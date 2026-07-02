@@ -1,141 +1,136 @@
-cmake_minimum_required(VERSION 3.18)
-project(shm_hnsw LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.14)
+cmake_policy(SET CMP0144 NEW)
+project(hnsw_shard_l2ing_benchmark LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_BUILD_TYPE Release)
 
-option(PROFILE_LIGHTWEIGHT "Use lightweight profiling (phase-level only, no per-edge timing)" OFF)
-if(PROFILE_LIGHTWEIGHT)
-    add_compile_definitions(HNSW_PROFILE_LIGHTWEIGHT)
-    message(STATUS "Lightweight profiling enabled — per-edge sub-phase timing disabled")
-endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
 
-option(STRICT_WARNINGS "Enable strict warnings (-Wconversion -Wsign-conversion -Wdouble-promotion)" OFF)
-
-# Project-wide warning flags (high signal-to-noise by default)
-set(PROJECT_WARNING_FLAGS
-    -Wall -Wextra -Wshadow -Wnull-dereference
-    -Wformat=2 -Wunused -Werror=return-type -Werror=format-security)
-if(STRICT_WARNINGS)
-    list(APPEND PROJECT_WARNING_FLAGS -Wconversion -Wsign-conversion -Wdouble-promotion)
-    message(STATUS "Strict warnings enabled")
-endif()
-
-# ============================================================
-# Dependencies
-# ============================================================
-
-# MPI
 find_package(MPI REQUIRED)
-
-# OpenMP
 find_package(OpenMP REQUIRED)
+find_package(HDF5 REQUIRED COMPONENTS C)
 
-# HDF5 (C++ bindings)
-find_package(HDF5 REQUIRED COMPONENTS CXX)
-
-# NUMA (Linux only)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    find_library(NUMA_LIB numa REQUIRED)
+# FAISS
+find_package(faiss CONFIG QUIET)
+if(NOT faiss_FOUND)
+    find_library(FAISS_LIBRARY NAMES libfaiss.a faiss 
+        PATHS 
+        /usr/local/lib 
+        /usr/lib 
+        /usr/lib/x86_64-linux-gnu
+        $ENV{FAISS_ROOT}/lib
+        NO_DEFAULT_PATH)
+    
+    if(NOT FAISS_LIBRARY)
+        find_library(FAISS_LIBRARY NAMES libfaiss.a faiss)
+    endif()
+    
+    find_path(FAISS_INCLUDE_DIR faiss/IndexHNSW.h PATHS 
+        /usr/local/include 
+        /usr/include
+        $ENV{FAISS_ROOT}/include)
+    
+    if(FAISS_LIBRARY AND FAISS_INCLUDE_DIR)
+        message(STATUS "Found FAISS: ${FAISS_LIBRARY}")
+        
+        if(FAISS_LIBRARY MATCHES "\\.a$")
+            message(STATUS "FAISS is static library, adding dependencies...")
+            find_package(BLAS REQUIRED)
+            find_package(LAPACK REQUIRED)
+            set(FAISS_LIBRARIES 
+                ${FAISS_LIBRARY}
+                ${BLAS_LIBRARIES}
+                ${LAPACK_LIBRARIES}
+            )
+        else()
+            set(FAISS_LIBRARIES ${FAISS_LIBRARY})
+        endif()
+        
+        set(FAISS_INCLUDE_DIRS ${FAISS_INCLUDE_DIR})
+    else()
+        message(FATAL_ERROR "FAISS not found. Please install FAISS or set FAISS_ROOT environment variable.")
+    endif()
+else()
+    set(FAISS_LIBRARIES faiss)
+    get_target_property(FAISS_INCLUDE_DIRS faiss INTERFACE_INCLUDE_DIRECTORIES)
 endif()
 
-# ubs-mem SDK
-set(UBSMEM_ROOT "" CACHE PATH "ubs-mem SDK install root (contains include/ and lib/)")
+# UBSMEM (Unified Backend Memory)
+# Priority: 1) system install (find_path + find_library)
+#           2) local path via -DUBSMEM_ROOT=...
+set(UBSMEM_ROOT "" CACHE PATH "Local path to UBSMEM installation")
 if(UBSMEM_ROOT)
-    find_path(UBSMEM_INCLUDE_DIR ubs_mem.h PATHS ${UBSMEM_ROOT}/include NO_DEFAULT_PATH)
-    find_library(UBSMEM_LIBRARY ubsm_sdk PATHS ${UBSMEM_ROOT}/lib NO_DEFAULT_PATH)
-    if(NOT UBSMEM_INCLUDE_DIR OR NOT UBSMEM_LIBRARY)
-        message(FATAL_ERROR "ubs-mem SDK not found at ${UBSMEM_ROOT}")
+    message(STATUS "Using local UBSMEM from: ${UBSMEM_ROOT}")
+    set(UBSMEM_INCLUDE_DIRS "${UBSMEM_ROOT}/include")
+    #set(UBSMEM_LIBRARIES "${UBSMEM_ROOT}/lib/libubsmd.so" "${UBSMEM_ROOT}/lib/libubsm_sdk.so")
+    set(UBSMEM_LIBRARIES  "${UBSMEM_ROOT}/lib/libubsm_sdk.so")
+    if(NOT EXISTS "${UBSMEM_INCLUDE_DIRS}/ubs_mem.h")
+        message(FATAL_ERROR "UBSMEM headers not found in ${UBSMEM_INCLUDE_DIRS}")
     endif()
 else()
-    find_path(UBSMEM_INCLUDE_DIR ubs_mem.h)
-    find_library(UBSMEM_LIBRARY ubsm_sdk)
-    if(NOT UBSMEM_INCLUDE_DIR OR NOT UBSMEM_LIBRARY)
-        message(FATAL_ERROR "ubs-mem SDK not found. Set -DUBSMEM_ROOT=<path>")
-    endif()
-endif()
-message(STATUS "ubs-mem SDK: ${UBSMEM_LIBRARY}")
-
-# faiss
-# Priority: 1) system/user install (find_package)
-#           2) local source (-DFAISS_LOCAL_PATH=...)
-#           3) FetchContent from GitHub (needs network)
-set(FAISS_LOCAL_PATH "" CACHE PATH "Local path to faiss source tree")
-
-find_package(faiss QUIET)
-if(faiss_FOUND)
-    message(STATUS "Using system-installed faiss: ${faiss_DIR}")
-elseif(FAISS_LOCAL_PATH)
-    message(STATUS "Using local faiss source: ${FAISS_LOCAL_PATH}")
-    set(FAISS_ENABLE_GPU OFF CACHE BOOL "" FORCE)
-    set(FAISS_ENABLE_PYTHON OFF CACHE BOOL "" FORCE)
-    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-    add_subdirectory(${FAISS_LOCAL_PATH} ${CMAKE_BINARY_DIR}/_deps/faiss-build)
-else()
-    message(STATUS "Fetching faiss v1.14.1 from GitHub...")
-    set(FAISS_ENABLE_GPU OFF CACHE BOOL "" FORCE)
-    set(FAISS_ENABLE_PYTHON OFF CACHE BOOL "" FORCE)
-    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-    include(FetchContent)
-    FetchContent_Declare(
-        faiss
-        GIT_REPOSITORY https://github.com/facebookresearch/faiss.git
-        GIT_TAG        v1.14.1
+    # Try to find UBSMEM in standard locations
+    find_path(UBSMEM_INCLUDE_DIRS ubs_mem.h
+        /usr/local/include
+        /usr/include
+        $ENV{UBSMEM_ROOT}/include
     )
-    FetchContent_MakeAvailable(faiss)
+#    find_library(UBSMEM_LIBRARY NAMES ubsmd ubsm_sdk
+    find_library(UBSMEM_LIBRARY NAMES ubsm_sdk
+        /usr/local/lib
+        /usr/lib
+        $ENV{UBSMEM_ROOT}/lib
+    )
+    if(UBSMEM_INCLUDE_DIRS AND UBSMEM_LIBRARY)
+        message(STATUS "Found UBSMEM: include=${UBSMEM_INCLUDE_DIRS}, lib=${UBSMEM_LIBRARY}")
+        set(UBSMEM_LIBRARIES ${UBSMEM_LIBRARY})
+    else()
+        message(WARNING "UBSMEM not found. Set -DUBSMEM_ROOT=... or ensure it's installed.")
+        set(UBSMEM_INCLUDE_DIRS "")
+        set(UBSMEM_LIBRARIES "")
+    endif()
 endif()
 
-# ============================================================
-# Library: shm_hnsw_core (layout + search, no faiss/HDF5 dep)
-# ============================================================
-
-add_library(shm_hnsw_core STATIC
-    src/shm_layout.cpp
-    src/shm_hnsw_search.cpp
-    src/index_io.cpp
+include_directories(
+    ${MPI_CXX_INCLUDE_DIRS}
+    ${HDF5_INCLUDE_DIRS}
+    ${FAISS_INCLUDE_DIRS}
+    ${UBSMEM_INCLUDE_DIRS}
 )
-target_include_directories(shm_hnsw_core PUBLIC include)
-target_link_libraries(shm_hnsw_core PUBLIC OpenMP::OpenMP_CXX)
-target_compile_options(shm_hnsw_core PRIVATE -O3 -march=native -ffast-math ${PROJECT_WARNING_FLAGS})
 
-# ============================================================
-# Library: shm_hnsw_faiss (extractor, depends on faiss)
-# ============================================================
-
-add_library(shm_hnsw_faiss STATIC
-    src/faiss_extractor.cpp
+set(COMMON_LIBS
+    ${MPI_CXX_LIBRARIES}
+    ${HDF5_LIBRARIES}
+    ${FAISS_LIBRARIES}
+    OpenMP::OpenMP_CXX
+    pthread
+    rt  # for shm_open
 )
-target_include_directories(shm_hnsw_faiss PUBLIC include)
-target_link_libraries(shm_hnsw_faiss PUBLIC shm_hnsw_core faiss)
-target_compile_options(shm_hnsw_faiss PRIVATE -O3 -march=native -ffast-math ${PROJECT_WARNING_FLAGS})
 
-# ============================================================
-# Executable: shm_hnsw_bench (MPI benchmark with HDF5)
-# ============================================================
+add_executable(hnsw_shard_ub src/hnsw_shard_ub.cpp)
+target_link_libraries(hnsw_shard_ub ${COMMON_LIBS} ${UBSMEM_LIBRARIES} -lnuma)
+target_compile_definitions(hnsw_shard_ub PRIVATE _GNU_SOURCE)
+install(TARGETS hnsw_shard_ub RUNTIME DESTINATION bin)
 
-add_executable(shm_hnsw_bench src/main.cpp)
-target_include_directories(shm_hnsw_bench PRIVATE ${HDF5_INCLUDE_DIRS} ${UBSMEM_INCLUDE_DIR})
-target_link_libraries(shm_hnsw_bench PRIVATE
-    shm_hnsw_core
-    shm_hnsw_faiss
-    MPI::MPI_CXX
-    ${HDF5_CXX_LIBRARIES}
-    ${UBSMEM_LIBRARY}
-)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_link_libraries(shm_hnsw_bench PRIVATE ${NUMA_LIB})
-endif()
-target_compile_options(shm_hnsw_bench PRIVATE -O3 -march=native -ffast-math ${PROJECT_WARNING_FLAGS})
+install(DIRECTORY scripts/ DESTINATION scripts
+        FILES_MATCHING PATTERN "*.sh"
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+                    GROUP_READ GROUP_EXECUTE
+                    WORLD_READ WORLD_EXECUTE)
 
-# ============================================================
-# Executable: build_index (standalone index builder, no MPI)
-# ============================================================
+install(DIRECTORY docs/ DESTINATION docs
+        FILES_MATCHING PATTERN "*.md")
 
-add_executable(build_index src/build_index.cpp)
-target_include_directories(build_index PRIVATE ${HDF5_INCLUDE_DIRS})
-target_link_libraries(build_index PRIVATE
-    shm_hnsw_core
-    shm_hnsw_faiss
-    ${HDF5_CXX_LIBRARIES}
-)
-target_compile_options(build_index PRIVATE -O3 -march=native -ffast-math ${PROJECT_WARNING_FLAGS})
+message(STATUS "")
+message(STATUS "========== HNSW Sharding Benchmark Configuration ==========")
+message(STATUS "CMAKE_BUILD_TYPE:    ${CMAKE_BUILD_TYPE}")
+message(STATUS "CMAKE_CXX_COMPILER:  ${CMAKE_CXX_COMPILER}")
+message(STATUS "CMAKE_CXX_FLAGS:     ${CMAKE_CXX_FLAGS}")
+message(STATUS "MPI:                 ${MPI_CXX_LIBRARIES}")
+message(STATUS "OpenMP:              ${OpenMP_CXX_FLAGS}")
+message(STATUS "HDF5:                ${HDF5_LIBRARIES}")
+message(STATUS "FAISS:               ${FAISS_LIBRARIES}")
+message(STATUS "============================================================")
+message(STATUS "")
