@@ -32,7 +32,7 @@ namespace gd_hnsw {
 // ============================================================
 
 struct InitOptions {
-    int num_threads = 0; // >0 -> omp_set_num_threads; 0 = omp default
+    int num_threads = 0;       // >0 -> omp_set_num_threads; 0 = omp default
     bool auto_mpi_init = true; // false: caller already called MPI_Init
 };
 

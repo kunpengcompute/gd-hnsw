@@ -199,10 +199,11 @@ IdMapLoadStatus load_centroids_file(const std::string &base_path, std::vector<fl
     }
 
     // Sanity-check before allocation (full validation happens in caller)
-    if (hdr.num_shards == 0 || hdr.num_shards > 65536 ||
-        hdr.dim == 0 || hdr.dim > 65536) {
-        fprintf(stderr, "Error: centroids header has implausible dims "
-                         "(shards=%u, dim=%u)\n", hdr.num_shards, hdr.dim);
+    if (hdr.num_shards == 0 || hdr.num_shards > 65536 || hdr.dim == 0 || hdr.dim > 65536) {
+        fprintf(stderr,
+                "Error: centroids header has implausible dims "
+                "(shards=%u, dim=%u)\n",
+                hdr.num_shards, hdr.dim);
         fclose(fp);
         return IdMapLoadStatus::Error;
     }

@@ -862,8 +862,7 @@ void GdHnswSearcher::search_to(const float *query, const HnswQueryParams &params
     // unknown (empty graph edge case) -> default capacity.
     uint32_t visit_budget = 0;
     if (level0_nn_max_ > 0) {
-        visit_budget =
-            static_cast<uint32_t>(std::min<uint64_t>(static_cast<uint64_t>(ef) * level0_nn_max_, ntotal_));
+        visit_budget = static_cast<uint32_t>(std::min<uint64_t>(static_cast<uint64_t>(ef) * level0_nn_max_, ntotal_));
     }
     // Cache key includes capacity so queries with different ef only rebuild
     // when they cross a power-of-2 bucket.
