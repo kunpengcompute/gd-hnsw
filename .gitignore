@@ -1,0 +1,42 @@
+# ============================================================
+# Build outputs
+# ============================================================
+*.log
+/build/
+/build-*/
+/out/
+/dist/
+*.o
+*.obj
+*.so
+*.so.*
+*.a
+*.dylib
+*.dll
+*.exe
+
+# ============================================================
+# IDE / editor
+# ============================================================
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# ============================================================
+# CMake in-source builds (discouraged but possible)
+# ============================================================
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+install_manifest.txt
+compile_commands.json
+
+# ============================================================
+# 3rdparty submodule build artifacts
+# ============================================================
+/3rdparty/*/*/build/
+/3rdparty/*/*/dist/
+/3rdparty/*/*/_build/

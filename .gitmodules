@@ -1,0 +1,8 @@
+[submodule "3rdparty/faiss/faiss"]
+	path = 3rdparty/faiss/faiss
+	url = https://gitcode.com/GitHub_Trending/fa/faiss.git
+	tag = v1.13.2
+[submodule "3rdparty/googletest/googletest"]
+	path = 3rdparty/googletest/googletest
+	url = https://gitcode.com/GitHub_Trending/go/googletest.git
+	tag = v1.14.0

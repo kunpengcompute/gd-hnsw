@@ -1,0 +1,42 @@
+minimum_pre_commit_version: 4.0.0
+exclude: ^LICENSES/|^docs/|\.(md|html|csv|svg)$
+
+default_stages: [pre-commit]
+ci:
+  autofix_prs: false
+  autoupdate_schedule: monthly
+
+repos:
+  # pre-commit 基础检查
+  - repo: https://gitcode.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ["--allow-multiple-documents"]  # 兼容K8S
+        exclude: mkdocs\.yml$  # !!python/name: 标签不兼容 safe_load
+      - id: check-added-large-files  # 拦截>50MB文件（默认阈值）
+      - id: check-merge-conflict     # 检测未解决的合并冲突（<<<<<<< HEAD）
+      - id: detect-private-key       # 检测硬编码的私钥/密钥
+      - id: check-json
+#      - id: no-commit-to-branch     # 禁止直接提交到main/master分支
+
+#--------------- C++ 核心检查 ---------------------------------------------
+  # clang-format：C/C++ 代码格式化
+  - repo: https://gitcode.com/pre-commit-clang/mirrors-clang-format
+    rev: v18.1.8
+    hooks:
+      - id: clang-format
+        files: \.(c|h|cpp|hpp|cc|hh|cxx|hxx)$
+        types_or: [c, c++]
+        exclude: ^build/|^tests/third_party/
+
+  # markdownlint：Markdown 格式检查（仅CI手动执行）
+  - repo: https://gitcode.com/gh_mirrors/ma/markdownlint-cli
+    rev: v0.46.0
+    hooks:
+      - id: markdownlint
+        exclude: '.*\.inc\.md$|.*report_template\.md$|.*contributors\.md$|.*PULL_REQUEST_TEMPLATE\.md$'
+        stages: [manual]
+        description: "Markdown format check (run in CI: pre-commit run markdownlint --all-files)"
