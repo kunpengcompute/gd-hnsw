@@ -12,7 +12,7 @@
 
 ## 典型场景实践
 
-1. 离线构建索引。
+### 1. 离线构建索引。
 
 - 使用hdf5格式数据集构建索引示例。
 
@@ -35,11 +35,12 @@
    ```bash
    ./build/benchmarks/build_index --config configs/gist-960-euclidean.config
    ```
+
    结果：`/path/to/data/idx.shard_0 .. idx.shard_7`。部署前分发到各节点（共享存储或本地副本）。
 
-2. 在线检索（8节点）。
+### 2. 在线检索（8节点）。
 
-   1. 首先先进入当前算法conifgs目录下，配置对应数据集的相关配置参数。
+   1. 首先，先进入当前算法configs目录下，配置对应数据集的相关配置参数。
 
    2. 然后运行以下算法。
 
