@@ -116,7 +116,7 @@ gd_hnsw的核心是`Context`对象，即封装分布式检索全流程的有状�
    }
    ```
 
-2. 参考当前算法benchmarks目录下[CMakeList.txt](../../benchmarks/CMakeList.txt), 编译得到可执行文件例如：./build/benchmarks/gd_hnsw_bench。
+2. 参考当前算法benchmarks目录下[CMakeLists.txt](../../benchmarks/CMakeLists.txt), 编译得到可执行文件例如：./build/benchmarks/gd_hnsw_bench。
 
 3. 进入当前算法conifgs目录下，配置对应数据集的相关配置参数。
 
