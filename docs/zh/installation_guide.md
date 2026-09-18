@@ -6,7 +6,7 @@
 
 为保证您可以顺利安全地使用gd_hnsw，请确保所使用的环境信息在已验证环境范围内。
 
-**表 1**gd_hnsw已验证环境<a id="gd_hnsw已验证环境"></a>
+**表 1** gd_hnsw已验证环境<a id="gd_hnsw已验证环境"></a>
 
 | 操作系统 | 处理器类型 | 内存 | 编译器 | 其他 |
 |----------|------------|------|--------|------|
@@ -28,9 +28,9 @@ gd_hnsw编译依赖如下组件。
 | MPI | 节点同步与集合通信（如OpenMPI/MPICH） 版本4.1.4| yum install openmpi-devel等 |
 | OpenMP | 线程级并行| 随GCC提供 |
 | HDF5（CXX组件） | HDF5数据集加载 | yum install hdf5 hdf5-devel |
-| libnuma | NUMA 探测 | yum install numactl numactl-devel |
+| libnuma | NUMA探测 | yum install numactl numactl-devel |
 | UB相关组件与驱动 | 跨节点通信 | 请参见下文"[安装UB相关组件与驱动](./installation_guide.md#安装ub相关组件与驱动)" |
-| Faiss | HNSW 索引构建 ，1.13.2版本| 下载[Faiss](https://github.com/facebookresearch/faiss.git)  |
+| Faiss | HNSW索引构建 ，1.13.2版本| 下载[Faiss](https://github.com/facebookresearch/faiss.git)  |
 | OpenBLAS（可选） | Faiss数学库依赖 | 请参见下文"[获取OpenBLAS](./installation_guide.md#获取openblas)" |
 
 ## 编译安装

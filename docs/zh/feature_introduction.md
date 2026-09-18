@@ -25,7 +25,7 @@ gd_hnsw系统总体分为**对外接口层、核心算法层、底层依赖层**
 | Context（对外API） | 封装分布式检索全流程：初始化、建库、加载、同步、搜索、释放；状态全部在对象内，无全局变量 |
 | GdHnswSearcher | 有状态搜索器，支持单分片本地搜索与多分片pushdown搜索、批量搜索 |
 | SuperBlockV1（gd_layout） | 数据布局：固定4KB超级块头+向量/层级/偏移/邻居/累计邻居数5个数据块，含CRC64校验与状态机 |
-| FaissExtractor | 调用 Faiss 构建HNSW图，流式抽N 片逐个落盘，可选K-Means聚类分片（生成idmap/centroids） |
+| FaissExtractor | 调用Faiss构建HNSW图，流式抽N 片逐个落盘，可选K-Means聚类分片（生成idmap/centroids） |
 | DualDistService（dist_service） | pushdown双通道service：task_inbox/result_inbox跨节点通道 |
 | VisitedTable | 访问表：小图用密集数组（O(1) 直接下标），大图用epoch戳flat开放寻址哈希表（512KB固定，fit L2） |
 | MinimaxHeap | 双堆结构：结果max-heap（bounded ef_search+候选min-heap（lazy失效），候选出堆O(log n)摊还 |
@@ -66,7 +66,7 @@ HNSW（Hierarchical Navigable Small World，分层可导航小世界图）是一
 2. 对端节点常驻的`DualDistService`工作线程poll到任务后，在本地就近计算距离，把结果写入本节点的计算结果通道。
 3. 本节点搜索线程从计算结果通道读取结果，继续图遍历。
 
-这一机制把"大块向量跨节点搬运"转化为"少量距离结果跨节点回传"，并让计算发生在数据所在节点，显著降低访存与通信开销。`expand_batch`（multi-pop扩展）允许每轮弹出多个候选、合并其邻居后批量下发，进一步摊薄通道往返成本。
+这一机制把“大块向量跨节点搬运”转化为“少量距离结果跨节点回传”，并让计算发生在数据所在节点，显著降低访存与通信开销。`expand_batch`（multi-pop扩展）允许每轮弹出多个候选、合并其邻居后批量下发，进一步摊薄通道往返成本。
 
 ## 修订记录
 

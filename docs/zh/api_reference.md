@@ -119,7 +119,7 @@ BuildResult build(const BuildOptions& opts);
 | dataset_path | std::string | 数据集路径（HDF5文件或 .bin目录/文件） | 有效路径 |
 | output_path | std::string | 输出前缀，写output_path.shard_0 .. shard_N-1 | 有效路径 |
 | num_shards | uint32_t | 分片数 | ≥1，默认1 |
-| M | uint32_t | HNSW 的M参数 | 正整数，默认16 |
+| M | uint32_t | HNSW的M参数 | 正整数，默认16 |
 | ef_construction | uint32_t | 建图ef_construction | 正整数，默认200 |
 | ef_search | uint32_t | 写入索引的默认ef_search | 正整数，默认64 |
 | build_threads | uint32_t | 构建线程数；0=全核 | 默认0 |
@@ -267,7 +267,7 @@ static std::vector<uint32_t> route_queries(const Context& ctx,
 
 **接口用途**
 
-按质心/均匀把query分到各节点，返回**本rank** 应处理的query下标列表。有centroids时对每条query找最近质心；无centroids时按rank均匀切片。
+按质心/均匀把query分到各节点，返回**本rank**应处理的query下标列表。有centroids时对每条query找最近质心；无centroids时按rank均匀切片。
 
 **参数说明**
 

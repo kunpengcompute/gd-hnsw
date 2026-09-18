@@ -25,9 +25,9 @@ gd-hnsw-master/
 ├─ 3rdparty/                                  // 第三方依赖（faiss v1.13.2、googletest v1.14.0子模块）
 │  ├─ CMakeLists.txt                          // 子模块调度：faiss/gtest检出、构建并安装到dist/3rdparty/
 │  ├─ faiss/
-│  │  └─ CMakeLists.txt                       // faiss 构建脚本（引用3rdparty/faiss/faiss子模块）
+│  │  └─ CMakeLists.txt                       // faiss构建脚本（引用3rdparty/faiss/faiss子模块）
 │  └─ googletest/
-│     └─ CMakeLists.txt                       // googletest 构建脚本（引用3rdparty/googletest/googletest子模块）
+│     └─ CMakeLists.txt                       // googletest构建脚本（引用3rdparty/googletest/googletest子模块）
 ├─ benchmarks/                                // 性能基准与端到端服务测试
 │  ├─ CMakeLists.txt                          // build_index/service_runner/bench_runner目标构建
 │  ├─ main.cpp                                // bench 入口：命令行解析与分发
@@ -152,9 +152,9 @@ gd-hnsw-master/
 
 ## License
 
-gd_hnsw采用Apache 2.0 License许可证授权，支持修改代码和再开源，具体请参见[LICENSE](./LICENSE) 文件。
+gd_hnsw采用Apache 2.0 License许可证授权，支持修改代码和再开源，具体请参见[LICENSE](./LICENSE)文件。
 
-本项目的文档适用CC-BY 4.0许可证，具体请参见 [LICENSE](./docs/LICENSE) 文件。
+本项目的文档适用CC-BY 4.0许可证，具体请参见 [LICENSE](./docs/LICENSE)文件。
 
 ## 贡献声明
 

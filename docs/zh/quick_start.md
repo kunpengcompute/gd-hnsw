@@ -64,9 +64,9 @@ gd_hnsw的核心是`Context`对象，即封装分布式检索全流程的有状�
 
 - 构建产物。
 
-- `/data/idx.shard_0 ... /data/idx.shard_<N-1>` —— 分片索引（含图 + 向量）。
-- `/data/idx.idmap` —— （仅`cluster_partition`）新gid到原始gid的映射。
-- `/data/idx.centroids` —— （仅`cluster_partition`）每分片质心，用于query路由。
+   - `/data/idx.shard_0 ... /data/idx.shard_<N-1>` —— 分片索引（含图 + 向量）。
+   - `/data/idx.idmap` —— （仅`cluster_partition`）新gid到原始gid的映射。
+   - `/data/idx.centroids` —— （仅`cluster_partition`）每分片质心，用于query路由。
 
    >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
    >部署前把上述文件放到**每个容器都能读到**的位置（共享存储 / 各节点本地副本）。
