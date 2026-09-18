@@ -68,7 +68,7 @@ gd_hnsw的核心是`Context`对象，即封装分布式检索全流程的有状�
 - `/data/idx.idmap` —— （仅`cluster_partition`）新gid到原始gid的映射。
 - `/data/idx.centroids` —— （仅`cluster_partition`）每分片质心，用于query路由。
 
->![表示说明的图片](./public_sys-resources/icon-note.gif)**说明：**部署前把上述文件放到**每个容器都能读到**的位置（共享存储 / 各节点本地副本）。
+   >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**部署前把上述文件放到**每个容器都能读到**的位置（共享存储 / 各节点本地副本）。
 
 ### 在线检索（N个容器）
 
@@ -126,7 +126,7 @@ gd_hnsw的核心是`Context`对象，即封装分布式检索全流程的有状�
    mpirun --allow-run-as-root -np 8 --hostfile hostfile --map-by ppr:1:numa --bind-to numa ./build/benchmarks/gd_hnsw_bench --config configs/gist-960-euclidean.config
    ```
 
->![表示说明的图片](./public_sys-resources/icon-note.gif)**说明：**`hostfile`中为服务器IP。形如`xxx.xxx.xxx.xxx`。
+   >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**`hostfile`中为服务器IP。形如`xxx.xxx.xxx.xxx`。
 
 ### 分配query
 

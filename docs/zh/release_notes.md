@@ -23,7 +23,7 @@
 |----------|------------|------|--------|--------------|
 | openEuler 24.03 LTS SP3 | 鲲鹏950处理器 | 24*64GB | GCC 12.3.1 | CMake>=3.18 |
 
->![表示说明的图片](./public_sys-resources/icon-note.gif)**说明：**gd_hnsw依赖NUMA，当前仅支持Linux+NUMA。非Linux或非NUMA环境编译会报错。
+>![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**gd_hnsw依赖NUMA，当前仅支持Linux+NUMA。非Linux或非NUMA环境编译会报错。
 
 ## 版本使用注意事项
 

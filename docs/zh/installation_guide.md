@@ -12,7 +12,7 @@
 |----------|------------|------|--------|------|
 | openEuler 24.03 LTS SP3 | 鲲鹏950处理器 | 24*64GB | GCC 12.3.1 | CMake>=3.18，需NUMA |
 
->![表示说明的图片](./public_sys-resources/icon-note.gif)**说明：**
+>![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >
 > - gd_hnsw依赖NUMA（`libnuma`），当前仅支持Linux+NUMA，非Linux或非NUMA环境编译会报错。
 > - 距离核使用ARM NEON指令，目标架构须为AArch64。编译时建议使用`-march=native`（CMake已默认开启）。
@@ -76,9 +76,9 @@ yum install make cmake hdf5 hdf5-devel numactl numactl-devel openmpi-devel gcc g
 | ubs-engine-client | 1.0.2-6oe2403sp3 | 跟随openEular 24.03 LTS sp3最新版本发布，通过yum install安装 |
 | ubs-comm-lib | 1.0.1-2oe2403sp3 | 跟随openEular 24.03 LTS sp3最新版本发布，通过yum install安装 |
 | ubs-mem-shmem | 1.0.2-3oe2403sp3 | 跟随openEular 24.03 LTS sp3最新版本发布，通过yum install安装 |
-| UBM | 2.0.0.B023-1 | [sopport网站获取](https://support.huawei.com) |
-| UBE | 1.1.10.0.b142-openeular24.03 | [sopport网站获取](https://support.huawei.com) |
-| BIOS | 2.16.0.B013 | [sopport网站获取](https://support.huawei.com) |
+| UBM | 2.0.0.B023-1 | [support网站获取](https://support.huawei.com) |
+| UBE | 1.1.10.0.b142-openeular24.03 | [support网站获取](https://support.huawei.com) |
+| BIOS | 2.16.0.B013 | [support网站获取](https://support.huawei.com) |
 
 ### 编译gd_hnsw
 
@@ -95,8 +95,8 @@ yum install make cmake hdf5 hdf5-devel numactl numactl-devel openmpi-devel gcc g
    sh scripts/build.sh -t release --ubs_mem /path/to/ubs_mem
    ```
 
->![表示说明的图片](./public_sys-resources/icon-note.gif)**说明：**
-> `--ubs_mem`必须指向包含`include/ubs_mem.h`与`lib/libubsm_sdk.so`的目录；未指定时CMake会在系统默认路径查找，找不到则报错。
+   >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
+   > `--ubs_mem`必须指向包含`include/ubs_mem.h`与`lib/libubsm_sdk.so`的目录；未指定时CMake会在系统默认路径查找，找不到则报错。
 
 ### 编译产物
 
@@ -104,7 +104,7 @@ yum install make cmake hdf5 hdf5-devel numactl numactl-devel openmpi-devel gcc g
 |------|------|------|
 | gd_hnsw_core | 静态库 | 纯算法库（layout/search/io，不含MPI/ubs-mem/faiss/HDF5） |
 | gd_hnsw_faiss | 静态库 | faiss抽取层 |
-| gd_hnsw_api | 静态库 | **对外库**（Context，链core+faiss+MPI+ubs-mem+HDF5） |
+| gd_hnsw_api | 静态库 | 对外库（Context，链core+faiss+MPI+ubs-mem+HDF5） |
 | gd_hnsw_bench | 可执行 | 最小示例程序 |
 | build_index | 可执行 | 命令行建库工具 |
 

@@ -12,7 +12,7 @@
 
 ## 典型场景实践
 
-**1. 离线构建索引**
+1. 离线构建索引。
 
 - 使用hdf5格式数据集构建索引示例。
 
@@ -35,20 +35,19 @@
    ```bash
    ./build/benchmarks/build_index --config configs/gist-960-euclidean.config
    ```
+   结果：`/path/to/data/idx.shard_0 .. idx.shard_7`。部署前分发到各节点（共享存储或本地副本）。
 
-结果：`/path/to/data/idx.shard_0 .. idx.shard_7`。部署前分发到各节点（共享存储或本地副本）。
+2. 在线检索（8节点）。
 
-**2. 在线检索（8节点）**
+   1. 首先先进入当前算法conifgs目录下，配置对应数据集的相关配置参数。
 
-1. 首先先进入当前算法conifgs目录下，配置对应数据集的相关配置参数。
+   2. 然后运行以下算法。
 
-2. 然后运行以下算法。
+      ```bash
+      mpirun --allow-run-as-root -np 8 --hostfile hostfile --map-by ppr:1:numa --bind-to numa ./build/benchmarks/gd_hnsw_bench --config configs/gist-960-euclidean.config
+      ```
 
-   ```bash
-   mpirun --allow-run-as-root -np 8 --hostfile hostfile --map-by ppr:1:numa --bind-to numa ./build/benchmarks/gd_hnsw_bench --config configs/gist-960-euclidean.config
-   ```
-
->![表示说明的图片](./public_sys-resources/icon-note.gif)**说明：**`hostfile`中为服务器IP，形如：`xxx.xxx.xxx.xxx`。
+      >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**`hostfile`中为服务器IP，形如：`xxx.xxx.xxx.xxx`。
 
 ## 调优建议
 
@@ -60,7 +59,7 @@
 | ef_construction | 建图候选宽度，越大图质量越高、构建越慢 |
 | ef_search | 查询候选宽度，越大召回越高、时延越高；可每查可变 |
 
->![表示说明的图片](./public_sys-resources/icon-note.gif)**说明：**召回率与时延的权衡建议先用`ef_search`调，再回退调`M`。`build`一次性成本高，`search`时`ef_search`可在线调整。
+>![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**召回率与时延的权衡建议先用`ef_search`调，再回退调`M`。`build`一次性成本高，`search`时`ef_search`可在线调整。
 
 ### 并发与线程
 

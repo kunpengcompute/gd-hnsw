@@ -199,14 +199,14 @@ Status node_init_and_sync(uint32_t node_id, const DeployOptions& opts = {});
 
 | 参数名称 | 参数类型 | 参数说明 | 取值范围 |
 |----------|----------|------|----------|
-| search_threads | uint32_t | 搜索线程数；0 = 自动（num_threads-service_threads） | 默认0 |
-| service_threads | uint32_t | service 线程数；0 = 自动（cores/4，且≤num_shards-1） | 默认0 |
+| search_threads | uint32_t | 搜索线程数；0=自动（num_threads-service_threads） | 默认0 |
+| service_threads | uint32_t | service 线程数；0=自动（cores/4，且≤num_shards-1） | 默认0 |
 | expand_batch | uint32_t | multi-pop扩展批量；1=单候选（默认），>1合并远端小批量 | ≥1，默认1 |
 | use_dot_norm | bool | 是否启用dot+norm距离核 | 默认false |
 
 **返回值**：`Status`。
 
->![表示说明的图片](./public_sys-resources/icon-note.gif)**说明：**pushdown channel是跨节点成对的，**所有节点都必须调用**`node_init_and_sync`，任一节点不参与会导致其它节点映射channel失败。
+>![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**pushdown channel是跨节点成对的，**所有节点都必须调用**`node_init_and_sync`，任一节点不参与会导致其它节点映射channel失败。
 
 ### search
 
@@ -248,9 +248,9 @@ SearchResult search(const float* queries, uint64_t nq,
 | status | Status | 执行状态 |
 | error | std::string | 错误描述 |
 
-**输出约定**：`out_ids[nq*k]`/`out_dists[nq*k]`由调用方分配；未填满的位置`id=-1, dist=FLT_MAX`。若`idmap`存在，结果id默认是**内部 gid**；如需原始gid，调用方用`Context::idmap()`自行重映射。
+**输出约定**：`out_ids[nq*k]`/`out_dists[nq*k]`由调用方分配；未填满的位置`id=-1, dist=FLT_MAX`。若`idmap`存在，结果id默认是**内部gid**；如需原始gid，调用方用`Context::idmap()`自行重映射。
 
->![表示说明的图片](./public_sys-resources/icon-note.gif)**说明：**`search`无副作用，可反复调用，`k`/`ef_search`每次可变。
+>![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**`search`无副作用，可反复调用，`k`/`ef_search`每次可变。
 
 ### route_queries
 
@@ -291,7 +291,7 @@ Status finalize();
 
 释放资源。
 
->![表示说明的图片](./public_sys-resources/icon-note.gif)**说明：**`finalize`必须所有节点一起调，内部有Barrier与deallocate顺序依赖。
+>![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**`finalize`必须所有节点一起调，内部有Barrier与deallocate顺序依赖。
 
 ## 访问器
 
