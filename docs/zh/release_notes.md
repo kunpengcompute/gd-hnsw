@@ -13,7 +13,7 @@
 | 底层依赖 | Faiss（HNSW构建）、UB相关组件与驱动、MPI、OpenMP、HDF5 |
 | 目标架构 | 鲲鹏ARM |
 | C++ 标准 | C++17 |
-| 构建系统 | CMake≥3.18 |
+| 构建系统 | CMak 3.18及以上版本 |
 
 ### 与操作系统、编译器和处理器配套说明
 
@@ -21,7 +21,7 @@
 
 | 操作系统 | 处理器类型 | 内存 | 编译器 | CMake版本号 |
 |----------|------------|------|--------|--------------|
-| openEuler 24.03 LTS SP3 | 鲲鹏950处理器 | 24*64GB | GCC 12.3.1 | CMake>=3.18 |
+| openEuler 24.03 LTS SP3 | 鲲鹏950处理器 | 24*64GB | GCC 12.3.1 | CMake 3.18及以上版本 |
 
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >gd_hnsw算法依赖NUMA，当前仅支持Linux+NUMA。非Linux或非NUMA环境编译会报错。

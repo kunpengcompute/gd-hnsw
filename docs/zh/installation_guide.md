@@ -10,7 +10,7 @@
 
 | 操作系统 | 处理器类型 | 内存 | 编译器 | 其他 |
 |----------|------------|------|--------|------|
-| openEuler 24.03 LTS SP3 | 鲲鹏950处理器 | 24*64GB | GCC 12.3.1 | CMake>=3.18，需NUMA |
+| openEuler 24.03 LTS SP3 | 鲲鹏950处理器 | 24*64GB | GCC 12.3.1 | CMake 3.18及以上版本，需NUMA |
 
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >
@@ -23,8 +23,8 @@ gd_hnsw编译依赖如下组件。
 
 | 依赖 | 说明 | 获取方式 |
 |------|------|----------|
-| CMake>=3.18 | 构建系统 | 系统包管理器 |
-| GCC>=12 版本12.3.1 | C++17编译器 | 系统包管理器 |
+| CMake 3.18及以上版本 | 构建系统 | 系统包管理器 |
+| GCC 12.3.1 | C++17编译器 | 系统包管理器 |
 | MPI | 节点同步与集合通信（如OpenMPI/MPICH） 版本4.1.4| yum install openmpi-devel等 |
 | OpenMP | 线程级并行| 随GCC提供 |
 | HDF5（CXX组件） | HDF5数据集加载 | yum install hdf5 hdf5-devel |
