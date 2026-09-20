@@ -150,7 +150,7 @@ gd-hnsw-master/
 
 ## License
 
-gd_hnsw采用Apache 2.0 License许可证授权，支持修改代码和再开源，具体请参见[LICENSE](./LICENSE)文件。
+gd_hnsw采用Mulan PSL v2许可证授权，支持修改代码和再开源，具体请参见[LICENSE](./LICENSE)文件。
 
 本项目的文档适用CC-BY 4.0许可证，具体请参见 [LICENSE](./docs/LICENSE)文件。
 
