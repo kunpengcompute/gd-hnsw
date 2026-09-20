@@ -12,33 +12,33 @@
 
 ## 典型场景实践
 
-### 离线构建索引
+1. 离线构建索引。
 
-- 使用hdf5格式数据集构建索引示例。
+   - 使用hdf5格式数据集构建索引示例。
 
-   ```bash
-   ./build/benchmarks/build_index -d /path/to/data/sift-128-euclidean.hdf5 \
+      ```bash
+      ./build/benchmarks/build_index -d /path/to/data/sift-128-euclidean.hdf5 \
                  -o /path/to/data/idx \
                  -M 16 -c 200 -e 64 -s 8 -t 32
-   ```
+      ```
 
-- 使用bin格式数据集构建索引示例。
+   - 使用bin格式数据集构建索引示例。
 
-   ```bash
-   ./build/benchmarks/build_index -d /path/to/data/gist_1M_960/base.bin \
+      ```bash
+      ./build/benchmarks/build_index -d /path/to/data/gist_1M_960/base.bin \
                  -o /path/to/data/idx \
                  -M 64 -c 40 -e 355 -s 8 -t 32
-   ```
+      ```
 
-- 使用config文件的形式构建索引示例。
+   - 使用config文件的形式构建索引示例。
 
-   ```bash
-   ./build/benchmarks/build_index --config configs/gist-960-euclidean.config
-   ```
+      ```bash
+      ./build/benchmarks/build_index --config configs/gist-960-euclidean.config
+      ```
 
-   结果：`/path/to/data/idx.shard_0 .. idx.shard_7`。部署前分发到各节点（共享存储或本地副本）。
+      结果：`/path/to/data/idx.shard_0 .. idx.shard_7`。部署前分发到各节点（共享存储或本地副本）。
 
-### 在线检索（8节点）
+2. 在线检索（8节点）。
 
    1. 首先，先进入当前算法configs目录下，配置对应数据集的相关配置参数。
 
