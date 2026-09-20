@@ -28,6 +28,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <stdexcept>
 #include <string>
 
 using namespace gd_hnsw;
@@ -45,7 +46,7 @@ static void print_usage(const char *prog)
             "  -M, --M INT               HNSW M parameter (default: 16)\n"
             "  -c, --ef-construction INT  ef_construction (default: 200)\n"
             "  -e, --ef-search INT        ef_search stored in index (default: 64)\n"
-            "  -s, --shards INT           Number of shards to build (default: 1)\n"
+            "  -s, --shards INT           Number of shards, in [1, 32] (default: 1)\n"
             "  -t, --threads INT          OpenMP threads for building (default: all cores)\n"
             "      --cluster              Use k-means clustered shard partition\n"
             "      --dataset-format FMT   auto|hdf5|bin (default: auto)\n"
@@ -58,6 +59,23 @@ static void print_usage(const char *prog)
             "  %s -d /data/sift1b.h5 -M 32 -c 200 -s 4 -t 192 -o /data/idx\n"
             "  mpirun -np 4 ./gd_hnsw_bench --load-index /data/idx -d /data/sift1b.h5\n",
             prog, prog);
+}
+
+// Parse a uint32 CLI argument. Rejects garbage and negatives instead of
+// wrapping: static_cast<uint32_t>(std::stoi("-1")) == 4294967295 would
+// silently bypass the ef_search >= 1 check below. Throws std::runtime_error.
+static uint32_t parse_u32_arg(const char *opt, const char *arg)
+{
+    long long v = 0;
+    size_t pos = 0;
+    try {
+        v = std::stoll(arg, &pos);
+    } catch (const std::exception &) {
+        throw std::runtime_error(std::string(opt) + " expects an integer, got '" + arg + "'");
+    }
+    if (pos != std::strlen(arg) || v < 0 || v > UINT32_MAX)
+        throw std::runtime_error(std::string(opt) + " expects an integer in [0, 4294967295], got '" + arg + "'");
+    return static_cast<uint32_t>(v);
 }
 
 static void apply_config(const ConfigParser &cfg, BuildOptions &opts, int &num_shards, int &num_threads)
@@ -110,7 +128,12 @@ int main(int argc, char **argv)
             fprintf(stderr, "Error: cannot read config file '%s'\n", config_path.c_str());
             return 1;
         }
-        apply_config(cfg, opts, num_shards, num_threads);
+        try {
+            apply_config(cfg, opts, num_shards, num_threads);
+        } catch (const std::exception &e) {
+            fprintf(stderr, "Error: %s\n", e.what());
+            return 1;
+        }
     }
 
     static struct option long_opts[] = {{"dataset", required_argument, nullptr, 'd'},
@@ -128,22 +151,27 @@ int main(int argc, char **argv)
                                         {nullptr, 0, nullptr, 0}};
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "d:o:M:c:e:s:t:h", long_opts, nullptr)) != -1) {
-        switch (opt) {
-            case 'd': opts.dataset_path = optarg; break;
-            case 'o': opts.output_path = optarg; break;
-            case 'M': opts.M = static_cast<uint32_t>(std::stoi(optarg)); break;
-            case 'c': opts.ef_construction = static_cast<uint32_t>(std::stoi(optarg)); break;
-            case 'e': opts.ef_search = static_cast<uint32_t>(std::stoi(optarg)); break;
-            case 's': num_shards = std::stoi(optarg); break;
-            case 't': num_threads = std::stoi(optarg); break;
-            case 1007: opts.cluster_partition = true; break;
-            case 1015: opts.dataset_format = optarg; break;
-            case 1016: opts.bin_base_path = optarg; break;
-            case 1017: break; // already applied above
-            case 'h': print_usage(argv[0]); return 0;
-            default: print_usage(argv[0]); return 1;
+    try {
+        while ((opt = getopt_long(argc, argv, "d:o:M:c:e:s:t:h", long_opts, nullptr)) != -1) {
+            switch (opt) {
+                case 'd': opts.dataset_path = optarg; break;
+                case 'o': opts.output_path = optarg; break;
+                case 'M': opts.M = parse_u32_arg("--M", optarg); break;
+                case 'c': opts.ef_construction = parse_u32_arg("--ef-construction", optarg); break;
+                case 'e': opts.ef_search = parse_u32_arg("--ef-search", optarg); break;
+                case 's': num_shards = std::stoi(optarg); break;
+                case 't': num_threads = std::stoi(optarg); break;
+                case 1007: opts.cluster_partition = true; break;
+                case 1015: opts.dataset_format = optarg; break;
+                case 1016: opts.bin_base_path = optarg; break;
+                case 1017: break; // already applied above
+                case 'h': print_usage(argv[0]); return 0;
+                default: print_usage(argv[0]); return 1;
+            }
         }
+    } catch (const std::exception &e) {
+        fprintf(stderr, "Error: %s\n", e.what());
+        return 1;
     }
 
     if (opts.dataset_path.empty()) {
@@ -156,8 +184,10 @@ int main(int argc, char **argv)
         print_usage(argv[0]);
         return 1;
     }
-    if (num_shards < 1 || num_shards > 64) {
-        fprintf(stderr, "Error: --shards must be in [1, 64]\n");
+    // 32 = pushdown pending_mask (uint32_t bitmask) hard limit; must stay
+    // in sync with kMaxShards (gd_hnsw_search.cpp / faiss_extractor.cpp).
+    if (num_shards < 1 || num_shards > 32) {
+        fprintf(stderr, "Error: --shards must be in [1, 32] (pushdown bitmask limit)\n");
         return 1;
     }
     // ef_search = 0 is the bench-side "use index default" sentinel; storing it

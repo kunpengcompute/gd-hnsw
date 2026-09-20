@@ -366,24 +366,23 @@ TEST(PushdownFork, ForkRunGenerationMismatch)
     if (pid == 0) {
         ServiceChannelPair pair{task_view, result_view};
         // Worker has run_generation=1, channel has run_generation=999
-        // → worker should skip the request (never enters process_request)
+        // → run() must skip the request at the gen check and spin until stop.
         DualDistServiceWorker worker(1, sv1, FORK_DIM, FORK_RUN_GEN, {pair}, *stop);
-        // Run for a few iterations then stop — gen mismatch means no work done
-        for (int spin = 0; spin < 10000 && !stop->load(std::memory_order_relaxed); spin++)
-            gd_hnsw::cpu_pause();
-        // Manually poll: should skip the request
-        {
-            uint64_t raw = pair.task.h->req_seq.load(std::memory_order_acquire);
-            uint64_t seq = doorbell_seq(raw);
-            // run_generation check: this check happens inside run(),
-            // but we can't easily verify it from the child. Just don't crash.
-            (void)seq;
-        }
+        worker.run();
         _exit(0);
     }
 
-    // Parent waits briefly then terminates child
+    // Parent: give the worker ample time to (wrongly) process the request if
+    // the run_generation check in run() were missing — any real processing
+    // here completes in the first spin iteration, so 200ms is generous.
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    // THE assertion: the request must have been skipped, so resp_seq is
+    // untouched. If the gen check is deleted from run(), process_request()
+    // runs and resp_seq becomes the doorbell seq (1) → this fails.
+    EXPECT_EQ(result_view.h->resp_seq.load(std::memory_order_acquire), 0u)
+        << "gen-mismatched request was processed (resp_seq advanced)";
+
     stop->store(true, std::memory_order_relaxed);
 
     int status = 0;

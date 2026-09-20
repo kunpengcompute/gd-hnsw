@@ -1218,7 +1218,11 @@ TEST(Deploy, InitWithOptions)
     InitOptions io;
     io.num_threads = 2;
     Context ctx;
-    ASSERT_EQ(ctx.initialize(nullptr, nullptr, io), Status::Ok);
+    Status s = ctx.initialize(nullptr, nullptr, io);
+    if (s == Status::UbsemError) {
+        GTEST_SKIP() << "ubs-mem runtime unavailable (daemon not running)";
+    }
+    ASSERT_EQ(s, Status::Ok);
     EXPECT_TRUE(ctx.initialized());
     EXPECT_EQ(ctx.rank(), 0);
     EXPECT_EQ(ctx.size(), 1);

@@ -131,7 +131,7 @@ ValidationResult validate_superblock(const void *gd_base, uint64_t gd_size)
     if (sb.entry_point < 0 || static_cast<uint64_t>(sb.entry_point) >= sb.ntotal) {
         return fail("entry_point out of range");
     }
-    if (sb.max_level < 0 || static_cast<uint32_t>(sb.max_level + 1) >= sb.num_levels) {
+    if (sb.max_level < 0 || static_cast<uint64_t>(sb.max_level) + 1 >= static_cast<uint64_t>(sb.num_levels)) {
         return fail("max_level out of range (need max_level+1 < num_levels)");
     }
 
@@ -206,6 +206,19 @@ ValidationResult validate_superblock(const void *gd_base, uint64_t gd_size)
             uint64_t actual_slots = offsets[i + 1] - offsets[i];
             if (actual_slots != expected_slots) {
                 return fail("offsets slot count mismatch for node");
+            }
+        }
+
+        // entry_point must sit at max_level (the top of the navigable
+        // graph). With multiple shards the entry point may live on another
+        // shard — only the owning shard can verify this. int64 arithmetic
+        // sidesteps the max_level+1 signed overflow at INT32_MAX.
+        uint64_t gid_begin = sb.num_shards > 0 ? sb.global_id_begin : 0;
+        if (static_cast<uint64_t>(sb.entry_point) >= gid_begin &&
+            static_cast<uint64_t>(sb.entry_point) < gid_begin + n_local) {
+            uint64_t ep_local = static_cast<uint64_t>(sb.entry_point) - gid_begin;
+            if (static_cast<int64_t>(levels[ep_local]) != static_cast<int64_t>(sb.max_level) + 1) {
+                return fail("entry_point is not at max_level");
             }
         }
 

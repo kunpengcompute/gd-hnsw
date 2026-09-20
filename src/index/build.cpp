@@ -205,6 +205,7 @@ BuildResult build_sharded_index(const BuildOptions &opts)
         uint64_t sum_ntotal_local = 0;
         uint64_t expected_ntotal = 0;
         uint32_t expected_dim = 0, expected_M = 0, expected_num_shards = 0;
+        uint32_t expected_num_levels = 0, expected_ef_search = 0;
         int32_t expected_max_level = 0, expected_entry_point = 0;
         for (uint32_t s = 0; s < opts.num_shards; s++) {
             std::string path = index_file_for_shard(opts.output_path, s);
@@ -227,6 +228,8 @@ BuildResult build_sharded_index(const BuildOptions &opts)
                 expected_dim = sb.dim;
                 expected_M = sb.M;
                 expected_num_shards = sb.num_shards;
+                expected_num_levels = sb.num_levels;
+                expected_ef_search = sb.ef_search;
                 expected_max_level = sb.max_level;
                 expected_entry_point = sb.entry_point;
             } else if (sb.ntotal != expected_ntotal || sb.dim != expected_dim || sb.M != expected_M ||
@@ -234,6 +237,18 @@ BuildResult build_sharded_index(const BuildOptions &opts)
                        sb.entry_point != expected_entry_point) {
                 r.status = Status::ValidationErr;
                 r.error = "shard " + std::to_string(s) + " params inconsistent with shard 0";
+                return r;
+            }
+            if (s > 0 && sb.num_levels != expected_num_levels) {
+                r.status = Status::ValidationErr;
+                r.error = "shard " + std::to_string(s) + " num_levels=" + std::to_string(sb.num_levels) +
+                          ", expected " + std::to_string(expected_num_levels);
+                return r;
+            }
+            if (s > 0 && sb.ef_search != expected_ef_search) {
+                r.status = Status::ValidationErr;
+                r.error = "shard " + std::to_string(s) + " ef_search=" + std::to_string(sb.ef_search) + ", expected " +
+                          std::to_string(expected_ef_search);
                 return r;
             }
             if (sb.shard_id != s) {
