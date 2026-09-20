@@ -1,0 +1,56 @@
+FROM swr.cn-north-4.myhuaweicloud.com/cloud_boostkit/openeuler-24.03-lts-sp3:latest
+
+RUN set -ex && rm -rf /etc/yum.repos.d/* && touch /etc/yum.repos.d/openEuler.repo \
+&& echo "[openEuler-everything]                                                                                            " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "name=openEuler-everything                                                                                         " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "baseurl=http://repo.openeuler.org/openEuler-24.03-LTS-SP3/everything/aarch64/                                     " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "enabled=1                                                                                                         " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "gpgcheck=0                                                                                                        " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "gpgkey=http://repo.openeuler.org/openEuler-24.03-LTS-SP3/everything/aarch64/RPM-GPG-KEY-openEuler                 " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "                                                                                                                  " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "[openEuler-EPOL]                                                                                                  " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "name=openEuler-epol                                                                                               " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "baseurl=http://repo.openeuler.org/openEuler-24.03-LTS-SP3/EPOL/main/aarch64/                                      " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "enabled=1                                                                                                         " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "gpgcheck=0                                                                                                        " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "                                                                                                                  " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "[openEuler-update]                                                                                                " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "name=openEuler-update                                                                                             " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "baseurl=http://repo.openeuler.org/openEuler-24.03-LTS-SP3/update/aarch64/                                         " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "enabled=1                                                                                                         " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "gpgcheck=0                                                                                                        " >> /etc/yum.repos.d/openEuler.repo \
+&& yum clean all && yum makecache \
+&& yum install -y sudo zip unzip wget curl tar gcc gcc-c++ make git python3 cmake python3-pip python3-requests python3-devel dos2unix hdf5 hdf5-devel numactl numactl-devel openmpi-devel \
+&& mkdir -p /opt/compile_rely/ && pushd /opt/compile_rely/ \
+&& echo "install OpenBLAS" \
+&& git clone --branch v0.3.29 --single-branch https://gh-proxy.test.osinfra.cn/https://github.com/OpenMathLib/OpenBLAS.git \
+&& pushd OpenBLAS && make -j8 && make install && popd && find / -name libopenblas.so \
+&& echo "install faiss" \
+&& git clone --branch v1.13.2 --single-branch https://gh-proxy.test.osinfra.cn/https://github.com/facebookresearch/faiss.git && pushd faiss \
+&& cmake -B build . -DFAISS_ENABLE_GPU=OFF -DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DFAISS_OPT_LEVEL=generic -DFAISS_ENABLE_PYTHON=OFF -DMKL_LIBRARIES=/opt/OpenBLAS/lib/libopenblas.so -DCMAKE_INSTALL_PREFIX=/opt/compile_rely/faiss \
+&& make -C build -j faiss && make -C build install && popd \
+&& echo "get googletst" \
+&& git clone --branch v1.14.0 --depth 1 https://gh-proxy.test.osinfra.cn/https://github.com/google/googletest.git \
+&& popd
+
+ENV LANG=C.utf8 \
+    LC_ALL=C.utf8 \
+    LANGUAGE=C.utf8
+
+ENV BoostKit_USER=boostkit \
+    BoostKit_GROUP=boostkit \
+    BoostKit_UID=1000 \
+    BoostKit_GID=1000 \
+    AGENT_WORKDIR=/home/boostkit/agent
+
+RUN set -x \
+    && groupadd -g "${BoostKit_GID}" "${BoostKit_GROUP}" \
+    && useradd -c "Jenkins user" -d "/home/${BoostKit_USER}" -u "${BoostKit_UID}" -g "${BoostKit_GID}" -m "${BoostKit_USER}" \
+    && echo "${BoostKit_USER} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && mkdir -p "/home/${BoostKit_USER}/.boostkit" "${AGENT_WORKDIR}" /tmp \
+    && chown -R "${BoostKit_UID}:${BoostKit_GID}" /tmp /opt ${AGENT_WORKDIR} \
+    && chmod -R 755 /tmp /opt ${AGENT_WORKDIR}
+
+USER ${BoostKit_USER}
+VOLUME ["/home/boostkit/.boostkit","/home/boostkit/agent"]
+WORKDIR ${AGENT_WORKDIR}
