@@ -1,5 +1,12 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "gd_hnsw_search.h"
@@ -522,6 +529,19 @@ void GdHnswSearcher::get_neighbor_range(int32_t global_id, int layer, uint64_t &
     }
 
     const auto &sv = shards_[sorted_idx];
+
+    // Defensive: a node only participates in layers [0, levels[node]-1].
+    // On a corrupted or hand-built graph, layering past that would slide
+    // begin_out into the NEXT node's slots (nodes are stored back-to-back)
+    // and the search would treat another node's neighbors as upper-layer
+    // ones. Empty range → callers' loops skip the layer naturally.
+    // Negative layer / garbage negative level both cast to huge → same path.
+    if (static_cast<uint32_t>(layer) >= static_cast<uint32_t>(sv.levels[local_id])) {
+        begin_out = end_out = sv.offsets[local_id];
+        neighbors_out = sv.neighbors;
+        return;
+    }
+
     uint64_t o = sv.offsets[local_id];
     begin_out = o + static_cast<uint64_t>(sv.cum_nneighbor[layer]);
     end_out = o + static_cast<uint64_t>(sv.cum_nneighbor[layer + 1]);

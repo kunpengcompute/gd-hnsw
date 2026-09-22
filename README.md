@@ -29,11 +29,9 @@ gd-hnsw-master/
 │  └─ googletest/
 │     └─ CMakeLists.txt                       // googletest构建脚本（引用3rdparty/googletest/googletest子模块）
 ├─ benchmarks/                                // 性能基准与端到端服务测试
-│  ├─ CMakeLists.txt                          // build_index/service_runner/bench_runner目标构建
+│  ├─ CMakeLists.txt                          // build_index/gd_hnsw_bench目标构建
 │  ├─ main.cpp                                // bench 入口：命令行解析与分发
 │  ├─ build_index.cpp                         // 离线索引构建工具
-│  ├─ service_runner.cpp                      // 服务端运行器（启动service线程处理远端pushdown请求）
-│  ├─ service_runner.h                        // 服务运行器接口
 │  ├─ bench_runner.cpp                        // 基准运行器（warmup/rounds、召回率与延迟统计）
 │  ├─ bench_runner.h                          // 基准运行器接口
 │  ├─ bench_report.cpp                        // 基准报告生成（召回率、QPS、时延分位）
@@ -152,7 +150,7 @@ gd-hnsw-master/
 
 ## License
 
-gd_hnsw采用Apache 2.0 License许可证授权，支持修改代码和再开源，具体请参见[LICENSE](./LICENSE)文件。
+gd_hnsw采用Mulan PSL v2许可证授权，支持修改代码和再开源，具体请参见[LICENSE](./LICENSE)文件。
 
 本项目的文档适用CC-BY 4.0许可证，具体请参见 [LICENSE](./docs/LICENSE)文件。
 

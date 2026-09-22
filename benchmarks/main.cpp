@@ -1,5 +1,12 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 // main.cpp — gd_hnsw_bench: MPI benchmark using the gd_hnsw::Context API.
@@ -32,6 +39,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <getopt.h>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -95,6 +103,24 @@ static void apply_config(const ConfigParser &cfg, std::string &load_index_path, 
         num_warmup = cfg.get_int("warmup", num_warmup);
 }
 
+// Parse a uint32 CLI argument. Rejects garbage and negatives instead of
+// wrapping: static_cast<uint32_t>(std::stoi("-1")) == 4294967295 would turn
+// "--service-threads -1" into a 4-billion-thread request. Throws
+// std::runtime_error.
+static uint32_t parse_u32_arg(const char *opt, const char *arg)
+{
+    long long v = 0;
+    size_t pos = 0;
+    try {
+        v = std::stoll(arg, &pos);
+    } catch (const std::exception &) {
+        throw std::runtime_error(std::string(opt) + " expects an integer, got '" + arg + "'");
+    }
+    if (pos != std::strlen(arg) || v < 0 || v > UINT32_MAX)
+        throw std::runtime_error(std::string(opt) + " expects an integer in [0, 4294967295], got '" + arg + "'");
+    return static_cast<uint32_t>(v);
+}
+
 int main(int argc, char **argv)
 {
     std::string load_index_path;
@@ -130,9 +156,14 @@ int main(int argc, char **argv)
             fprintf(stderr, "Error: cannot read config file '%s'\n", config_path.c_str());
             return 1;
         }
-        apply_config(cfg, load_index_path, dataset_path, K, ef_search, num_threads, search_threads, service_threads,
-                     expand_batch, use_dot_norm, cluster_route, dataset_format_str, bin_base_path, num_rounds,
-                     num_warmup);
+        try {
+            apply_config(cfg, load_index_path, dataset_path, K, ef_search, num_threads, search_threads, service_threads,
+                         expand_batch, use_dot_norm, cluster_route, dataset_format_str, bin_base_path, num_rounds,
+                         num_warmup);
+        } catch (const std::exception &e) {
+            fprintf(stderr, "Error: %s\n", e.what());
+            return 1;
+        }
     }
 
     // ---- (1) CLI parse (overrides config) ----
@@ -155,26 +186,31 @@ int main(int argc, char **argv)
                                         {nullptr, 0, nullptr, 0}};
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "d:k:e:t:h", long_opts, nullptr)) != -1) {
-        switch (opt) {
-            case 1000: config_path = optarg; break; // already applied above
-            case 1006: load_index_path = optarg; break;
-            case 'd': dataset_path = optarg; break;
-            case 'k': K = std::stoi(optarg); break;
-            case 'e': ef_search = std::stoi(optarg); break;
-            case 't': num_threads = std::stoi(optarg); break;
-            case 1002: search_threads = static_cast<uint32_t>(std::stoi(optarg)); break;
-            case 1003: service_threads = static_cast<uint32_t>(std::stoi(optarg)); break;
-            case 1022: expand_batch = static_cast<uint32_t>(std::stoi(optarg)); break;
-            case 1019: use_dot_norm = true; break;
-            case 1100: cluster_route = true; break;
-            case 1015: dataset_format_str = optarg; break;
-            case 1016: bin_base_path = optarg; break;
-            case 1001: num_rounds = std::stoi(optarg); break;
-            case 1004: num_warmup = std::stoi(optarg); break;
-            case 'h': print_usage(argv[0]); return 0;
-            default: print_usage(argv[0]); return 1;
+    try {
+        while ((opt = getopt_long(argc, argv, "d:k:e:t:h", long_opts, nullptr)) != -1) {
+            switch (opt) {
+                case 1000: config_path = optarg; break; // already applied above
+                case 1006: load_index_path = optarg; break;
+                case 'd': dataset_path = optarg; break;
+                case 'k': K = std::stoi(optarg); break;
+                case 'e': ef_search = std::stoi(optarg); break;
+                case 't': num_threads = std::stoi(optarg); break;
+                case 1002: search_threads = parse_u32_arg("--search-threads", optarg); break;
+                case 1003: service_threads = parse_u32_arg("--service-threads", optarg); break;
+                case 1022: expand_batch = parse_u32_arg("--expand-batch", optarg); break;
+                case 1019: use_dot_norm = true; break;
+                case 1100: cluster_route = true; break;
+                case 1015: dataset_format_str = optarg; break;
+                case 1016: bin_base_path = optarg; break;
+                case 1001: num_rounds = std::stoi(optarg); break;
+                case 1004: num_warmup = std::stoi(optarg); break;
+                case 'h': print_usage(argv[0]); return 0;
+                default: print_usage(argv[0]); return 1;
+            }
         }
+    } catch (const std::exception &e) {
+        fprintf(stderr, "Error: %s\n", e.what());
+        return 1;
     }
 
     if (load_index_path.empty() || dataset_path.empty()) {
@@ -263,7 +299,7 @@ int main(int argc, char **argv)
         my_idx = Context::route_queries(ctx, all_queries, nq);
     } else {
         uint64_t per = (nq + world_size - 1) / world_size;
-        uint64_t qs = static_cast<uint64_t>(rank) * per;
+        uint64_t qs = std::min<uint64_t>(static_cast<uint64_t>(rank) * per, nq);
         uint64_t qe = std::min(qs + per, nq);
         my_idx.reserve(qe - qs);
         for (uint64_t i = qs; i < qe; i++)

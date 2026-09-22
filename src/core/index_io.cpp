@@ -1,5 +1,12 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "index_io.h"
@@ -297,6 +304,8 @@ bool load_shard_buffers(const std::string &base_path, uint32_t num_shards, std::
     uint64_t expected_ntotal = sb0->ntotal;
     uint32_t expected_dim = sb0->dim;
     uint32_t expected_M = sb0->M;
+    uint32_t expected_num_levels = sb0->num_levels;
+    uint32_t expected_ef_search = sb0->ef_search;
     int32_t expected_max_level = sb0->max_level;
     int32_t expected_entry_point = sb0->entry_point;
 
@@ -322,6 +331,14 @@ bool load_shard_buffers(const std::string &base_path, uint32_t num_shards, std::
                     "Error: shard %u has inconsistent index parameters "
                     "(ntotal/dim/M/max_level/entry_point mismatch with shard 0)\n",
                     s);
+            return false;
+        }
+        if (sb->num_levels != expected_num_levels) {
+            fprintf(stderr, "Error: shard %u has num_levels=%u, expected %u\n", s, sb->num_levels, expected_num_levels);
+            return false;
+        }
+        if (sb->ef_search != expected_ef_search) {
+            fprintf(stderr, "Error: shard %u has ef_search=%u, expected %u\n", s, sb->ef_search, expected_ef_search);
             return false;
         }
         if (sb->global_id_begin != sum_ntotal_local) {

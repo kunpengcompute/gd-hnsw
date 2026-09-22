@@ -1,5 +1,12 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 // test_deploy_e2e.cpp — Layer 4 deploy API end-to-end tests.
@@ -1218,7 +1225,11 @@ TEST(Deploy, InitWithOptions)
     InitOptions io;
     io.num_threads = 2;
     Context ctx;
-    ASSERT_EQ(ctx.initialize(nullptr, nullptr, io), Status::Ok);
+    Status s = ctx.initialize(nullptr, nullptr, io);
+    if (s == Status::UbsemError) {
+        GTEST_SKIP() << "ubs-mem runtime unavailable (daemon not running)";
+    }
+    ASSERT_EQ(s, Status::Ok);
     EXPECT_TRUE(ctx.initialized());
     EXPECT_EQ(ctx.rank(), 0);
     EXPECT_EQ(ctx.size(), 1);
