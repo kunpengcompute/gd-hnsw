@@ -45,21 +45,21 @@ yum install make cmake gcc g++ openmpi-devel blas-devel lapack-devel
 
 ### 获取OpenBLAS
 
-1. Faiss依赖数学库，从GitHub仓下载开源OpenBLAS源代码，标签为v0.3.29。保存在编译机器可访问的路径中，假设位于"/path/to/OpenBLAS-0.3.29"。
+1. Faiss依赖数学库，从GitHub仓下载开源OpenBLAS源代码（版本以Faiss要求为准，如v0.3.29或更新版本）。保存在编译机器可访问的路径中，假设位于"/path/to/OpenBLAS"。
 
    ```bash
-   git clone --branch v0.3.29 --single-branch https://github.com/OpenMathLib/OpenBLAS.git
+   git clone https://github.com/OpenMathLib/OpenBLAS.git
    ```
 
 2. 编译源代码获取libopenblas.so。
 
    ```bash
-   cd /path/to/OpenBLAS-0.3.29/OpenBLAS
+   cd /path/to/OpenBLAS
    make
    make install
    ```
 
-3. 构建前确保动态库可被找到。
+3. 构建前确保动态库可被找到（以实际安装路径为准，示例如下）。
 
    ```bash
    export LD_LIBRARY_PATH=/opt/OpenBLAS/lib:$LD_LIBRARY_PATH
