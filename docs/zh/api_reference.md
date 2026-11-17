@@ -7,7 +7,7 @@ gd_hnsw以C++20实现，对外提供两层接口。
 - **C ABI**：头文件`ub_c_api.h`，纯C接口（无C++构造、签名不含STL），位于全局命名空间（extern "C"），面向Milvus等宿主的CGO集成，覆盖"配置→装载→资源发布/导入→启用→检索→释放"全生命周期。
 - **C++ API**：位于`namespace hnsw_urma`，含索引离线构建（`index/builder.hpp`）与索引文件读写（`index/format.hpp`），用于构建工具与自定义集成。
 
-错误处理约定：C ABI返回`0`表示成功，非`0`为`hnsw_urma::StatusCode`（个别接口除外，以各接口返回值说明为准）；C++ API返回`Status`/`Result<T>`，不抛异常。
+错误处理约定：C ABI返回`0`表示成功，非`0`为`hnsw_urma::StatusCode`（个别接口除外，以各接口返回值说明为准）；C++ API通过`Status`/`Result<T>`报告常规错误，但不保证所有异常均被转换为状态码，例如内存分配异常仍可能抛出。
 
 ## 状态码
 

@@ -53,13 +53,13 @@ Faiss依赖数学库OpenBLAS，按构建场景区分获取方式：
 1. 从GitHub仓下载开源OpenBLAS源代码，标签为v0.3.30。保存在编译机器可访问的路径中，假设位于"/path/to/OpenBLAS-0.3.30"。
 
    ```bash
-   git clone --branch v0.3.30 --single-branch https://github.com/OpenMathLib/OpenBLAS.git
+   git clone --branch v0.3.30 --single-branch https://github.com/OpenMathLib/OpenBLAS.git /path/to/OpenBLAS-0.3.30
    ```
 
 2. 编译源代码获取libopenblas.so。
 
    ```bash
-   cd /path/to/OpenBLAS-0.3.30/OpenBLAS
+   cd /path/to/OpenBLAS-0.3.30
    make
    make install
    ```

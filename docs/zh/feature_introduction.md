@@ -149,7 +149,7 @@ HNSW（Hierarchical Navigable Small World，分层可导航小世界图）是一
 | RPC Progress | max(1, min(4, ⌊C/12⌋)) |
 | Search | 扣除Distance、READ/RPC Progress及预留（max(1, ⌊C/12⌋)，含Control）后的剩余数量 |
 
-线程支持CPU绑定（`cpu_bind_mode`：auto/none）、拓扑布局（`cpu_layout`：contiguous/llc-isolated/llc-spread）与进度模式（`progress_mode`：busy自旋/adaptive休眠）。查询等待远端操作时，Search线程可以继续处理其他就绪查询，单条查询的搜索状态始终由同一个Search线程维护。
+线程支持CPU绑定（`cpu_bind_mode`：auto/none）、拓扑布局（`cpu_layout`：auto/contiguous/llc-isolated/llc-spread）与进度模式（`progress_mode`：busy自旋/adaptive休眠）。查询等待远端操作时，Search线程可以继续处理其他就绪查询，单条查询的搜索状态始终由同一个Search线程维护。
 
 ### 索引文件组织
 
@@ -187,7 +187,7 @@ HNSW（Hierarchical Navigable Small World，分层可导航小世界图）是一
 - **多线程并行与查询间重叠**：五类线程分工，通信与计算重叠；查询等待远端操作时Search线程切换处理其他查询。
 - **并发资源管理**：查询池（`max_active_queries`，默认16）限制在途查询；查询级超时（默认30s）与操作级超时（默认5s）保障长尾可控；支持优雅退出（drain）。
 - **可观测性**：基准输出召回率、QPS与时延分位（P50/P95/P99），并可导出分阶段耗时与队列水线等详细画像（JSON/CSV）。
-- **Milvus一体化接入**：经C ABI（`ub_c_api.h`）接入Milvus QueryNode，由`ub.TrySearch`分流闸门按开关接管检索请求；UB不支持的计划形态在解析阶段直接报错（不回退），开启全局索引时UB查询失败直接返回错误，仅关闭全局索引时本地UB执行失败才回退原生链路。
+- **Milvus一体化接入**：经C ABI（`ub_c_api.h`）接入Milvus QueryNode，由`ub.TrySearch`分流闸门按开关接管检索请求；开启全局索引时UB查询失败直接返回错误；关闭全局索引时，本地UB执行失败（包括计划解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。
 
 ## 性能规格
 

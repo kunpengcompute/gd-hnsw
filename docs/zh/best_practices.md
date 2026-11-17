@@ -40,7 +40,7 @@
 
 `expand_batch`（第0层每轮展开节点数，默认1）调大可摊薄每轮通信往返，但启动计划容量按`maximum_batch = max(1, M, M0 × expand_batch)`放大：
 
-- 调大`expand_batch`时，同步调大队列与注册RPC内存预算（`UbSetMemoryBudget`，默认1 GiB / 8 GiB），否则启动即超限。
+- 调大`expand_batch`后，检查容量规划是否仍在队列与注册RPC内存预算（`UbSetMemoryBudget`，默认1 GiB / 8 GiB）内；仅当规划用量超过现有预算时才需提高相应预算或降低容量相关参数，超限配置会在启动校验时被拒绝。
 - `read_jfs_depth`缺省解析为`max(64, maximum_batch, max_active_queries × expand_batch × 2)`；显式调大`max_active_queries`或`expand_batch`后注意其headroom。
 
 ### 并发与查询池
@@ -65,8 +65,8 @@
 
 1. 按《[快速入门](./quick_start.md)》"Milvus接入"配置`queryNode.urma`与`queryNode.ub`。注意`seedDir`/`shardIds`的启动装载仅在`globalIndex.enabled=false`时生效；开启全局索引时该路径被跳过，数据随segment装载。
 2. 伪分布式/单机验证时`shardIds`留空（装载全部分片）；真分布式按部署为每个QN分配其持有的分片（每QN一个分片）。
-3. UB链路只支持裸向量检索（单FloatVector placeholder、无过滤/group-by/迭代器、`round_decimal=-1`、`search_params`不含未声明字段）且要求`0 < topk <= ef`；不满足的计划在解析阶段直接报错、不回退，需由调用方保证请求形态。
-4. 开启全局索引（`globalIndex.enabled=true`）时UB查询失败直接返回错误；仅关闭全局索引时本地UB执行失败才回退原生链路。资源就绪后可经`UbRetryEnableForPushdown`升级为pushdown路径。
+3. UB链路只支持裸向量检索（单FloatVector placeholder、无过滤/group-by/迭代器、`round_decimal=-1`、`search_params`不含未声明字段）且要求`0 < topk <= ef`；不满足的计划由UB解析返回错误，回退行为取决于全局索引开关与错误发生位置，见下一项。
+4. 开启全局索引（`globalIndex.enabled=true`）时UB查询失败直接返回错误；关闭全局索引时，本地`RunSearchAsWorker`失败（包括计划或placeholder解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。资源就绪后可经`UbRetryEnableForPushdown`升级为pushdown路径。
 
 ## 验收Checklist
 

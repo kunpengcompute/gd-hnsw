@@ -15,7 +15,7 @@
 - **URMA数据面**：远端邻接表/向量经URMA READ单边读取；每个分片以五种角色发布注册内存（topology/vectors/distance-tasks/distance-results/distance-notify）。
 - **距离下推（pushdown）**：远端分片向量的距离计算可下发给**拥有该分片的远端进程**就近执行，只回传ID与距离；支持pull/pushdown/auto三种策略。
 - **五类线程运行时**：Control/Search/Distance/READ Progress/RPC Progress，通信与计算重叠，查询等待远端操作时Search线程切换处理其他查询。
-- **Milvus一体化接入**：经C ABI（`ub_c_api.h`）接入Milvus QueryNode，由`ub.TrySearch`按开关分流接管检索请求；仅支持裸向量检索，不支持的计划在解析阶段报错（不回退），开启全局索引时UB查询失败直接返回错误，仅关闭全局索引时本地失败才回退原生链路。
+- **Milvus一体化接入**：经C ABI（`ub_c_api.h`）接入Milvus QueryNode，由`ub.TrySearch`按开关分流接管检索请求；仅支持裸向量检索；开启全局索引时UB查询失败直接返回错误；关闭全局索引时，本地UB执行失败（包括计划解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。
 
 底层HNSW图基于[Faiss](https://github.com/facebookresearch/faiss)构建。
 
