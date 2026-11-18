@@ -10,7 +10,7 @@
 
 | 操作系统 | 处理器类型 | 编译器 | 其他 |
 |----------|------------|--------|------|
-| openEuler 24.03 LTS SP3 | 鲲鹏950处理器（AArch64） | GCC 12.3 | CMake 3.26及以上版本，C++20编译环境，需UMDK/URMA |
+| openEuler 24.03 LTS（Long Term Support，长期支持） SP3 | 鲲鹏950处理器（AArch64） | GCC（GNU Compiler Collection，GNU编译器套件） 12.3 | CMake（Cross-platform Make，跨平台构建工具） 3.26及以上版本，C++20编译环境，需UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA（Unified Remote Memory Access，统一远端内存访问） |
 
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >
@@ -27,10 +27,10 @@ gd_hnsw编译依赖如下组件。
 |------|------|----------|
 | CMake 3.26及以上版本 | 构建系统 | 系统包管理器或pip |
 | GCC 12.3 | C++20编译器 | 系统包管理器 |
-| MPI | 独立基准的集群控制面（Milvus集成不依赖MPI） | yum install openmpi-devel等 |
-| UMDK/URMA及UB相关组件 | 跨节点数据面（READ/WRITE_NOTIFY） | 请参见下文"[安装UB相关组件与驱动](./installation_guide.md#安装ub相关组件与驱动)" |
-| Faiss 1.13.2及以上版本 | 离线HNSW图构建 | 请参见下文"[获取Faiss](./installation_guide.md#获取faiss)" |
-| OpenBLAS | Faiss数学库依赖 | 请参见下文"[获取OpenBLAS](./installation_guide.md#获取openblas)" |
+| MPI（Message Passing Interface，消息传递接口） | 独立基准的集群控制面（Milvus集成不依赖MPI） | yum install openmpi-devel等 |
+| UMDK/URMA及UB（Unified Bus，统一总线）相关组件 | 跨节点数据面（READ/WRITE_NOTIFY） | 请参见下文"[安装UB相关组件与驱动](./installation_guide.md#安装ub相关组件与驱动)" |
+| Faiss 1.13.2及以上版本 | 离线HNSW（Hierarchical Navigable Small World，分层可导航小世界）图构建 | 请参见下文"[获取Faiss](./installation_guide.md#获取faiss)" |
+| OpenBLAS（Open Basic Linear Algebra Subprograms，开放基础线性代数子程序库） | Faiss数学库依赖 | 请参见下文"[获取OpenBLAS](./installation_guide.md#获取openblas)" |
 | googletest | 单元测试框架（仅跑测试时需要） | 系统包管理器或源码 |
 
 ## 编译安装
@@ -95,7 +95,7 @@ git clone --branch v1.13.2 --single-branch https://github.com/facebookresearch/f
 | ubctl | 1.0.3-4oe2403sp3 | 跟随openEuler 24.03 LTS SP3最新版本发布，通过yum install安装 |
 | UBM | 2.0.0.B023-1 | [support网站获取](https://support.huawei.com) |
 | UBE | 1.1.10.0.b142-openeuler24.03 | [support网站获取](https://support.huawei.com) |
-| BIOS | 2.16.0.B013 | [support网站获取](https://support.huawei.com) |
+| BIOS（Basic Input Output System，基本输入输出系统） | 2.16.0.B013 | [support网站获取](https://support.huawei.com) |
 
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >UB相关组件的具体配套版本以发布版本的版本配套表为准。
@@ -130,14 +130,14 @@ cmake --install build --prefix /path/to/install
 | hnsw_urma运行时库 | 库 | 核心检索运行时（core/index/compute/search/transport/runtime/protocol/control） |
 | hnsw_urma::builder | 库 | Faiss适配的离线索引构建模块 |
 | 索引构建应用 | 可执行 | 基于Faiss的离线建库工具（产出索引三元组） |
-| 检索基准应用 | 可执行 | 多进程基准：加载索引、启动五类线程运行时、统计召回率/QPS/时延分位 |
+| 检索基准应用 | 可执行 | 多进程基准：加载索引、启动五类线程运行时、统计召回率/QPS（Queries Per Second，每秒查询数）/时延分位 |
 
 ## 单元测试验证
 
 测试基于googletest，覆盖以下范围：
 
 - **单元**：索引格式与校验、ShardMap分片映射、VisitedTable、MinimaxHeap、距离计算、数据集加载、状态码、页对齐缓冲区、无锁环、运行时配置解析；
-- **运行时**：调度器、RPC传输/运行时/邮箱、距离下推、负载均衡、优雅退出；
+- **运行时**：调度器、RPC（Remote Procedure Call，远程过程调用）传输/运行时/邮箱、距离下推、负载均衡、优雅退出；
 - **集成**：本地搜索、远端拉取、端到端服务；
 - **格式**：索引文件format V2的写出/读取与全局元信息一致性校验。
 
@@ -151,7 +151,7 @@ cmake --install build --prefix /path/to/install
 
    编译器或标准库过旧。请使用GCC 12.3及以上版本，并确认以C++20或更高标准编译。
 
-3. **Faiss链接报缺BLAS符号**
+3. **Faiss链接报缺BLAS（Basic Linear Algebra Subprograms，基础线性代数子程序）符号**
 
    确认OpenBLAS已编译安装，且`LD_LIBRARY_PATH`包含其lib目录（如`/opt/OpenBLAS/lib`）。
 
@@ -159,8 +159,26 @@ cmake --install build --prefix /path/to/install
 
    确认各节点URMA设备可用（`ubctl`等工具枚举）、传输模式与设备能力匹配（当前驱动要求`rm`可靠消息模式），且对端资源已在资源目录中发布并完成导入。
 
+## 缩略语
+
+| 缩略语 | 英文全称 | 中文全称 |
+|--------|----------|----------|
+| BIOS | Basic Input Output System | 基本输入输出系统 |
+| BLAS | Basic Linear Algebra Subprograms | 基础线性代数子程序 |
+| CMake | Cross-platform Make | 跨平台构建工具 |
+| GCC | GNU Compiler Collection | GNU编译器套件 |
+| HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
+| LTS | Long Term Support | 长期支持 |
+| MPI | Message Passing Interface | 消息传递接口 |
+| OpenBLAS | Open Basic Linear Algebra Subprograms | 开放基础线性代数子程序库 |
+| QPS | Queries Per Second | 每秒查询数 |
+| RPC | Remote Procedure Call | 远程过程调用 |
+| UB | Unified Bus | 统一总线 |
+| UMDK | Unified Memory Development Kit | 统一内存开发工具包 |
+| URMA | Unified Remote Memory Access | 统一远端内存访问 |
+
 ## 修订记录
 
 | 文档版本 | 发布日期 | 修改说明 |
 |------|----------|------------|
-| 01 | 2026-11-17 | 第一次正式发布。 |
+| 01 | 2026-12-30 | 第一次正式发布。 |

@@ -2,7 +2,7 @@
 
 本文档介绍gd_hnsw（代码命名空间`hnsw_urma`）的系统架构、核心算法原理与关键特性，帮助三方开发者理解其工作机理并正确使用。
 
-gd_hnsw是一套基于URMA（用户态远程内存访问）的全局分布式HNSW检索运行时：多个进程共同持有一张覆盖全部数据的HNSW全局图（按分片存储），任一进程可发起查询，沿图遍历时通过URMA READ直接读取远端进程的图结构与向量，并可将距离计算下推（pushdown）到数据所在进程就近执行。核心以C++20实现，跨节点通信基于UMDK/URMA；独立基准的集群协同基于MPI（Milvus集成不依赖MPI，资源发现走Milvus目录机制）。
+gd_hnsw是一套基于URMA（Unified Remote Memory Access，统一远端内存访问）的全局分布式HNSW（Hierarchical Navigable Small World，分层可导航小世界）检索运行时：多个进程共同持有一张覆盖全部数据的HNSW全局图（按分片存储），任一进程可发起查询，沿图遍历时通过URMA READ直接读取远端进程的图结构与向量，并可将距离计算下推（pushdown）到数据所在进程就近执行。核心以C++20实现，跨节点通信基于UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA；独立基准的集群协同基于MPI（Message Passing Interface，消息传递接口）（Milvus集成不依赖MPI，资源发现走Milvus目录机制）。
 
 ## 架构介绍
 
@@ -30,11 +30,11 @@ gd_hnsw是一套基于URMA（用户态远程内存访问）的全局分布式HNS
 └──────────────────────────────────────────────────────────┘
 ```
 
-- **接入层**：`ub_c_api.h`以纯C ABI暴露运行时能力（配置、装载、资源发布/导入、启用、检索、释放），供Milvus等宿主经CGO调用；索引构建与检索基准以独立应用形式提供。
+- **接入层**：`ub_c_api.h`以纯C ABI（Application Binary Interface，应用二进制接口）暴露运行时能力（配置、装载、资源发布/导入、启用、检索、释放），供Milvus等宿主经CGO调用；索引构建与检索基准以独立应用形式提供。
 - **运行时层**：五类线程的编排与调度（详见"线程模型"），以及距离策略（`HybridDistanceOracle`）、负载均衡、优雅退出（drain）。
 - **搜索层**：查询任务（`HnswSearchTask`）的搜索状态机、查询池（`QuerySlotPool`）、本地/远端I/O路径。
 - **传输层**：URMA READ/WRITE_NOTIFY的封装与批处理（lane），以及节点内共享内存传输。
-- **核心层**：`ShardMap`分片映射、`VisitedTable`访问表、`MinimaxHeap`双堆、无锁环（SPSC/MPMC）、页对齐缓冲区、统一`Status`/`Result`返回。
+- **核心层**：`ShardMap`分片映射、`VisitedTable`访问表、`MinimaxHeap`双堆、无锁环（SPSC（Single Producer Single Consumer，单生产者单消费者）/MPMC（Multi Producer Multi Consumer，多生产者多消费者））、页对齐缓冲区、统一`Status`/`Result`返回。
 - **索引层**：索引文件格式（format V2）与离线构建接口（builder，含Faiss适配）。
 
 ### 功能模块
@@ -51,11 +51,11 @@ gd_hnsw是一套基于URMA（用户态远程内存访问）的全局分布式HNS
 | HybridDistanceOracle（runtime） | 距离策略适配器：按目标分片与策略（auto/pull/pushdown）为每组邻居选择执行方式 |
 | Scheduler（runtime） | 查询接纳与分配：准入队列、就绪通知、重试与超时管理（`query_timeout_ms`/`operation_timeout_ms`） |
 | Distance线程（runtime） | 距离计算服务：处理其他进程下推的距离请求，使用本地向量计算指定ID的距离 |
-| READ/RPC Progress（transport/runtime） | 通信线程：推进远端邻接表/向量的URMA READ，收发RPC距离请求与结果（WRITE_NOTIFY） |
+| READ/RPC Progress（transport/runtime） | 通信线程：推进远端邻接表/向量的URMA READ，收发RPC（Remote Procedure Call，远程过程调用）距离请求与结果（WRITE_NOTIFY） |
 | RpcMailbox（runtime/rpc） | RPC邮箱：requests/responses/notify三块注册内存段，承载距离任务与结果队列 |
 | index format V2（index） | 索引文件格式：4KB定长头+数据块，含校验；三类文件组成"三元组"（见"索引文件组织"） |
 | builder（index） | 离线构建：`BuildReferenceIndex`（小规模校验用）与Faiss适配构建（生产，支持流式） |
-| benchmark（runtime） | 检索基准：召回率、QPS、时延分位（P50/P95/P99）与详细运行时画像计数 |
+| benchmark（runtime） | 检索基准：召回率、QPS（Queries Per Second，每秒查询数）、时延分位（P50/P95/P99）与详细运行时画像计数 |
 
 ### 部署模型
 
@@ -70,7 +70,7 @@ gd_hnsw采用对等部署：**一个进程负责一个数据分片**（one worke
 
 ### HNSW算法概述
 
-HNSW（Hierarchical Navigable Small World，分层可导航小世界图）是一种基于多层图的近似最近邻搜索算法。
+HNSW是一种基于多层图的近似最近邻搜索算法。
 
 - **多层图结构**：上层稀疏、下层稠密（第0层包含全部节点）。查询从入口点出发，逐层贪心下探到第0层，在第0层做beam search（`ef_search`宽度的候选集维护）。
 - **关键参数**（`ReferenceBuildOptions`）
@@ -78,7 +78,7 @@ HNSW（Hierarchical Navigable Small World，分层可导航小世界图）是一
   - `M0`：第0层最大邻居数（默认32）。
   - `ef_construction`：建图候选宽度，越大图质量越高、构建越慢（Faiss构建时传入）。
   - `ef_search`：查询候选宽度（索引默认64），越大召回越高、时延越高。
-- **距离度量**：支持L2与内积（IP）两类；构建选项`metric`取值0=L2、1=负内积。运行时可选dot+norm优化路径（`use_dot_norm`）：以‖q‖²+‖x‖²−2q·x计算平方L2距离，仅限L2度量，不是IP开关。
+- **距离度量**：支持L2（L2 Norm，欧氏距离）与IP（Inner Product，内积）两类；构建选项`metric`取值0=L2、1=负内积。运行时可选dot+norm优化路径（`use_dot_norm`）：以‖q‖²+‖x‖²−2q·x计算平方L2距离，仅限L2度量，不是IP开关。
 
 ### 全局图索引与分片基线对比
 
@@ -140,7 +140,7 @@ HNSW（Hierarchical Navigable Small World，分层可导航小世界图）是一
 | READ Progress | 推进远端邻接表与向量的URMA READ，并参与查询阶段的就绪通知 |
 | RPC Progress | 发送本进程的距离请求、接收返回结果，并把本进程Distance的计算结果发回请求方 |
 
-设当前进程可用逻辑CPU数为C，除Control固定1个外，其余四类默认`auto`（0），按以下规则解析（`ResolveRuntimeConfig`）：
+设当前进程可用逻辑CPU（Central Processing Unit，中央处理器）数为C，除Control固定1个外，其余四类默认`auto`（0），按以下规则解析（`ResolveRuntimeConfig`）：
 
 | 线程 | auto解析规则 |
 |------|--------------|
@@ -186,8 +186,8 @@ HNSW（Hierarchical Navigable Small World，分层可导航小世界图）是一
 - **URMA数据面**：远端邻接表/向量经URMA READ单边读取，距离任务经WRITE_NOTIFY投递，配合五块注册内存与资源目录实现零拷贝跨节点访问。
 - **多线程并行与查询间重叠**：五类线程分工，通信与计算重叠；查询等待远端操作时Search线程切换处理其他查询。
 - **并发资源管理**：查询池（`max_active_queries`，默认16）限制在途查询；查询级超时（默认30s）与操作级超时（默认5s）保障长尾可控；支持优雅退出（drain）。
-- **可观测性**：基准输出召回率、QPS与时延分位（P50/P95/P99），并可导出分阶段耗时与队列水线等详细画像（JSON/CSV）。
-- **Milvus一体化接入**：经C ABI（`ub_c_api.h`）接入Milvus QueryNode，由`ub.TrySearch`分流闸门按开关接管检索请求；开启全局索引时UB查询失败直接返回错误；关闭全局索引时，本地UB执行失败（包括计划解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。
+- **可观测性**：基准输出召回率、QPS与时延分位（P50/P95/P99），并可导出分阶段耗时与队列水线等详细画像（JSON（JavaScript Object Notation，JavaScript对象表示法）/CSV（Comma-Separated Values，逗号分隔值））。
+- **Milvus一体化接入**：经C ABI（`ub_c_api.h`）接入Milvus QueryNode，由`ub.TrySearch`分流闸门按开关接管检索请求；开启全局索引时UB（Unified Bus，统一总线）查询失败直接返回错误；关闭全局索引时，本地UB执行失败（包括计划解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。
 
 ## 性能规格
 
@@ -200,10 +200,32 @@ HNSW（Hierarchical Navigable Small World，分层可导航小世界图）是一
 | 吞吐（QPS） | 同等算力下，全局索引相比32分片索引提升100% |
 | 查询时延 | 小于50ms |
 | 召回率 | 大于0.95 |
-| 验证环境 | 鲲鹏超节点电组网4节点（KP950+），openEuler 24.03 LTS SP3 |
+| 验证环境 | 鲲鹏超节点电组网4节点（KP950+），openEuler 24.03 LTS（Long Term Support，长期支持） SP3 |
+
+## 缩略语
+
+| 缩略语 | 英文全称 | 中文全称 |
+|--------|----------|----------|
+| ABI | Application Binary Interface | 应用二进制接口 |
+| CPU | Central Processing Unit | 中央处理器 |
+| CSV | Comma-Separated Values | 逗号分隔值 |
+| HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
+| IP | Inner Product | 内积 |
+| JSON | JavaScript Object Notation | JavaScript对象表示法 |
+| L2 | L2 Norm | 欧氏距离 |
+| LTS | Long Term Support | 长期支持 |
+| MPI | Message Passing Interface | 消息传递接口 |
+| MPMC | Multi Producer Multi Consumer | 多生产者多消费者 |
+| OpenMP | Open Multi-Processing | 开放多处理 |
+| QPS | Queries Per Second | 每秒查询数 |
+| RPC | Remote Procedure Call | 远程过程调用 |
+| SPSC | Single Producer Single Consumer | 单生产者单消费者 |
+| UB | Unified Bus | 统一总线 |
+| UMDK | Unified Memory Development Kit | 统一内存开发工具包 |
+| URMA | Unified Remote Memory Access | 统一远端内存访问 |
 
 ## 修订记录
 
 | 文档版本 | 发布日期 | 修改说明 |
 |------|----------|------------|
-| 01 | 2026-11-17 | 第一次正式发布。 |
+| 01 | 2026-12-30 | 第一次正式发布。 |

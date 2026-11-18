@@ -1,11 +1,13 @@
 # API参考
 
+本文档提供gd_hnsw对外C ABI与C++接口定义、参数说明与返回值。
+
 ## 概述
 
 gd_hnsw以C++20实现，对外提供两层接口。
 
-- **C ABI**：头文件`ub_c_api.h`，纯C接口（无C++构造、签名不含STL），位于全局命名空间（extern "C"），面向Milvus等宿主的CGO集成，覆盖"配置→装载→资源发布/导入→启用→检索→释放"全生命周期。
-- **C++ API**：位于`namespace hnsw_urma`，含索引离线构建（`index/builder.hpp`）与索引文件读写（`index/format.hpp`），用于构建工具与自定义集成。
+- **C ABI（Application Binary Interface，应用二进制接口）**：头文件`ub_c_api.h`，纯C接口（无C++构造、签名不含STL（Standard Template Library，标准模板库）），位于全局命名空间（extern "C"），面向Milvus等宿主的CGO集成，覆盖"配置→装载→资源发布/导入→启用→检索→释放"全生命周期。
+- **C++ API（Application Programming Interface，应用程序编程接口）**：位于`namespace hnsw_urma`，含索引离线构建（`index/builder.hpp`）与索引文件读写（`index/format.hpp`），用于构建工具与自定义集成。
 
 错误处理约定：C ABI返回`0`表示成功，非`0`为`hnsw_urma::StatusCode`（个别接口除外，以各接口返回值说明为准）；C++ API通过`Status`/`Result<T>`报告常规错误，但不保证所有异常均被转换为状态码，例如内存分配异常仍可能抛出。
 
@@ -54,7 +56,7 @@ void UbSetConfig(uint32_t search_workers,
 
 **接口用途**
 
-设置运行时线程与CPU配置。线程数传`0`表示`auto`，按内置公式解析（见《[特性介绍](./feature_introduction.md)》"线程模型"）。
+设置运行时线程与CPU（Central Processing Unit，中央处理器）配置。线程数传`0`表示`auto`，按内置公式解析（见《[特性介绍](./feature_introduction.md)》"线程模型"）。
 
 **参数说明**
 
@@ -63,14 +65,14 @@ void UbSetConfig(uint32_t search_workers,
 | search_workers | uint32_t | Search线程数 | 0=auto |
 | distance_workers | uint32_t | Distance线程数 | 0=auto |
 | read_progress_workers | uint32_t | READ Progress线程数 | 0=auto |
-| rpc_progress_workers | uint32_t | RPC Progress线程数 | 0=auto |
-| cpu_bind_mode | const char* | CPU绑定模式 | "auto"（按NUMA拓扑绑核）/ "none" |
+| rpc_progress_workers | uint32_t | RPC（Remote Procedure Call，远程过程调用） Progress线程数 | 0=auto |
+| cpu_bind_mode | const char* | CPU绑定模式 | "auto"（按NUMA（Non-Uniform Memory Access，非一致内存访问）拓扑绑核）/ "none" |
 | cpu_layout | const char* | CPU布局 | "contiguous" / "llc-isolated" / "llc-spread" |
 | progress_mode | const char* | 进度线程模式 | "busy"（自旋）/ "adaptive"（休眠） |
 | allowed_cpus | const uint32_t* | 显式CPU列表 | allowed_cpu_count==0表示不设置，由C++侧自行解析 |
 | allowed_cpu_count | uint32_t | CPU列表长度 | ≥0 |
 | max_active_queries | uint32_t | 查询池大小（在途查询上限） | 默认16；调大前确认设备内存 |
-| read_jfs_depth | uint32_t | URMA READ JFS（WR槽位池）深度 | 0=auto（解析为max(64, maximum_batch, max_active_queries × expand_batch × 2)） |
+| read_jfs_depth | uint32_t | URMA（Unified Remote Memory Access，统一远端内存访问） READ JFS（Jetty Frame Sender，Jetty帧发送端）（WR（Work Request，工作请求）槽位池）深度 | 0=auto（解析为max(64, maximum_batch, max_active_queries × expand_batch × 2)） |
 
 #### UbSetMemoryBudget
 
@@ -107,7 +109,7 @@ void UbSetExpandBatch(uint32_t expand_batch);
 
 **接口用途**
 
-设置HNSW第0层束宽（每轮展开的节点数）。传`0`保留编译期默认值（1）。该值同时作用于搜索任务与启动计划容量（`maximum_batch = max(1, M, M0 × expand_batch)`），避免运行期触发"batch exceeds prepared slot space"限制。
+设置HNSW（Hierarchical Navigable Small World，分层可导航小世界）第0层束宽（每轮展开的节点数）。传`0`保留编译期默认值（1）。该值同时作用于搜索任务与启动计划容量（`maximum_batch = max(1, M, M0 × expand_batch)`），避免运行期触发"batch exceeds prepared slot space"限制。
 
 #### UbSetUrmaEndpoint / UbSetRuntimeOptions
 
@@ -120,8 +122,8 @@ void UbSetRuntimeOptions(const char* options);
 
 **接口用途**
 
-- `UbSetUrmaEndpoint`：把URMA设备名传给运行时单例，`UbEnableDistributedSearch`据此构建UMDK后端。`device_name`为NUL结尾字符串，传`nullptr`清除。
-- `UbSetRuntimeOptions`：以空格分隔的选项串覆盖单项运行时配置（与基准CLI同名的选项，例如`--distance-policy pushdown --use-dot-norm`）。
+- `UbSetUrmaEndpoint`：把URMA设备名传给运行时单例，`UbEnableDistributedSearch`据此构建UMDK（Unified Memory Development Kit，统一内存开发工具包）后端。`device_name`为NUL结尾字符串，传`nullptr`清除。
+- `UbSetRuntimeOptions`：以空格分隔的选项串覆盖单项运行时配置（与基准CLI（Command Line Interface，命令行界面）同名的选项，例如`--distance-policy pushdown --use-dot-norm`）。
 
 ### 装载接口
 
@@ -321,7 +323,7 @@ int UbSearch(const float* query, uint32_t nq, uint32_t dim, uint32_t topk,
 
 **接口用途**
 
-同步检索服务入口：对`nq`个查询向量执行全局图检索。结果共`nq × topk`项，不足处以`-1`（id）/`+inf`（距离）填充。`metric_name`须与已装载索引的度量一致（L2或IP），未知度量报错。
+同步检索服务入口：对`nq`个查询向量执行全局图检索。结果共`nq × topk`项，不足处以`-1`（id）/`+inf`（距离）填充。`metric_name`须与已装载索引的度量一致（L2（L2 Norm，欧氏距离）或IP（Inner Product，内积）），未知度量报错。
 
 **参数说明**
 
@@ -493,8 +495,27 @@ format V2：魔数`0x3258444E494D5248`，版本2，4096字节定长头（`IndexH
 
 `GlobalIndexMeta`关键字段：`ntotal`、`dim`、`metric`、`M`、`M0`、`ef_search_default`、`entry_point`、`max_level`、`num_shards`。装载时校验元信息一致性（`ValidateGlobalMeta`），不一致即拒绝。
 
+## 缩略语
+
+| 缩略语 | 英文全称 | 中文全称 |
+|--------|----------|----------|
+| ABI | Application Binary Interface | 应用二进制接口 |
+| API | Application Programming Interface | 应用程序编程接口 |
+| CLI | Command Line Interface | 命令行界面 |
+| CPU | Central Processing Unit | 中央处理器 |
+| HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
+| IP | Inner Product | 内积 |
+| JFS | Jetty Frame Sender | Jetty帧发送端 |
+| L2 | L2 Norm | 欧氏距离 |
+| NUMA | Non-Uniform Memory Access | 非一致内存访问 |
+| RPC | Remote Procedure Call | 远程过程调用 |
+| STL | Standard Template Library | 标准模板库 |
+| UMDK | Unified Memory Development Kit | 统一内存开发工具包 |
+| URMA | Unified Remote Memory Access | 统一远端内存访问 |
+| WR | Work Request | 工作请求 |
+
 ## 修订记录
 
 | 文档版本 | 发布日期 | 修改说明 |
 |------|----------|------------|
-| 01 | 2026-11-17 | 第一次正式发布。 |
+| 01 | 2026-12-30 | 第一次正式发布。 |

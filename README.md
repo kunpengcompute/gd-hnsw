@@ -2,11 +2,11 @@
 
 ## 最新消息
 
-\[2026.11.17\]：第一次正式发布。提供基于URMA的全局分布式检索能力。
+\[2026-12-30\]：第一次正式发布。提供基于URMA（Unified Remote Memory Access，统一远端内存访问）的全局分布式检索能力。
 
 ## 项目介绍
 
-**gd_hnsw**是一个面向鲲鹏ARM架构的**全局分布式检索算法**。相较于传统分片检索的方式（各分片独立检索再汇聚，总计算量随之放大），该算法在全部数据上构建一张HNSW全局图再按分片存储，保留跨分片图边；利用灵衢（URMA）高带宽、低时延的用户态远程内存访问能力实现分布式全局检索，减少计算量提升吞吐。
+**gd_hnsw**是一个面向鲲鹏ARM（Advanced RISC Machine，高级精简指令集机器）架构的**全局分布式检索算法**。相较于传统分片检索的方式（各分片独立检索再汇聚，总计算量随之放大），该算法在全部数据上构建一张HNSW（Hierarchical Navigable Small World，分层可导航小世界）全局图再按分片存储，保留跨分片图边；利用灵衢统一总线的高带宽、低时延远端内存访问能力实现分布式全局检索，减少计算量提升吞吐。
 
 核心设计思想如下。
 
@@ -14,8 +14,8 @@
 - **全局图跨分片搜索**：沿同一张全局图推进，无需各分片分别完成一次本地top-K再归并。
 - **URMA数据面**：远端邻接表/向量经URMA READ单边读取；每个分片以五种角色发布注册内存（topology/vectors/distance-tasks/distance-results/distance-notify）。
 - **距离下推（pushdown）**：远端分片向量的距离计算可下发给**拥有该分片的远端进程**就近执行，只回传ID与距离；支持pull/pushdown/auto三种策略。
-- **五类线程运行时**：Control/Search/Distance/READ Progress/RPC Progress，通信与计算重叠，查询等待远端操作时Search线程切换处理其他查询。
-- **Milvus一体化接入**：经C ABI（`ub_c_api.h`）接入Milvus QueryNode，由`ub.TrySearch`按开关分流接管检索请求；仅支持裸向量检索；开启全局索引时UB查询失败直接返回错误；关闭全局索引时，本地UB执行失败（包括计划解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。
+- **五类线程运行时**：Control/Search/Distance/READ Progress/RPC（Remote Procedure Call，远程过程调用） Progress，通信与计算重叠，查询等待远端操作时Search线程切换处理其他查询。
+- **Milvus一体化接入**：经C ABI（Application Binary Interface，应用二进制接口）（`ub_c_api.h`）接入Milvus QueryNode，由`ub.TrySearch`按开关分流接管检索请求；仅支持裸向量检索；开启全局索引时UB（Unified Bus，统一总线）查询失败直接返回错误；关闭全局索引时，本地UB执行失败（包括计划解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。
 
 底层HNSW图基于[Faiss](https://github.com/facebookresearch/faiss)构建。
 
@@ -44,6 +44,7 @@ gd-hnsw/
 │  ├─ zh/                                   // 中文文档
 │  │  ├─ api_reference.md                   // API参考
 │  │  ├─ best_practices.md                  // 最佳实践
+│  │  ├─ FAQ.md                             // 常见问题（FAQ）
 │  │  ├─ feature_introduction.md            // 特性介绍
 │  │  ├─ installation_guide.md              // 安装指南
 │  │  ├─ quick_start.md                     // 快速入门
@@ -81,6 +82,9 @@ gd-hnsw/
 <tr><td valign="top"><a href="./docs/zh/best_practices.md">最佳实践</a></td>
 <td valign="top">提供使用gd_hnsw的部署Checklist与调优建议。</td>
 </tr>
+<tr><td valign="top"><a href="./docs/zh/FAQ.md">常见问题（FAQ）</a></td>
+<td valign="top">汇总使用gd_hnsw过程中的常见问题与解答。</td>
+</tr>
 </tbody>
 </table>
 
@@ -90,9 +94,9 @@ gd-hnsw/
 
 ## License
 
-gd_hnsw采用Mulan PSL v2许可证授权，支持修改代码和再开源，具体请参见[LICENSE](./LICENSE)文件。
+gd_hnsw采用Mulan PSL（Mulan Permissive Software License，木兰宽松许可证） v2许可证授权，支持修改代码和再开源，具体请参见[LICENSE](./LICENSE)文件。
 
-本项目的文档适用CC-BY 4.0许可证，具体请参见 [LICENSE](./docs/LICENSE)文件。
+本项目的文档适用CC-BY（Creative Commons Attribution，知识共享署名） 4.0许可证，具体请参见 [LICENSE](./docs/LICENSE)文件。
 
 ## 贡献声明
 
@@ -103,6 +107,25 @@ gd_hnsw采用Mulan PSL v2许可证授权，支持修改代码和再开源，具�
 gd_hnsw在以下方面受益于开源社区。
 
 - [Faiss](https://github.com/facebookresearch/faiss) —— 提供HNSW索引构建能力。
-- MPI/OpenMP/OpenBLAS等开源基础设施。
+- MPI（Message Passing Interface，消息传递接口）/OpenMP（Open Multi-Processing，开放多处理）/OpenBLAS（Open Basic Linear Algebra Subprograms，开放基础线性代数子程序库）等开源基础设施。
 
-感谢来自社区的每一个PR，欢迎贡献gd_hnsw！
+感谢来自社区的每一个PR（Pull Request，拉取请求），欢迎贡献gd_hnsw！
+
+## 缩略语
+
+| 缩略语 | 英文全称 | 中文全称 |
+|--------|----------|----------|
+| ABI | Application Binary Interface | 应用二进制接口 |
+| ARM | Advanced RISC Machine | 高级精简指令集机器 |
+| CC-BY | Creative Commons Attribution | 知识共享署名 |
+| HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
+| IP | Inner Product | 内积 |
+| L2 | L2 Norm | 欧氏距离 |
+| MPI | Message Passing Interface | 消息传递接口 |
+| OpenBLAS | Open Basic Linear Algebra Subprograms | 开放基础线性代数子程序库 |
+| OpenMP | Open Multi-Processing | 开放多处理 |
+| PR | Pull Request | 拉取请求 |
+| PSL | Mulan Permissive Software License | 木兰宽松许可证 |
+| RPC | Remote Procedure Call | 远程过程调用 |
+| UB | Unified Bus | 统一总线 |
+| URMA | Unified Remote Memory Access | 统一远端内存访问 |

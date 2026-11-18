@@ -7,14 +7,14 @@
 部署分布式检索前，请逐项确认。
 
 1. **每个进程能读本进程分片文件**：索引三元组（`global.meta`/`upper_graph.index`/`shard_N.index`）在共享存储或各节点本地副本上可读。
-2. **URMA环境**：所有节点已安装UB相关组件与驱动（参见《[安装指南](./installation_guide.md)》），设备可枚举，传输模式与设备能力匹配（当前驱动要求`rm`）。
+2. **URMA（Unified Remote Memory Access，统一远端内存访问）环境**：所有节点已安装UB（Unified Bus，统一总线）相关组件与驱动（参见《[安装指南](./installation_guide.md)》），设备可枚举，传输模式与设备能力匹配（当前驱动要求`rm`）。
 3. **进程数=分片数**：采用"一个进程一个分片"的对等部署，进程数须与索引分片数一致。
 4. **资源目录可用**：各节点分片的五块注册内存（topology/vectors/distance-tasks/distance-results/distance-notify）已在资源目录发布，且对端完成链路激活与句柄导入（Milvus场景经etcd，参见《[快速入门](./quick_start.md)》"Milvus接入"）。
 5. **基础一致性校验**：导入对端资源前用`UbValidateShardLayout`校验分片数量、编号范围与入口点归属。注意该校验不含构建版本/内容指纹比对，不能单独用于排除过期发布。
 
 ## 调优建议
 
-推荐调优顺序：**先建索引达标召回 → 再调ef_search → 再调运行时参数提QPS → 最后验收时延**。
+推荐调优顺序：**先建索引达标召回 → 再调ef_search → 再调运行时参数提QPS（Queries Per Second，每秒查询数） → 最后验收时延**。
 
 ### HNSW参数
 
@@ -31,7 +31,7 @@
 ### 距离策略选择
 
 - `pushdown`：远端距离就近计算，只回传ID与距离。高维向量、批量较大或跨节点带宽敏感时优先。
-- `pull`：拉回向量本地计算。低维向量、组内ID零散时可避免RPC任务组织开销。
+- `pull`：拉回向量本地计算。低维向量、组内ID零散时可避免RPC（Remote Procedure Call，远程过程调用）任务组织开销。
 - `auto`（默认）：组内ID数量小于`pull_threshold`（默认4）时拉取、否则下推，大多数场景的稳妥选择。
 
 辅助手段：开启组内ID排序（`layer0_sort_mode`）让同分片访问更集中；结果集合满时下推请求自动携带最差距离上界，远端只回传不劣于上界的结果，减少响应量。
@@ -52,7 +52,7 @@
 
 - 五类线程默认`auto`：Distance=max(1,⌊C/6⌋)、READ=max(1,min(2,⌊C/24⌋))、RPC=max(1,min(4,⌊C/12⌋))，Search取扣除后剩余。
 - 跨节点pushdown压力大、Distance队列积压时显式调大Distance线程；追求单节点QPS时调大Search线程，但须为Distance与通信线程留足核数。
-- 生产环境建议保持`cpu_bind_mode=auto`（按NUMA拓扑绑核），并按机器拓扑选择`cpu_layout`；时延敏感用`progress_mode=busy`，功耗/共享环境可试`adaptive`。
+- 生产环境建议保持`cpu_bind_mode=auto`（按NUMA（Non-Uniform Memory Access，非一致内存访问）拓扑绑核），并按机器拓扑选择`cpu_layout`；时延敏感用`progress_mode=busy`，功耗/共享环境可试`adaptive`。
 
 ### 基准测量方法
 
@@ -64,7 +64,7 @@
 ## Milvus接入实践
 
 1. 按《[快速入门](./quick_start.md)》"Milvus接入"配置`queryNode.urma`与`queryNode.ub`。注意`seedDir`/`shardIds`的启动装载仅在`globalIndex.enabled=false`时生效；开启全局索引时该路径被跳过，数据随segment装载。
-2. 伪分布式/单机验证时`shardIds`留空（装载全部分片）；真分布式按部署为每个QN分配其持有的分片（每QN一个分片）。
+2. 伪分布式/单机验证时`shardIds`留空（装载全部分片）；真分布式按部署为每个QN（QueryNode，查询节点）分配其持有的分片（每QN一个分片）。
 3. UB链路只支持裸向量检索（单FloatVector placeholder、无过滤/group-by/迭代器、`round_decimal=-1`、`search_params`不含未声明字段）且要求`0 < topk <= ef`；不满足的计划由UB解析返回错误，回退行为取决于全局索引开关与错误发生位置，见下一项。
 4. 开启全局索引（`globalIndex.enabled=true`）时UB查询失败直接返回错误；关闭全局索引时，本地`RunSearchAsWorker`失败（包括计划或placeholder解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。资源就绪后可经`UbRetryEnableForPushdown`升级为pushdown路径。
 
@@ -75,8 +75,21 @@
 3. 查询时延小于50ms。
 4. 同等算力下，全局索引相比32分片索引QPS提升100%（设计目标，按相同召回率口径对比）。
 
+## 缩略语
+
+| 缩略语 | 英文全称 | 中文全称 |
+|--------|----------|----------|
+| CPU | Central Processing Unit | 中央处理器 |
+| HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
+| NUMA | Non-Uniform Memory Access | 非一致内存访问 |
+| QN | QueryNode | 查询节点 |
+| QPS | Queries Per Second | 每秒查询数 |
+| RPC | Remote Procedure Call | 远程过程调用 |
+| UB | Unified Bus | 统一总线 |
+| URMA | Unified Remote Memory Access | 统一远端内存访问 |
+
 ## 修订记录
 
 | 文档版本 | 发布日期 | 修改说明 |
 |------|----------|------------|
-| 01 | 2026-11-17 | 第一次正式发布。 |
+| 01 | 2026-12-30 | 第一次正式发布。 |

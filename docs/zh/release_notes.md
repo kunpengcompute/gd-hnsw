@@ -1,5 +1,7 @@
 # 版本说明书
 
+本文档提供gd_hnsw每个发布版本的基础信息、配套环境与特性更新信息。
+
 ## 版本配套说明
 
 ### 产品版本信息
@@ -10,10 +12,10 @@
 | 产品版本 | 26.2.RC1 |
 | 软件名称 | gd_hnsw |
 | 软件版本 | v1.0.0 |
-| 底层依赖 | Faiss 1.13.2及以上版本（离线HNSW图构建）、UMDK/URMA（跨节点数据面）、MPI（独立基准控制面，Milvus集成不依赖） |
-| 目标架构 | 鲲鹏ARM（AArch64） |
+| 底层依赖 | Faiss 1.13.2及以上版本（离线HNSW（Hierarchical Navigable Small World，分层可导航小世界）图构建）、UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA（Unified Remote Memory Access，统一远端内存访问）（跨节点数据面）、MPI（Message Passing Interface，消息传递接口）（独立基准控制面，Milvus集成不依赖） |
+| 目标架构 | 鲲鹏ARM（Advanced RISC Machine，高级精简指令集机器）（AArch64） |
 | C++标准 | C++20 |
-| 构建系统 | CMake 3.26及以上版本 |
+| 构建系统 | CMake（Cross-platform Make，跨平台构建工具） 3.26及以上版本 |
 
 ### 与操作系统、编译器和处理器配套说明
 
@@ -21,7 +23,7 @@
 
 | 操作系统 | 处理器类型 | 编译器 | CMake版本号 |
 |----------|------------|--------|--------------|
-| openEuler 24.03 LTS SP3 | 鲲鹏950处理器 | GCC 12.3 | CMake 3.26及以上版本 |
+| openEuler 24.03 LTS（Long Term Support，长期支持） SP3 | 鲲鹏950处理器 | GCC（GNU Compiler Collection，GNU编译器套件） 12.3 | CMake 3.26及以上版本 |
 
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >
@@ -40,14 +42,14 @@
 
 **新增特性**
 
-- 提供基于灵衢（URMA）通信能力的分布式HNSW全局检索算法：在全部数据上构建一张全局图再分片存储，保留跨分片图边，一次查询直接产出全局top-K。
+- 提供基于灵衢统一总线URMA通信能力的分布式HNSW全局检索算法：在全部数据上构建一张全局图再分片存储，保留跨分片图边，一次查询直接产出全局top-K。
 - 提供URMA数据面：远端邻接表/向量经URMA READ单边读取，距离任务经WRITE_NOTIFY投递；每个分片以五种角色发布注册内存（topology/vectors/distance-tasks/distance-results/distance-notify）。
 - 提供混合距离策略：pull（拉取向量）/ pushdown（距离下推）/ auto（按组内ID数量阈值自动选择，默认阈值4），支持组内ID排序与结果上界过滤。
-- 提供五类线程运行时：Control/Search/Distance/READ Progress/RPC Progress，数量支持auto解析（按可用CPU的内置公式），支持CPU绑定、拓扑布局与进度模式配置。
+- 提供五类线程运行时：Control/Search/Distance/READ Progress/RPC（Remote Procedure Call，远程过程调用） Progress，数量支持auto解析（按可用CPU（Central Processing Unit，中央处理器）的内置公式），支持CPU绑定、拓扑布局与进度模式配置。
 - 提供并发资源管理：查询池（`max_active_queries`）、查询级与操作级超时、优雅退出（drain）。
 - 提供索引文件format V2与离线构建：三元组组织（global.meta/upper_graph.index/shard_N.index），支持Faiss生产构建（含流式）与参考构建。
-- 提供检索基准与画像：召回率、QPS、时延分位（P50/P95/P99），可分阶段耗时与队列水线画像（JSON/CSV）。
-- 提供C ABI（`ub_c_api.h`）与Milvus一体化接入：经`ub.TrySearch`分流闸门按开关接管裸向量检索；开启全局索引时UB查询失败直接返回错误；关闭全局索引时，本地UB执行失败（包括计划解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。
+- 提供检索基准与画像：召回率、QPS（Queries Per Second，每秒查询数）、时延分位（P50/P95/P99），可分阶段耗时与队列水线画像（JSON（JavaScript Object Notation，JavaScript对象表示法）/CSV（Comma-Separated Values，逗号分隔值））。
+- 提供C ABI（Application Binary Interface，应用二进制接口）（`ub_c_api.h`）与Milvus一体化接入：经`ub.TrySearch`分流闸门按开关接管裸向量检索；开启全局索引时UB（Unified Bus，统一总线）查询失败直接返回错误；关闭全局索引时，本地UB执行失败（包括计划解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。
 
 ### 性能规格
 
@@ -66,7 +68,7 @@
 - 采用"一个进程一个分片"的对等部署：运行进程数须等于索引分片数。
 - 索引为离线构建，暂不支持在线增删向量。
 - Milvus接入链路当前仅支持裸向量检索：单个FloatVector placeholder、不含标量过滤/group-by/迭代器、要求`round_decimal=-1`、`search_params`不含未声明字段，且要求`0 < topk <= ef`；不满足的计划由UB解析返回错误，开启全局索引时直接返回，关闭全局索引时本地UB执行失败可回退原生链路，转发等前置步骤报错仍直接返回。
-- 底层索引与C ABI的距离度量支持L2与IP两类；Milvus接入层将COSINE查询向量归一化后按IP处理。
+- 底层索引与C ABI的距离度量支持L2（L2 Norm，欧氏距离）与IP（Inner Product，内积）两类；Milvus接入层将COSINE查询向量归一化后按IP处理。
 
 #### 约束说明
 
@@ -94,8 +96,30 @@
 
 您可以通过访问[gd_hnsw仓库](https://gitcode.com/boostkit/gd-hnsw)浏览和获取相关文档。
 
+## 缩略语
+
+| 缩略语 | 英文全称 | 中文全称 |
+|--------|----------|----------|
+| ABI | Application Binary Interface | 应用二进制接口 |
+| ARM | Advanced RISC Machine | 高级精简指令集机器 |
+| CMake | Cross-platform Make | 跨平台构建工具 |
+| CPU | Central Processing Unit | 中央处理器 |
+| CSV | Comma-Separated Values | 逗号分隔值 |
+| GCC | GNU Compiler Collection | GNU编译器套件 |
+| HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
+| IP | Inner Product | 内积 |
+| JSON | JavaScript Object Notation | JavaScript对象表示法 |
+| L2 | L2 Norm | 欧氏距离 |
+| LTS | Long Term Support | 长期支持 |
+| MPI | Message Passing Interface | 消息传递接口 |
+| QPS | Queries Per Second | 每秒查询数 |
+| RPC | Remote Procedure Call | 远程过程调用 |
+| UB | Unified Bus | 统一总线 |
+| UMDK | Unified Memory Development Kit | 统一内存开发工具包 |
+| URMA | Unified Remote Memory Access | 统一远端内存访问 |
+
 ## 修订记录
 
 | 文档版本 | 发布日期 | 修改说明 |
 |------|----------|------------|
-| 01 | 2026-11-17 | 第一次正式发布。 |
+| 01 | 2026-12-30 | 第一次正式发布。 |
