@@ -1,0 +1,2 @@
+#pragma once
+#define HNSW_URMA_GIT_COMMIT "1b9b4f000730e2d74bce927d04410d6d3101c23e"

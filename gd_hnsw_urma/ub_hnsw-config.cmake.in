@@ -1,0 +1,14 @@
+# find_package(ub_hnsw) config.
+# Exposes the imported target ub_hnsw::ub_hnsw (shared library) plus the
+# public include directories (hnsw_urma headers + flat ub_c_api.h).
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/ub_hnsw-targets.cmake")
+
+# The library's PUBLIC include dir was the source tree at build time; for
+# consumers we point at the installed headers.
+set(_ub_hnsw_inc "@CMAKE_INSTALL_FULL_INCLUDEDIR@")
+set_target_properties(ub_hnsw::ub_hnsw PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${_ub_hnsw_inc};${_ub_hnsw_inc}/ub_hnsw")
+
+check_required_components(ub_hnsw)
