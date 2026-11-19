@@ -40,14 +40,6 @@
 
 **ef_search标定方法**：固定其他参数，在一组`ef_search`取值（如32/64/128/256/512）下分别测量召回率与QPS，画出召回-QPS曲线，选择召回达标（建议留有余量）且QPS最高的取值。
 
-### 距离策略选择
-
-- `pushdown`：远端距离就近计算，只回传ID与距离。高维向量、批量较大或跨节点带宽敏感时优先。
-- `pull`：拉回向量本地计算。低维向量、组内ID零散时可避免RPC（Remote Procedure Call，远程过程调用）任务组织开销。
-- `auto`（默认）：组内ID数量小于`pull_threshold`（默认4）时拉取、否则下推，大多数场景的稳妥选择。
-
-辅助手段：开启组内ID排序（`layer0_sort_mode`）让同分片访问更集中；结果集合满时下推请求自动携带最差距离上界，远端只回传不劣于上界的结果，减少响应量。
-
 ### expand_batch与内存预算联动
 
 `expand_batch`（第0层每轮展开节点数，默认1）调大可摊薄每轮通信往返，但启动计划容量按`maximum_batch = max(1, M, M0 × expand_batch)`放大：
@@ -62,7 +54,7 @@
 
 ### 线程与CPU
 
-- 五类线程默认`auto`：Distance=max(1,⌊C/6⌋)、READ=max(1,min(2,⌊C/24⌋))、RPC=max(1,min(4,⌊C/12⌋))，Search取扣除后剩余。
+- 五类线程默认`auto`：Distance=max(1,⌊C/6⌋)、READ=max(1,min(2,⌊C/24⌋))、RPC（Remote Procedure Call，远程过程调用）=max(1,min(4,⌊C/12⌋))，Search取扣除后剩余。
 - 跨节点pushdown压力大、Distance队列积压时显式调大Distance线程；追求单节点QPS时调大Search线程，但须为Distance与通信线程留足核数。
 - 生产环境建议保持`cpu_bind_mode=auto`（按NUMA（Non-Uniform Memory Access，非一致内存访问）拓扑绑核），并按机器拓扑选择`cpu_layout`；时延敏感用`progress_mode=busy`，功耗/共享环境可试`adaptive`。
 
@@ -70,7 +62,7 @@
 
 - 使用VectorDBBench或宿主侧压测工具：先预热（建立通道、触碰内存）再取统计值。
 - 关注三类指标：召回率（recall@k）、吞吐（QPS）、时延分位（P50/P95/P99）。
-- 变更单一变量对比（如只改`ef_search`或只改距离策略），避免多参数同时变化无法归因。
+- 变更单一变量对比（如只改`ef_search`或某一运行时选项），避免多参数同时变化无法归因。
 
 ## 接入实践（以Milvus为例）
 
@@ -84,9 +76,6 @@
 ## 验收Checklist
 
 1. 功能测试用例全部通过（单元/运行时/集成测试）。
-2. 目标数据集上召回率大于0.95。
-3. 查询时延小于50ms。
-4. 同等算力下，全局索引相比32分片索引QPS提升100%（设计目标，按相同召回率口径对比）。
 
 ## 缩略语
 

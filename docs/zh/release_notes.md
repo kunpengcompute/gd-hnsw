@@ -44,23 +44,12 @@
 
 - 提供基于灵衢统一总线URMA通信能力的分布式HNSW全局检索算法：在全部数据上构建一张全局图再分片存储，保留跨分片图边，一次查询直接产出全局top-K。
 - 提供URMA数据面：远端邻接表/向量经URMA READ单边读取，距离任务经WRITE_NOTIFY投递；每个分片以五种角色发布注册内存（topology/vectors/distance-tasks/distance-results/distance-notify）。
-- 提供混合距离策略：pull（拉取向量）/ pushdown（距离下推）/ auto（按组内ID数量阈值自动选择，默认阈值4），支持组内ID排序与结果上界过滤。
+- 提供距离下推（pushdown）：远端分片向量的距离计算下发到数据所在进程就近执行，配合组内ID排序与结果上界过滤，减少跨节点传输。
 - 提供五类线程运行时：Control/Search/Distance/READ Progress/RPC（Remote Procedure Call，远程过程调用） Progress，数量支持auto解析（按可用CPU（Central Processing Unit，中央处理器）的内置公式），支持CPU绑定、拓扑布局与进度模式配置。
 - 提供并发资源管理：查询池（`max_active_queries`）、查询级与操作级超时、优雅退出（drain）。
 - 提供索引文件format V2与离线构建：三元组组织（global.meta/upper_graph.index/shard_N.index）；生产环境大规模构建由宿主侧构建组件承担，本库提供确定性参考构建。
 - 提供运行时画像能力：分阶段耗时与队列水线等画像计数，用于定位瓶颈在搜索、通信还是距离服务。
 - 提供C ABI（Application Binary Interface，应用二进制接口）（`ub_c_api.h`）与Milvus一体化接入：由接入层按开关分流接管裸向量检索请求；接入行为细节请参见Milvus侧资料。
-
-### 性能规格
-
-以下为设计目标（需求规格），非承诺实测值。
-
-| 规格项 | 目标 |
-|--------|------|
-| 吞吐（QPS（Queries Per Second，每秒查询数）） | 同等算力下，全局索引相比32分片索引提升100% |
-| 查询时延 | 小于50ms |
-| 召回率 | 大于0.95 |
-| 验证环境 | 鲲鹏超节点电组网4节点（KP950+），openEuler 24.03 LTS SP3 |
 
 ### 已知限制
 
@@ -110,7 +99,6 @@
 | IP | Inner Product | 内积 |
 | L2 | L2 Norm | 欧氏距离 |
 | LTS | Long Term Support | 长期支持 |
-| QPS | Queries Per Second | 每秒查询数 |
 | RPC | Remote Procedure Call | 远程过程调用 |
 | UMDK | Unified Memory Development Kit | 统一内存开发工具包 |
 | URMA | Unified Remote Memory Access | 统一远端内存访问 |

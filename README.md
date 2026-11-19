@@ -13,7 +13,7 @@
 - **一个进程一个分片**：各进程对等部署，任一进程可发起查询并维护该查询的全部搜索状态。
 - **全局图跨分片搜索**：沿同一张全局图推进，无需各分片分别完成一次本地top-K再归并。
 - **URMA数据面**：远端邻接表/向量经URMA READ单边读取；每个分片以五种角色发布注册内存（topology/vectors/distance-tasks/distance-results/distance-notify）。
-- **距离下推（pushdown）**：远端分片向量的距离计算可下发给**拥有该分片的远端进程**就近执行，只回传ID与距离；支持pull/pushdown/auto三种策略。
+- **距离下推（pushdown）**：远端分片向量的距离计算可下发给**拥有该分片的远端进程**就近执行，只回传ID与距离。
 - **五类线程运行时**：Control/Search/Distance/READ Progress/RPC（Remote Procedure Call，远程过程调用） Progress，通信与计算重叠，查询等待远端操作时Search线程切换处理其他查询。
 - **Milvus一体化接入**：经C ABI（Application Binary Interface，应用二进制接口）（`ub_c_api.h`）接入Milvus QueryNode，由接入层按开关分流接管检索请求；当前仅支持裸向量检索；接入行为细节请参见Milvus侧资料。
 

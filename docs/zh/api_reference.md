@@ -94,15 +94,13 @@ int UbConfigure(const UbConfig* cfg);
 `runtime_options`使用空格分隔，例如：
 
 ```text
---distance-policy pushdown --use-dot-norm --layer0-sort local-only --request-ring-depth 32
+--use-dot-norm --layer0-sort local-only --request-ring-depth 32
 ```
 
 下表列出常用选项；不支持的选项会在配置解析时被拒绝。
 
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
-| --distance-policy | auto | 距离策略：`auto`、`pull`或`pushdown` |
-| --pull-threshold | 4 | auto策略下，远端分组ID（Identifier，标识符）数量小于此值时拉取，否则下推 |
 | --use-dot-norm | 关闭 | 启用L2（L2 Norm，欧氏距离）的平方距离优化，仅对L2生效 |
 | --layer0-sort | all | 第0层排序范围：`all`、`local-only`或`upper-only` |
 | --request-ring-depth | 8 | RPC请求环深度，须为正的2的幂 |
