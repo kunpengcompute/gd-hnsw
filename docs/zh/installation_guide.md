@@ -112,21 +112,7 @@ Milvus侧经`find_package(ub_hnsw)`引用本库（导入目标`ub_hnsw::ub_hnsw`
 
 ## 常见问题
 
-1. **CMake报"ENABLE_URMA requires the URMA library, headers and bonding header"**
-
-   确认UB相关组件与驱动已安装（见"安装UB相关组件与驱动"）；如UMDK安装在非系统默认路径，请通过`UMDK_ROOT`环境变量或`CMAKE_PREFIX_PATH`指定。不需要跨节点数据面时可改以`ENABLE_URMA=OFF`构建。
-
-2. **CMake报"ub_hnsw requires fmt"**
-
-   确认fmt开发包已安装（如`fmt-devel`）；如经conan或源码安装，请将其CMake包路径加入`CMAKE_PREFIX_PATH`。
-
-3. **编译报C++20特性缺失（如`std::jthread`）**
-
-   编译器或标准库过旧。请使用GCC 12.3及以上版本，并确认以C++20或更高标准编译。
-
-4. **运行时无跨节点流量**
-
-   确认构建时`ENABLE_URMA=ON`，各节点URMA设备可用（`ubctl`等工具枚举）、传输模式与设备能力匹配（当前驱动要求`rm`可靠消息模式），且对端资源已在资源目录中发布并完成导入。
+安装与使用过程中的常见问题和故障案例，请参见《[常见问题和故障案例（FAQ）](./FAQ.md)》。
 
 ## 缩略语
 
