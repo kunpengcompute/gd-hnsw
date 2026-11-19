@@ -12,10 +12,10 @@
 | 产品版本 | 26.2.RC1 |
 | 软件名称 | gd_hnsw |
 | 软件版本 | v1.0.0 |
-| 底层依赖 | Faiss 1.13.2及以上版本（离线HNSW（Hierarchical Navigable Small World，分层可导航小世界）图构建）、UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA（Unified Remote Memory Access，统一远端内存访问）（跨节点数据面）、MPI（Message Passing Interface，消息传递接口）（独立基准控制面，Milvus集成不依赖） |
+| 底层依赖 | UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA（Unified Remote Memory Access，统一远端内存访问）（跨节点数据面）；离线HNSW（Hierarchical Navigable Small World，分层可导航小世界）图构建依赖（Faiss等）由宿主侧构建组件承担 |
 | 目标架构 | 鲲鹏ARM（Advanced RISC Machine，高级精简指令集机器）（AArch64） |
 | C++标准 | C++20 |
-| 构建系统 | CMake（Cross-platform Make，跨平台构建工具） 3.26及以上版本 |
+| 构建系统 | CMake（Cross-platform Make，跨平台构建工具） 3.22及以上版本 |
 
 ### 与操作系统、编译器和处理器配套说明
 
@@ -23,11 +23,11 @@
 
 | 操作系统 | 处理器类型 | 编译器 | CMake版本号 |
 |----------|------------|--------|--------------|
-| openEuler 24.03 LTS（Long Term Support，长期支持） SP3 | 鲲鹏950处理器 | GCC（GNU Compiler Collection，GNU编译器套件） 12.3 | CMake 3.26及以上版本 |
+| openEuler 24.03 LTS（Long Term Support，长期支持） SP3 | 鲲鹏950处理器 | GCC（GNU Compiler Collection，GNU编译器套件） 12.3 | CMake 3.22及以上版本 |
 
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >
-> - gd_hnsw跨节点数据面依赖UMDK/URMA，需在配备URMA设备的鲲鹏环境部署；无URMA设备时仅支持本机共享内存传输的功能验证。
+> - gd_hnsw跨节点数据面依赖UMDK/URMA，需在配备URMA设备的鲲鹏环境部署，并以`ENABLE_URMA=ON`构建算法库；未启用URMA数据面的构建无法提供分布式检索服务。
 > - 上表为设计典配环境；各组件的验证报告与精确驱动配套版本以发布版本的配套表为准。
 
 ## 版本使用注意事项
@@ -47,9 +47,9 @@
 - 提供混合距离策略：pull（拉取向量）/ pushdown（距离下推）/ auto（按组内ID数量阈值自动选择，默认阈值4），支持组内ID排序与结果上界过滤。
 - 提供五类线程运行时：Control/Search/Distance/READ Progress/RPC（Remote Procedure Call，远程过程调用） Progress，数量支持auto解析（按可用CPU（Central Processing Unit，中央处理器）的内置公式），支持CPU绑定、拓扑布局与进度模式配置。
 - 提供并发资源管理：查询池（`max_active_queries`）、查询级与操作级超时、优雅退出（drain）。
-- 提供索引文件format V2与离线构建：三元组组织（global.meta/upper_graph.index/shard_N.index），支持Faiss生产构建（含流式）与参考构建。
-- 提供检索基准与画像：召回率、QPS（Queries Per Second，每秒查询数）、时延分位（P50/P95/P99），可分阶段耗时与队列水线画像（JSON（JavaScript Object Notation，JavaScript对象表示法）/CSV（Comma-Separated Values，逗号分隔值））。
-- 提供C ABI（Application Binary Interface，应用二进制接口）（`ub_c_api.h`）与Milvus一体化接入：经`ub.TrySearch`分流闸门按开关接管裸向量检索；开启全局索引时UB（Unified Bus，统一总线）查询失败直接返回错误；关闭全局索引时，本地UB执行失败（包括计划解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。
+- 提供索引文件format V2与离线构建：三元组组织（global.meta/upper_graph.index/shard_N.index）；生产环境大规模构建由宿主侧构建组件承担，本库提供确定性参考构建。
+- 提供运行时画像能力：分阶段耗时与队列水线等画像计数，用于定位瓶颈在搜索、通信还是距离服务。
+- 提供C ABI（Application Binary Interface，应用二进制接口）（`ub_c_api.h`）与Milvus一体化接入：由接入层按开关分流接管裸向量检索请求；接入行为细节请参见Milvus侧资料。
 
 ### 性能规格
 
@@ -57,7 +57,7 @@
 
 | 规格项 | 目标 |
 |--------|------|
-| 吞吐（QPS） | 同等算力下，全局索引相比32分片索引提升100% |
+| 吞吐（QPS（Queries Per Second，每秒查询数）） | 同等算力下，全局索引相比32分片索引提升100% |
 | 查询时延 | 小于50ms |
 | 召回率 | 大于0.95 |
 | 验证环境 | 鲲鹏超节点电组网4节点（KP950+），openEuler 24.03 LTS SP3 |
@@ -67,8 +67,8 @@
 - 跨节点数据面依赖UMDK/URMA；目标平台为鲲鹏AArch64，编译环境需支持C++20。
 - 采用"一个进程一个分片"的对等部署：运行进程数须等于索引分片数。
 - 索引为离线构建，暂不支持在线增删向量。
-- Milvus接入链路当前仅支持裸向量检索：单个FloatVector placeholder、不含标量过滤/group-by/迭代器、要求`round_decimal=-1`、`search_params`不含未声明字段，且要求`0 < topk <= ef`；不满足的计划由UB解析返回错误，开启全局索引时直接返回，关闭全局索引时本地UB执行失败可回退原生链路，转发等前置步骤报错仍直接返回。
-- 底层索引与C ABI的距离度量支持L2（L2 Norm，欧氏距离）与IP（Inner Product，内积）两类；Milvus接入层将COSINE查询向量归一化后按IP处理。
+- Milvus接入链路当前仅支持裸向量检索：单个FloatVector查询、无标量过滤/group-by/迭代器、`search_params`仅接受声明的字段，且要求`0 < topk <= ef`。
+- 底层索引与C ABI的距离度量支持L2（L2 Norm，欧氏距离）与IP（Inner Product，内积）两类。
 
 #### 约束说明
 
@@ -91,6 +91,7 @@
 | 《API参考》 | 本文档提供gd_hnsw对外接口定义、接口说明。 | 开源仓 |
 | 《最佳实践》 | 本文档提供gd_hnsw使用的实践案例。 | 开源仓 |
 | 《特性介绍》 | 本文档提供gd_hnsw架构介绍、核心算法原理及特性优化说明。 | 开源仓 |
+| 《常见问题和故障案例》 | 本文档汇总gd_hnsw使用过程中的常见问题与解答。 | 开源仓 |
 
 ### 获取文档的方法
 
@@ -104,17 +105,13 @@
 | ARM | Advanced RISC Machine | 高级精简指令集机器 |
 | CMake | Cross-platform Make | 跨平台构建工具 |
 | CPU | Central Processing Unit | 中央处理器 |
-| CSV | Comma-Separated Values | 逗号分隔值 |
 | GCC | GNU Compiler Collection | GNU编译器套件 |
 | HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
 | IP | Inner Product | 内积 |
-| JSON | JavaScript Object Notation | JavaScript对象表示法 |
 | L2 | L2 Norm | 欧氏距离 |
 | LTS | Long Term Support | 长期支持 |
-| MPI | Message Passing Interface | 消息传递接口 |
 | QPS | Queries Per Second | 每秒查询数 |
 | RPC | Remote Procedure Call | 远程过程调用 |
-| UB | Unified Bus | 统一总线 |
 | UMDK | Unified Memory Development Kit | 统一内存开发工具包 |
 | URMA | Unified Remote Memory Access | 统一远端内存访问 |
 

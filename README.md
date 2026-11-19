@@ -15,31 +15,34 @@
 - **URMA数据面**：远端邻接表/向量经URMA READ单边读取；每个分片以五种角色发布注册内存（topology/vectors/distance-tasks/distance-results/distance-notify）。
 - **距离下推（pushdown）**：远端分片向量的距离计算可下发给**拥有该分片的远端进程**就近执行，只回传ID与距离；支持pull/pushdown/auto三种策略。
 - **五类线程运行时**：Control/Search/Distance/READ Progress/RPC（Remote Procedure Call，远程过程调用） Progress，通信与计算重叠，查询等待远端操作时Search线程切换处理其他查询。
-- **Milvus一体化接入**：经C ABI（Application Binary Interface，应用二进制接口）（`ub_c_api.h`）接入Milvus QueryNode，由`ub.TrySearch`按开关分流接管检索请求；仅支持裸向量检索；开启全局索引时UB（Unified Bus，统一总线）查询失败直接返回错误；关闭全局索引时，本地UB执行失败（包括计划解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。
+- **Milvus一体化接入**：经C ABI（Application Binary Interface，应用二进制接口）（`ub_c_api.h`）接入Milvus QueryNode，由接入层按开关分流接管检索请求；当前仅支持裸向量检索；接入行为细节请参见Milvus侧资料。
 
 底层HNSW图基于[Faiss](https://github.com/facebookresearch/faiss)构建。
 
 ## 目录结构
 
-代码仓目录结构如下（规划结构，运行时代码合入后生效；当前仓库以文档为主，实际代码结构以正式交付为准）。
+代码仓目录结构如下（算法库代码随版本交付合入）。
 
 ```text
 gd-hnsw/
-├─ include/hnsw_urma/                       // 公共头文件（C++20）
-│  ├─ compute/                              // 数据集加载（bin）与距离计算（L2/IP；dot+norm为L2优化路径）
-│  ├─ control/                              // MPI控制面（独立基准的集群协同）
-│  ├─ core/                                 // 基础组件：status/types/shard_map/visited_table/
-│  │                                        //   minimax_heap/query_key/page_aligned_buffer/ring
-│  ├─ index/                                // 索引文件format V2（三元组）与离线构建接口
-│  ├─ protocol/                             // 距离批量请求/响应线格式（distance_batch_wire）
-│  ├─ runtime/                              // 运行时：config/thread_group/scheduler/topology/
-│  │                                        //   hybrid_distance/load_balancing/drain/benchmark/rpc
-│  ├─ search/                               // 搜索：query_context/query_slot_pool/io/
-│  │                                        //   local_io/remote_io/read_resources/search
-│  └─ transport/                            // 传输：URMA transport/read_batch_lane/
-│                                           //   shared_memory_transport/urma_resources
-├─ src/                                     // 上述各层实现
-├─ apps/                                    // 应用：Faiss索引构建与检索基准（以正式交付为准）
+├─ gd_hnsw_urma/                            // 算法库（独立CMake交付，产出libub_hnsw.so）
+│  ├─ include/hnsw_urma/                    // 公共头文件（C++20）
+│  │  ├─ compute/                           // 数据集加载（bin）与距离计算（L2/IP；dot+norm为L2优化路径）
+│  │  ├─ control/                           // 集群控制面
+│  │  ├─ core/                              // 基础组件：status/types/shard_map/visited_table/
+│  │  │                                     //   minimax_heap/query_key/page_aligned_buffer/spsc_ring/mpmc_ring
+│  │  ├─ index/                             // 索引文件format V2（三元组）与参考构建接口
+│  │  ├─ protocol/                          // 距离批量请求/响应线格式（distance_batch_wire）
+│  │  ├─ runtime/                           // 运行时：config/thread_group/scheduler/topology/
+│  │  │                                     //   hybrid_distance/load_balancing/drain/rpc
+│  │  ├─ search/                            // 搜索：query_context/query_slot_pool/io/
+│  │  │                                     //   local_io/remote_io/read_resources/search
+│  │  └─ transport/                         // 传输：URMA transport/read_batch_lane/
+│  │                                        //   shared_memory_transport/urma_resources
+│  ├─ src/                                  // 上述各层实现，及Milvus接入层（milvus_*）、C ABI（ub_c_api.cpp）
+│  ├─ CMakeLists.txt                        // 独立构建入口
+│  ├─ ub_hnsw-config.cmake.in               // find_package(ub_hnsw)包配置模板
+│  └─ ub_hnsw.pc.in                         // pkg-config模板
 ├─ docs/                                    // 文档
 │  ├─ zh/                                   // 中文文档
 │  │  ├─ api_reference.md                   // API参考
@@ -71,7 +74,7 @@ gd-hnsw/
 <td valign="top">提供gd_hnsw每个发布版本的基础信息、配套环境与特性更新信息。</td>
 </tr>
 <tr><td valign="top"><a href="./docs/zh/quick_start.md">快速入门</a></td>
-<td valign="top">提供gd_hnsw快速入门指导，含离线构建索引、检索基准与Milvus接入示例。</td>
+<td valign="top">提供gd_hnsw快速入门指导，含环境准备、索引构建与Milvus接入示例。</td>
 </tr>
 <tr><td valign="top"><a href="./docs/zh/installation_guide.md">安装指南</a></td>
 <td valign="top">提供gd_hnsw依赖安装与编译方法指导。</td>
@@ -107,7 +110,6 @@ gd_hnsw采用Mulan PSL（Mulan Permissive Software License，木兰宽松许可�
 gd_hnsw在以下方面受益于开源社区。
 
 - [Faiss](https://github.com/facebookresearch/faiss) —— 提供HNSW索引构建能力。
-- MPI（Message Passing Interface，消息传递接口）/OpenMP（Open Multi-Processing，开放多处理）/OpenBLAS（Open Basic Linear Algebra Subprograms，开放基础线性代数子程序库）等开源基础设施。
 
 感谢来自社区的每一个PR（Pull Request，拉取请求），欢迎贡献gd_hnsw！
 
@@ -121,11 +123,7 @@ gd_hnsw在以下方面受益于开源社区。
 | HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
 | IP | Inner Product | 内积 |
 | L2 | L2 Norm | 欧氏距离 |
-| MPI | Message Passing Interface | 消息传递接口 |
-| OpenBLAS | Open Basic Linear Algebra Subprograms | 开放基础线性代数子程序库 |
-| OpenMP | Open Multi-Processing | 开放多处理 |
 | PR | Pull Request | 拉取请求 |
 | PSL | Mulan Permissive Software License | 木兰宽松许可证 |
 | RPC | Remote Procedure Call | 远程过程调用 |
-| UB | Unified Bus | 统一总线 |
 | URMA | Unified Remote Memory Access | 统一远端内存访问 |

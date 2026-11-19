@@ -6,11 +6,23 @@
 
 部署分布式检索前，请逐项确认。
 
-1. **每个进程能读本进程分片文件**：索引三元组（`global.meta`/`upper_graph.index`/`shard_N.index`）在共享存储或各节点本地副本上可读。
-2. **URMA（Unified Remote Memory Access，统一远端内存访问）环境**：所有节点已安装UB（Unified Bus，统一总线）相关组件与驱动（参见《[安装指南](./installation_guide.md)》），设备可枚举，传输模式与设备能力匹配（当前驱动要求`rm`）。
-3. **进程数=分片数**：采用"一个进程一个分片"的对等部署，进程数须与索引分片数一致。
-4. **资源目录可用**：各节点分片的五块注册内存（topology/vectors/distance-tasks/distance-results/distance-notify）已在资源目录发布，且对端完成链路激活与句柄导入（Milvus场景经etcd，参见《[快速入门](./quick_start.md)》"Milvus接入"）。
-5. **基础一致性校验**：导入对端资源前用`UbValidateShardLayout`校验分片数量、编号范围与入口点归属。注意该校验不含构建版本/内容指纹比对，不能单独用于排除过期发布。
+**环境与网络**
+
+1. **跨节点连通性实测**：用TCP（Transmission Control Protocol，传输控制协议）/HTTP（HyperText Transfer Protocol，超文本传输协议）实测跨节点互通，不要只看ping通；各节点时间同步（偏差过大会引起TLS（Transport Layer Security，传输层安全）握手类失败）、防火墙放通所需端口。
+2. **磁盘余量充足**：数据盘与系统盘预留足够空间，避免数据写入或装载过程中磁盘打满。
+3. **URMA（Unified Remote Memory Access，统一远端内存访问）环境**：所有节点已安装UB（Unified Bus，统一总线）相关组件与驱动（参见《[安装指南](./installation_guide.md)》），设备可枚举，传输模式与设备能力匹配（当前驱动要求`rm`）。
+4. **URMA数据面已编译启用**：算法库以`ENABLE_URMA=ON`构建；`OFF`构建的库不含跨节点数据面，启用与检索接口将返回`kInvalidArgument`。
+
+**索引与进程**
+
+5. **每个进程能读本进程分片文件**：索引三元组（`global.meta`/`upper_graph.index`/`shard_N.index`）在共享存储或各节点本地副本上可读。
+6. **进程数=分片数**：采用"一个进程一个分片"的对等部署，进程数须与索引分片数一致。
+
+**资源发布与启用**
+
+7. **资源目录可用**：各节点分片的五块注册内存（topology/vectors/distance-tasks/distance-results/distance-notify）已在资源目录发布，且对端完成链路激活与句柄导入。
+8. **基础一致性校验**：导入对端资源前用`UbValidateShardLayout`校验分片数量、编号范围与入口点归属。注意该校验不含构建版本/内容指纹比对，不能单独用于排除过期发布。
+9. **配置变更须重启生效**：接入侧配置下发后重启相关组件，不要假设配置热加载。
 
 ## 调优建议
 
@@ -40,13 +52,13 @@
 
 `expand_batch`（第0层每轮展开节点数，默认1）调大可摊薄每轮通信往返，但启动计划容量按`maximum_batch = max(1, M, M0 × expand_batch)`放大：
 
-- 调大`expand_batch`后，检查容量规划是否仍在队列与注册RPC内存预算（`UbSetMemoryBudget`，默认1 GiB / 8 GiB）内；仅当规划用量超过现有预算时才需提高相应预算或降低容量相关参数，超限配置会在启动校验时被拒绝。
+- 调大`expand_batch`后，检查容量规划是否仍在队列与注册RPC内存预算（`UbConfigure`的`queue_memory_budget_bytes`/`registered_rpc_memory_budget_bytes`，默认1 GiB / 8 GiB）内；仅当规划用量超过现有预算时才需提高相应预算或降低容量相关参数，超限配置会在启动校验时被拒绝。
 - `read_jfs_depth`缺省解析为`max(64, maximum_batch, max_active_queries × expand_batch × 2)`；显式调大`max_active_queries`或`expand_batch`后注意其headroom。
 
 ### 并发与查询池
 
 - `max_active_queries`（默认16）控制在途查询占用。调大可提升并发，但会放大槽位池、队列与URMA lane缓冲，调大前确认设备与进程内存。
-- 大批量nq场景（maxActiveQueries × 单查询时延）受查询级超时（默认30 s）约束，不要仅凭超时判定运行时卡死，先按批量调整`query_timeout_ms`。
+- 大批量场景（nq较大）下，整批查询共用同一个截止时间，排队时间也计入预算；端到端耗时更接近`ceil(nq / 有效并发数) × 单查询时延`（忽略其他开销）。不要仅凭超时判定运行时卡死，先按批量调整`query_timeout_ms`。
 
 ### 线程与CPU
 
@@ -56,17 +68,18 @@
 
 ### 基准测量方法
 
-- 使用检索基准应用：先按`warmup`轮预热（建立通道、触碰内存），再执行`rounds`轮取统计值。
+- 使用VectorDBBench或宿主侧压测工具：先预热（建立通道、触碰内存）再取统计值。
 - 关注三类指标：召回率（recall@k）、吞吐（QPS）、时延分位（P50/P95/P99）。
-- 开启`--profile`导出分阶段耗时（上层搜索/图等待/距离等待/堆提交等）与队列水线，用于定位瓶颈在搜索、通信还是距离服务。
 - 变更单一变量对比（如只改`ef_search`或只改距离策略），避免多参数同时变化无法归因。
 
-## Milvus接入实践
+## 接入实践（以Milvus为例）
 
-1. 按《[快速入门](./quick_start.md)》"Milvus接入"配置`queryNode.urma`与`queryNode.ub`。注意`seedDir`/`shardIds`的启动装载仅在`globalIndex.enabled=false`时生效；开启全局索引时该路径被跳过，数据随segment装载。
-2. 伪分布式/单机验证时`shardIds`留空（装载全部分片）；真分布式按部署为每个QN（QueryNode，查询节点）分配其持有的分片（每QN一个分片）。
-3. UB链路只支持裸向量检索（单FloatVector placeholder、无过滤/group-by/迭代器、`round_decimal=-1`、`search_params`不含未声明字段）且要求`0 < topk <= ef`；不满足的计划由UB解析返回错误，回退行为取决于全局索引开关与错误发生位置，见下一项。
-4. 开启全局索引（`globalIndex.enabled=true`）时UB查询失败直接返回错误；关闭全局索引时，本地`RunSearchAsWorker`失败（包括计划或placeholder解析失败）可回退原生链路，转发等前置步骤报错仍直接返回。资源就绪后可经`UbRetryEnableForPushdown`升级为pushdown路径。
+以下以Milvus为例给出接入侧的实践建议；其他宿主可参照执行。
+
+1. 按Milvus侧资料配置接入参数（配置键与默认值以Milvus侧为准）；接入侧配置下发后须重启相关组件生效。
+2. 伪分布式/单机验证时可在单进程装载全部分片；真分布式按部署为每个查询节点分配其持有的分片（每个进程一个分片）。
+3. UB链路只支持裸向量检索（单FloatVector查询、无过滤/group-by/迭代器、`search_params`不含未声明字段）且要求`0 < topk <= ef`；不满足的检索请求由接入链路返回错误。
+4. 启用接口幂等可重试：对端资源未就绪导致启用失败时，待资源就绪后重新发起启用即可。
 
 ## 验收Checklist
 
@@ -81,10 +94,12 @@
 |--------|----------|----------|
 | CPU | Central Processing Unit | 中央处理器 |
 | HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
+| HTTP | HyperText Transfer Protocol | 超文本传输协议 |
 | NUMA | Non-Uniform Memory Access | 非一致内存访问 |
-| QN | QueryNode | 查询节点 |
 | QPS | Queries Per Second | 每秒查询数 |
 | RPC | Remote Procedure Call | 远程过程调用 |
+| TCP | Transmission Control Protocol | 传输控制协议 |
+| TLS | Transport Layer Security | 传输层安全 |
 | UB | Unified Bus | 统一总线 |
 | URMA | Unified Remote Memory Access | 统一远端内存访问 |
 

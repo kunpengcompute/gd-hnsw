@@ -1,317 +1,336 @@
 # API参考
 
-本文档提供gd_hnsw对外C ABI与C++接口定义、参数说明与返回值。
-
 ## 概述
 
-gd_hnsw以C++20实现，对外提供两层接口。
+本文介绍gd_hnsw的API（Application Programming Interface，应用程序编程接口）。gd_hnsw采用HNSW（Hierarchical Navigable Small World，分层可导航小世界）图索引，跨节点通信基于URMA（Unified Remote Memory Access，统一远端内存访问）。
 
-- **C ABI（Application Binary Interface，应用二进制接口）**：头文件`ub_c_api.h`，纯C接口（无C++构造、签名不含STL（Standard Template Library，标准模板库）），位于全局命名空间（extern "C"），面向Milvus等宿主的CGO集成，覆盖"配置→装载→资源发布/导入→启用→检索→释放"全生命周期。
-- **C++ API（Application Programming Interface，应用程序编程接口）**：位于`namespace hnsw_urma`，含索引离线构建（`index/builder.hpp`）与索引文件读写（`index/format.hpp`），用于构建工具与自定义集成。
+本库提供两类接口：
 
-错误处理约定：C ABI返回`0`表示成功，非`0`为`hnsw_urma::StatusCode`（个别接口除外，以各接口返回值说明为准）；C++ API通过`Status`/`Result<T>`报告常规错误，但不保证所有异常均被转换为状态码，例如内存分配异常仍可能抛出。
+- **C接口**：头文件`ub_c_api.h`，供Milvus等宿主接入检索运行时。
+- **C++接口**：位于`namespace hnsw_urma`，用于参考建库和索引文件读写。
+
+调用顺序：**注入URMA上下文 → 配置 → 装载分片 → 创建邮箱 → 发布、导入资源 → 启用 → 检索 → 释放**。完整接入流程见《[快速入门](./quick_start.md#经c-abi集成生命周期顺序)》。
+
+除另有说明外，C接口返回`0`表示成功，非`0`表示失败。配置和输出结构体应先清零，`reserved`字段保持为0。宿主应顺序执行装载、资源发布、启用和释放操作，避免并发变更运行时状态。
 
 ## 状态码
 
-```cpp
-enum class StatusCode {
-  kOk = 0,
-  kInvalidArgument,
-  kInvalidFormat,
-  kOutOfRange,
-  kResourceExhausted,
-  kProtocolError,
-  kTimeout,
-  kCancelled,
-  kTransportError,
-  kInternalError,
-};
-```
+| 状态码 | 说明 |
+|--------|------|
+| kOk（0） | 成功 |
+| kInvalidArgument | 参数不合法 |
+| kInvalidFormat | 索引格式不合法 |
+| kOutOfRange | 数值超出范围 |
+| kResourceExhausted | 资源不足 |
+| kProtocolError | 协议错误 |
+| kTimeout | 操作超时 |
+| kCancelled | 操作被取消 |
+| kTransportError | 通信错误 |
+| kInternalError | 内部错误 |
 
-`Status`携带错误消息与键值对上下文（`AddContext`），`ToString()`输出完整描述。
+C++接口通过`Status`或`Result<T>`返回常规错误，使用`ok()`判断成功，错误说明由`Status::ToString()`提供；内存分配等异常仍可能抛出。
 
-## C ABI（ub_c_api.h）
+## 配置接口
 
-### 配置接口
-
-以下接口在首次装载分片前调用（"staged"语义），启用分布式检索（`UbEnableDistributedSearch`）前生效。
-
-#### UbSetConfig
+### UbSetUrmaContext
 
 **接口定义**
 
 ```cpp
-void UbSetConfig(uint32_t search_workers,
-                 uint32_t distance_workers,
-                 uint32_t read_progress_workers,
-                 uint32_t rpc_progress_workers,
-                 const char* cpu_bind_mode,
-                 const char* cpu_layout,
-                 const char* progress_mode,
-                 const uint32_t* allowed_cpus,
-                 uint32_t allowed_cpu_count,
-                 uint32_t max_active_queries,
-                 uint32_t read_jfs_depth);
+int UbSetUrmaContext(void* urma_context);
 ```
 
 **接口用途**
 
-设置运行时线程与CPU（Central Processing Unit，中央处理器）配置。线程数传`0`表示`auto`，按内置公式解析（见《[特性介绍](./feature_introduction.md)》"线程模型"）。
+设置宿主已创建的URMA上下文（`urma_context_t*`）。本库借用上下文，由宿主负责创建和释放。
 
 **参数说明**
 
-| 参数名称 | 参数类型 | 参数说明 | 取值范围 |
-|----------|----------|------|----------|
-| search_workers | uint32_t | Search线程数 | 0=auto |
-| distance_workers | uint32_t | Distance线程数 | 0=auto |
-| read_progress_workers | uint32_t | READ Progress线程数 | 0=auto |
-| rpc_progress_workers | uint32_t | RPC（Remote Procedure Call，远程过程调用） Progress线程数 | 0=auto |
-| cpu_bind_mode | const char* | CPU绑定模式 | "auto"（按NUMA（Non-Uniform Memory Access，非一致内存访问）拓扑绑核）/ "none" |
-| cpu_layout | const char* | CPU布局 | "contiguous" / "llc-isolated" / "llc-spread" |
-| progress_mode | const char* | 进度线程模式 | "busy"（自旋）/ "adaptive"（休眠） |
-| allowed_cpus | const uint32_t* | 显式CPU列表 | allowed_cpu_count==0表示不设置，由C++侧自行解析 |
-| allowed_cpu_count | uint32_t | CPU列表长度 | ≥0 |
-| max_active_queries | uint32_t | 查询池大小（在途查询上限） | 默认16；调大前确认设备内存 |
-| read_jfs_depth | uint32_t | URMA（Unified Remote Memory Access，统一远端内存访问） READ JFS（Jetty Frame Sender，Jetty帧发送端）（WR（Work Request，工作请求）槽位池）深度 | 0=auto（解析为max(64, maximum_batch, max_active_queries × expand_batch × 2)） |
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| urma_context | void* | 服务模式下须为有效上下文；在启用检索前设置 |
 
-#### UbSetMemoryBudget
+运行时启用后不能更换上下文。宿主须等运行时成功停止后再释放上下文。
+
+### UbConfigure
 
 **接口定义**
 
 ```cpp
-void UbSetMemoryBudget(uint64_t queue_memory_budget_bytes,
-                       uint64_t registered_rpc_memory_budget_bytes);
+int UbConfigure(const UbConfig* cfg);
 ```
 
 **接口用途**
 
-设置启动期内存上限：队列计划与注册RPC计划。传`0`保留内置默认值（队列1 GiB、注册RPC 8 GiB）。两项计划随`maximum_batch = max(1, M, M0 × expand_batch)`放大，调大`expand_batch`超出默认值可容纳的范围时需同步调大本预算。须在`UbEnableDistributedSearch`前调用，与`UbSetConfig`相互独立。
+保存线程、CPU（Central Processing Unit，中央处理器）和内存预算等运行时配置，在首次装载分片前调用。`cfg`须非空；启用检索后不能修改配置。
 
-#### UbSetTimeouts
+**UbConfig参数说明**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| search_workers | uint32_t | Search线程数；0=自动 |
+| distance_workers | uint32_t | Distance线程数；0=自动 |
+| read_progress_workers | uint32_t | READ Progress线程数；0=自动 |
+| rpc_progress_workers | uint32_t | RPC（Remote Procedure Call，远程过程调用）Progress线程数；0=自动 |
+| cpu_bind_mode | const char* | `auto`或`none`；NULL=`auto` |
+| cpu_layout | const char* | `auto`、`contiguous`、`llc-isolated`或`llc-spread`；NULL=`contiguous` |
+| progress_mode | const char* | `busy`或`adaptive`；NULL=`busy` |
+| allowed_cpus | const uint32_t* | 必填，进程可用的非空CPU列表 |
+| allowed_cpu_count | uint32_t | CPU列表长度，须大于0 |
+| max_active_queries | uint32_t | 最大在途查询数，须≥1；建议初始设为16 |
+| read_jfs_depth | uint32_t | URMA READ发送队列深度；0=自动 |
+| queue_memory_budget_bytes | uint64_t | 队列内存预算；0=默认1 GiB（Gibibyte，吉比字节） |
+| registered_rpc_memory_budget_bytes | uint64_t | RPC注册内存预算；0=默认8 GiB |
+| query_timeout_ms | uint32_t | 查询超时，单位毫秒；0=默认30000 |
+| operation_timeout_ms | uint32_t | 操作超时，单位毫秒；0=默认5000，不得大于查询超时 |
+| expand_batch | uint32_t | 每轮展开节点数；0=默认1，显式值范围[1,64] |
+| runtime_options | const char* | 可选配置串，覆盖对应字段；NULL=空串 |
+| urma_device_name | const char* | 启用分布式检索前须提供有效的非空URMA设备名 |
+| urma_eid_index | uint32_t | URMA设备上的EID（Endpoint Identifier，端点标识符）索引，可为0 |
+
+>![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
+>不要直接用全零配置启动。须填写设备名、CPU列表及长度、`max_active_queries`。该接口只保存配置；`max_active_queries=0`会在后续配置解析时返回`kOutOfRange`，CPU列表为空会导致邮箱创建失败。
+
+`runtime_options`使用空格分隔，例如：
+
+```text
+--distance-policy pushdown --use-dot-norm --layer0-sort local-only --request-ring-depth 32
+```
+
+下表列出常用选项；不支持的选项会在配置解析时被拒绝。
+
+| 选项 | 默认值 | 说明 |
+|------|--------|------|
+| --distance-policy | auto | 距离策略：`auto`、`pull`或`pushdown` |
+| --pull-threshold | 4 | auto策略下，远端分组ID（Identifier，标识符）数量小于此值时拉取，否则下推 |
+| --use-dot-norm | 关闭 | 启用L2（L2 Norm，欧氏距离）的平方距离优化，仅对L2生效 |
+| --layer0-sort | all | 第0层排序范围：`all`、`local-only`或`upper-only` |
+| --request-ring-depth | 8 | RPC请求环深度，须为正的2的幂 |
+| --drain-timeout-ms | 30000 | 停止时等待在途任务排空的超时，单位毫秒 |
+| --profile | 关闭 | 开启运行时画像统计 |
+
+### UbEstimateRuntimeMemory
+
+```cpp
+int UbEstimateRuntimeMemory(const char* root, uint32_t shard, uint64_t* bytes);
+```
+
+装载分片前估算运行时内存。`root`为索引三元组目录，`shard`为本地分片号，`bytes`为非空的输出指针。
+
+## 装载接口
+
+### UbSeedFromDir
 
 **接口定义**
 
 ```cpp
-void UbSetTimeouts(uint32_t query_timeout_ms, uint32_t operation_timeout_ms);
+int UbSeedFromDir(const char* triple_dir,
+                  const uint32_t* shard_ids, uint32_t count);
 ```
 
 **接口用途**
 
-设置查询级墙钟超时与单次尝试的阶段超时（毫秒）。传`0`保留内置默认值（查询30 s、操作5 s）。调度器截止时间与此预算共用，大批量nq（maxActiveQueries × 单查询时延）由查询超时约束。
+从索引三元组目录装载全部分片或指定分片。
 
-#### UbSetExpandBatch
+同一索引按分片幂等装载；从空运行时开始时，若分片装载返回错误，将回滚本次已装载数据。
+
+**参数说明**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| triple_dir | const char* | 包含`global.meta`、`upper_graph.index`和分片文件的目录 |
+| shard_ids | const uint32_t* | 要装载的分片号数组，各分片号须在[0, num_shards)内 |
+| count | uint32_t | 数组长度；`shard_ids==NULL`或`count==0`时装载全部分片 |
+
+分布式服务每个进程只保留一个本地分片，可在装载后调用`UbSetLocalShard`确定。
+
+### UbLoadShardFromDir / UbReadIndexMeta
 
 **接口定义**
 
 ```cpp
-void UbSetExpandBatch(uint32_t expand_batch);
+int UbLoadShardFromDir(const char* triple_dir, uint32_t shard_id,
+                       UbIndexMeta* out_meta);
+int UbReadIndexMeta(const char* triple_dir, uint32_t shard_id,
+                    UbIndexMeta* out_meta);
 ```
 
 **接口用途**
 
-设置HNSW（Hierarchical Navigable Small World，分层可导航小世界）第0层束宽（每轮展开的节点数）。传`0`保留编译期默认值（1）。该值同时作用于搜索任务与启动计划容量（`maximum_batch = max(1, M, M0 × expand_batch)`），避免运行期触发"batch exceeds prepared slot space"限制。
+- `UbLoadShardFromDir`：装载一个分片，校验分片存在且各分片声明的行数之和等于`ntotal`；`out_meta`可为NULL。
+- `UbReadIndexMeta`：只读元信息，不装载分片；`out_meta`须非空。
 
-#### UbSetUrmaEndpoint / UbSetRuntimeOptions
+`triple_dir`为三元组目录，`shard_id`为分片号。只读元信息时，分片号超出范围会使`local_count`为0；装载时须提供有效分片号。
 
-**接口定义**
+**UbIndexMeta输出字段**
 
-```cpp
-void UbSetUrmaEndpoint(const char* device_name, uint32_t eid_index);
-void UbSetRuntimeOptions(const char* options);
-```
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| dim | uint32_t | 向量维度 |
+| ntotal | uint64_t | 全局向量总数 |
+| shard_count | uint32_t | 全局分片数 |
+| local_count | uint64_t | 指定分片的向量数 |
 
-**接口用途**
-
-- `UbSetUrmaEndpoint`：把URMA设备名传给运行时单例，`UbEnableDistributedSearch`据此构建UMDK（Unified Memory Development Kit，统一内存开发工具包）后端。`device_name`为NUL结尾字符串，传`nullptr`清除。
-- `UbSetRuntimeOptions`：以空格分隔的选项串覆盖单项运行时配置（与基准CLI（Command Line Interface，命令行界面）同名的选项，例如`--distance-policy pushdown --use-dot-norm`）。
-
-### 装载接口
-
-#### UbSeedFromDir / UbSeedFromDirWithShards
-
-**接口定义**
-
-```cpp
-int UbSeedFromDir(const char* triple_dir);
-int UbSeedFromDirWithShards(const char* triple_dir,
-                            const uint32_t* shard_ids,
-                            uint32_t count);
-```
-
-**接口用途**
-
-从本地"三元组"目录（`global.meta` + `upper_graph.index` + `shard_N.index`）装载索引到进程单例。
-
-- `UbSeedFromDir`：按`global.meta`声明的全部分片范围逐个装载（单进程持有全部分片，用于伪分布式/单机验证）。幂等，已装载的分片跳过。
-- `UbSeedFromDirWithShards`：只装载`shard_ids`列出的分片（真分布式，每个进程持有自己的分片，远端分片经URMA访问）。`count==0`不装载并返回成功；分片号超出`[0, num_shards)`报错。按分片幂等。
-
-**返回值**：`0`成功；非`0`为`StatusCode`。
-
-#### UbSetLocalShard
-
-**接口定义**
+### UbSetLocalShard
 
 ```cpp
 int UbSetLocalShard(uint32_t shard_id);
 ```
 
-**接口用途**
+指定本进程服务的分片，须在启用检索前调用。该分片必须已装载；若已装载多个分片，调用后仅保留指定分片。启用后不能通过此接口更换分片，应先成功关闭运行时。
 
-钉住本进程服务的分片。一个进程只拥有一个分片；调用会校验该分片已在本地装载，并释放其他已装载分片的向量数据（全局元信息与分片映射保留，被释放分片的数据由对端经URMA提供）。变更分片归属须先`UbShutdown`。
+### 装载状态与图复用
 
-**返回值**：`0`成功；非`0`为`StatusCode`。
+```cpp
+int UbGetShardStatus(UbShardStatus* out);
+int UbBindGlobalGraphIdentity(const char* graph_id, uint64_t epoch);
+int UbReuseGlobalGraphShard(const char* graph_id, uint64_t epoch,
+                            uint32_t shard, int* out_reused,
+                            UbSeededShardInfo* out_info);
+```
 
-#### UbLoadedShardCount / UbExpectedShardCount
+| 接口 | 用途及参数要求 |
+|------|----------------|
+| UbGetShardStatus | 读取装载状态；`out`须非空，读取时避免并发装载或关闭 |
+| UbBindGlobalGraphIdentity | 装载成功后绑定图身份；`graph_id`非空，`epoch>0`；更换身份须先成功关闭运行时 |
+| UbReuseGlobalGraphShard | 查询图和分片是否可复用；`graph_id`非空，`out_reused`、`out_info`须非空 |
+
+复用命中时，`out_reused=1`并填写`out_info`；尚未绑定图身份时返回成功且`out_reused=0`，继续正常装载。身份不匹配或目标分片未在本地装载时返回错误。
+
+| 输出结构体 | 字段 | 类型 | 说明 |
+|------------|------|------|------|
+| UbShardStatus | local_shard_id | uint32_t | 唯一本地分片号；未确定唯一分片时为`UB_NO_LOCAL_SHARD` |
+| UbShardStatus | loaded_count | uint32_t | 已装载分片数 |
+| UbShardStatus | expected_count | uint32_t | 全局分片数 |
+| UbSeededShardInfo | dim | uint32_t | 已装载分片的向量维度 |
+| UbSeededShardInfo | count | uint64_t | 已装载分片的向量数 |
+
+## 资源发布与导入接口
+
+### UbEnsureRpcMailbox
+
+```cpp
+int UbEnsureRpcMailbox(UbRpcMailboxRegions* out);
+```
+
+装载分片后创建本地RPC邮箱，并返回供宿主注册、发布的内存信息。`out`须非空，可重复调用。
+
+**UbRpcMailboxRegions输出字段**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| requests_address / requests_bytes | void* / uint64_t | 请求内存地址/字节数，对应角色2 |
+| responses_address / responses_bytes | void* / uint64_t | 响应内存地址/字节数，对应角色3 |
+| notify_address / notify_bytes | void* / uint64_t | 通知内存地址/字节数，对应角色4 |
+| ring_depth | uint32_t | 邮箱环深度 |
+
+### UbGetGraphPublishSnapshot
 
 **接口定义**
 
 ```cpp
-uint32_t UbLoadedShardCount(void);
-uint32_t UbExpectedShardCount(void);
+int UbGetGraphPublishSnapshot(uint32_t capacity,
+                              UbShardRegion* out_regions,
+                              UbGraphPublishSnapshot* out_snapshot);
 ```
 
 **接口用途**
 
-诊断：已装载分片数 / 期望分片数（`shard_map`声明的分片总数）。
+获取本地分片的图、向量内存地址和全局入口信息，供宿主发布资源。
 
-### 资源发布与导入接口
+**参数说明**
 
-#### UbGetShardRegions
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| capacity | uint32_t | `out_regions`数组容量 |
+| out_regions | UbShardRegion* | 调用方分配的分片内存信息数组 |
+| out_snapshot | UbGraphPublishSnapshot* | 非空的输出结构体 |
 
-**接口定义**
+先传`capacity=0`、`out_regions=NULL`查询`region_count`，再分配足够容量的数组并再次调用。结果从`out_regions`读取，`out_snapshot->regions`始终为NULL。
+
+| 输出结构体 | 字段 | 说明 |
+|------------|------|------|
+| UbShardRegion | shard_id | 分片号 |
+| UbShardRegion | graph_address / graph_bytes | 第0层图内存地址/字节数 |
+| UbShardRegion | vector_address / vector_bytes | 向量内存地址/字节数 |
+| UbGraphPublishSnapshot | region_count | 返回的分片内存信息条目数 |
+| UbGraphPublishSnapshot | shard_count | 全局分片数 |
+| UbGraphPublishSnapshot | entry_shard_id | 全局入口点所在分片 |
+| UbGraphPublishSnapshot | entry_vertex_id / entry_level | 全局入口点ID/层数 |
+
+先用`UbSetLocalShard`确定本地分片，再读取、发布资源。内存由运行时管理，仅在对应分片保持装载期间有效；分片装载集合变化后须重新获取。
+
+### UbValidateShardLayout
 
 ```cpp
-int UbGetShardRegions(uint32_t capacity,
-                      uint32_t* out_shard_ids,
-                      void** out_graph_addrs,
-                      uint64_t* out_graph_bytes,
-                      void** out_vector_addrs,
-                      uint64_t* out_vector_bytes);
+int UbValidateShardLayout(uint32_t shard_id, uint32_t shard_count,
+                          uint32_t entry_shard_id, uint64_t entry_vertex_id);
 ```
 
-**接口用途**
+导入对端资源前，校验其分片数量、分片编号和入口点归属是否符合本地索引。成功返回0；该校验不能单独确认资源来自同一次索引构建。
 
-发布侧：枚举每个已装载分片的注册内存（图地址/长度、向量地址/长度），供调用方注册进UMDK并经资源目录发布。数组容量须不小于已装载分片数（可用`UbLoadedShardCount()`取得）。内存归运行时所有，`UbShutdown`前有效，调用方不得释放。
-
-**返回值**：成功返回填充的条目数；失败返回正值状态码（如参数非法或容量不足时返回`kInvalidArgument`）。注意：成功返回1个条目时与`kInvalidArgument`(1)同值，建议结合`UbLoadedShardCount()`核对结果。
-
-#### UbGetEntryPoint / UbGetEntryShard
+### UbImportPeerHandles / UbRemovePeerHandles
 
 **接口定义**
 
 ```cpp
-int UbGetEntryPoint(uint64_t* out_entry_vertex_id, int32_t* out_entry_level);
-int UbGetEntryShard(uint32_t* out_entry_shard_id);
-```
-
-**接口用途**
-
-- `UbGetEntryPoint`：返回全局图入口点（`meta.entry_point`，最高层节点的全局ID）及其层数。
-- `UbGetEntryShard`：返回入口点所在分片。该值才是资源目录发布用的正确`EntryShardID`（入口点的层数不是分片号）。
-
-**返回值**：`0`成功；非`0`为`StatusCode`。
-
-#### UbValidateShardLayout
-
-**接口定义**
-
-```cpp
-int UbValidateShardLayout(uint32_t shard_id,
-                          uint32_t shard_count,
-                          uint32_t entry_shard_id,
-                          uint64_t entry_vertex_id);
-```
-
-**接口用途**
-
-基础一致性校验：把外部发布的分片身份（etcd ResourceRecord：shard_count、shard_id、入口点）与本地`global.meta`拓扑比对。激活某分片链路前使用。拒绝情形包括：shard_count与`meta.num_shards`不一致、shard_id/entry_shard_id越界、入口点无法在本地分片映射中解析或不属于entry_shard_id。
-
->![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
->该校验只比对分片数量、编号范围与入口点的分片归属，不包含构建版本或内容指纹比对，也不要求发布的入口点等于本地`meta.entry_point`，因此不能单独用于排除过期发布或确认"同一次构建"。
-
-**返回值**：`0`匹配；非`0`为`StatusCode`。
-
-#### UbImportPeerHandles / UbRemovePeerHandles
-
-**接口定义**
-
-```cpp
-int UbImportPeerHandles(uint32_t shard_id,
-                        uint32_t role,
-                        void* target_jetty,
+int UbImportPeerHandles(uint32_t shard_id, uint32_t role,
+                        const void* rjetty_descriptor,
+                        uint32_t descriptor_bytes, uint32_t jetty_token,
                         void* target_segment);
 void UbRemovePeerHandles(uint32_t shard_id, uint32_t role);
 ```
 
 **接口用途**
 
-对端句柄注入：采纳宿主（如UrmaManager）为拥有`shard_id`的对端激活链路后得到的不透明句柄对（`UrmaPeerEndpointInfo*`/`urma_target_seg_t*`）。运行时不持有句柄所有权，调用方须保持链路存活直至`UbShutdown`或`UbRemovePeerHandles`。同键重复调用为幂等重激活。
+导入或移除宿主已激活的对端资源句柄。导入成功返回0；移除接口无返回值。
 
-**role取值**
+**参数说明**
 
-| 取值 | 角色 |
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| shard_id | uint32_t | 对端分片号 |
+| role | uint32_t | 资源角色，见下表 |
+| rjetty_descriptor | const void* | 非空的对端端点描述数据 |
+| descriptor_bytes | uint32_t | 描述数据字节数，须大于0 |
+| jetty_token | uint32_t | 对端端点令牌 |
+| target_segment | void* | 宿主提供的有效目标段指针，不能为NULL |
+
+| role | 资源 |
 |------|------|
-| 0 | topology（第0层图结构） |
-| 1 | vectors（基向量） |
-| 2 | distance-tasks（距离任务队列） |
-| 3 | distance-results（距离结果队列） |
-| 4 | distance-notify（WRITE_NOTIFY通知） |
+| 0 | topology：第0层图结构 |
+| 1 | vectors：基向量 |
+| 2 | distance-tasks：距离请求 |
+| 3 | distance-results：距离响应 |
+| 4 | distance-notify：完成通知 |
 
-**返回值**（`UbImportPeerHandles`）：`0`成功；非`0`为`StatusCode`。
+>![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
+>句柄由宿主管理。只有运行时成功停止并排空后，宿主才可释放链路资源；停止失败时须继续保留。仅调用`UbRemovePeerHandles`不会停止正在使用该资源的运行时。
 
-### RPC邮箱接口
+## 启用与检索接口
 
-#### UbEnsureRpcMailbox
-
-**接口定义**
-
-```cpp
-int UbEnsureRpcMailbox(void);
-```
-
-**接口用途**
-
-构建进程本地RPC距离邮箱（幂等）。须在`UbSeedFromDir`/装载分片后调用（需已知world_size）。邮箱承载角色2（distance-tasks）与角色3（distance-results）的发布，并在`UbEnableDistributedSearch`时复用为requests/responses/notify三段。
-
-**返回值**：`0`成功；非`0`为`StatusCode`。
-
-#### UbGetRpcMailboxRegions / UbRpcLayout
+### UbEnableDistributedSearch / UbEnableDistributedSearchWithTimeout
 
 **接口定义**
 
 ```cpp
-int UbGetRpcMailboxRegions(void** out_requests_address,
-                          uint64_t* out_requests_bytes,
-                          void** out_responses_address,
-                          uint64_t* out_responses_bytes,
-                          void** out_notify_address,
-                          uint64_t* out_notify_bytes,
-                          uint32_t* out_ring_depth);
-const char* UbRpcLayout(void);
+int UbEnableDistributedSearch(char* msg, int msg_capacity);
+int UbEnableDistributedSearchWithTimeout(int64_t timeout_ns);
 ```
 
 **接口用途**
 
-- `UbGetRpcMailboxRegions`：返回邮箱三段（requests/responses/notify）的地址与长度及环深度，供CGO层注册并经资源目录发布（角色2=TaskQueue、角色3=ResultQueue、notify为对端角色4）。`UbEnsureRpcMailbox`未成功时返回非`0`。
-- `UbRpcLayout`：返回邮箱布局描述串（线程局部，下次调用前有效）。
+启动分布式检索。调用前须已提供有效的非空URMA设备名、注入上下文、保留一个本地分片、创建邮箱，并导入所有远端分片的五类资源句柄。
 
-### 启用与检索接口
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| msg | char* | 可选的失败原因缓冲区，可为NULL |
+| msg_capacity | int | 缓冲区字节数；大于0时最多写入该容量（含字符串结束符） |
+| timeout_ns | int64_t | 启动预算，单位纳秒；-1=不限时，0=立即超时，小于-1=参数错误 |
 
-#### UbEnableDistributedSearch
+成功返回0。资源未就绪时，补齐资源后可重试；运行时已存在时，重复调用返回其当前状态，健康时为0。
 
-**接口定义**
-
-```cpp
-int UbEnableDistributedSearch(void);
-```
-
-**接口用途**
-
-构建并启动分布式线程组运行时（调度器 + Control/Search/Distance/READ Progress/RPC Progress）。启动前提（任一不满足即拒绝）：恰好一个本地分片（多个已装载分片可先经`UbSetLocalShard`钉住本分片、释放其余）、本地RPC邮箱已构建（`UbEnsureRpcMailbox`）、每个远端分片全部五种角色（0~4）的对端句柄均已导入（`UbImportPeerHandles`）。幂等：运行时已启动时返回`0`。
-
-**返回值**：`0`成功；非`0`为`StatusCode`。
-
-#### UbSearch
+### UbSearch / UbSearchWithTimeout
 
 **接口定义**
 
@@ -319,113 +338,69 @@ int UbEnableDistributedSearch(void);
 int UbSearch(const float* query, uint32_t nq, uint32_t dim, uint32_t topk,
              uint32_t ef_search, const char* metric_name,
              int64_t* out_ids, float* out_dists);
+int UbSearchWithTimeout(const float* query, uint32_t nq, uint32_t dim,
+                        uint32_t topk, uint32_t ef_search,
+                        const char* metric_name, int64_t timeout_ns,
+                        int64_t* out_ids, float* out_dists);
 ```
 
 **接口用途**
 
-同步检索服务入口：对`nq`个查询向量执行全局图检索。结果共`nq × topk`项，不足处以`-1`（id）/`+inf`（距离）填充。`metric_name`须与已装载索引的度量一致（L2（L2 Norm，欧氏距离）或IP（Inner Product，内积）），未知度量报错。
+对一批查询向量执行全局检索，同步返回top-K结果。须先成功启用分布式检索。
 
 **参数说明**
 
-| 参数名称 | 参数类型 | 参数说明 |
-|----------|----------|------|
-| query | const float* | 查询向量，nq × dim连续排布 |
-| nq | uint32_t | 查询向量数 |
+| 参数 | 类型 | 说明及取值范围 |
+|------|------|----------------|
+| query | const float* | 非空，`nq × dim`个连续float值，不含NaN（Not a Number，非数值）或无穷值 |
+| nq | uint32_t | 本批查询向量数，范围[1,4096]；更多向量须分批调用 |
 | dim | uint32_t | 向量维度，须与索引一致 |
-| topk | uint32_t | top-K结果数 |
-| ef_search | uint32_t | 查询候选集宽度，应≥topk（Milvus接入层强制校验`0 < topk <= ef`） |
-| metric_name | const char* | 度量名："L2"或"IP" |
-| out_ids | int64_t* | 输出id（调用方分配nq × topk） |
-| out_dists | float* | 输出距离（调用方分配nq × topk） |
+| topk | uint32_t | 每条查询返回的结果数，须大于0 |
+| ef_search | uint32_t | 搜索候选集宽度，须≥topk |
+| metric_name | const char* | L2或IP（Inner Product，内积），须与索引一致 |
+| timeout_ns | int64_t | 剩余请求预算，单位纳秒；-1=使用配置超时，0=立即超时，小于-1=参数错误 |
+| out_ids | int64_t* | 非空，由调用方分配`nq × topk`项 |
+| out_dists | float* | 非空，由调用方分配`nq × topk`项 |
 
-**返回值**：`0`成功；非`0`为`StatusCode`。
+**输出约定**：结果按查询顺序连续排列；不足top-K时，以`id=-1`、`distance=+inf`填充。
 
-#### UbRpcDistanceReady / UbRetryEnableForPushdown
+`UbSearch`等价于`timeout_ns=-1`的`UbSearchWithTimeout`。同一批查询共用截止时间，其排队和执行受`query_timeout_ms`及请求剩余预算共同限制。
 
-**接口定义**
-
-```cpp
-int UbRpcDistanceReady(void);
-int UbRetryEnableForPushdown(char* msg, int msg_capacity);
-```
-
-**接口用途**
-
-- `UbRpcDistanceReady`：报告分布式运行时是否已启动且距离数据面（RPC邮箱）可用。启用前与停止后为未就绪。
-- `UbRetryEnableForPushdown`：重新执行分布式启用。成功时构建完整RPC距离树；对端资源不全时拒绝并把原因写入`msg`（容量`msg_capacity`，NUL结尾）。
-
-**返回值**：`UbRpcDistanceReady`返回`1`=就绪、`0`=未就绪（布尔语义，非状态码）；`UbRetryEnableForPushdown`返回`0`成功，非`0`为`StatusCode`。
-
-### 释放接口
-
-#### UbStopDistributedSearch / UbShutdown
-
-**接口定义**
+## 释放接口
 
 ```cpp
 int UbStopDistributedSearch(void);
 int UbShutdown(void);
 ```
 
-**接口用途**
+| 接口 | 用途 |
+|------|------|
+| UbStopDistributedSearch | 停止接纳查询，等待在途任务排空并停止运行时 |
+| UbShutdown | 停止运行时并释放已装载索引、邮箱和暂存句柄，可在成功后重新装载 |
 
-- `UbStopDistributedSearch`：停止分布式检索运行时。可安全重复调用。
-- `UbShutdown`：释放全部单例状态，可安全重复调用；之后可由下一次装载重新seed。
+两者均可重复调用。须检查返回码；停止或关闭失败时，不要释放宿主持有的URMA上下文或链路资源。
 
-**返回值**：`0`成功；非`0`为`StatusCode`。
-
-### 诊断接口
-
-#### UbPing
-
-**接口定义**
+## 诊断接口
 
 ```cpp
 int UbPing(int x);
+int UbRpcDistanceReady(void);
+const char* UbLastError(void);
+const char* UbRpcLayout(void);
 ```
 
-**接口用途**
+| 接口 | 返回值及说明 |
+|------|--------------|
+| UbPing | 返回`x + 1`，用于验证接口调用是否连通 |
+| UbRpcDistanceReady | 运行时对象存在时返回1，否则返回0；不能代替健康检查 |
+| UbLastError | 返回线程保存的错误详情；为空时返回NULL。部分失败分支不更新详情，可能保留旧值，应以本次返回码为准 |
+| UbRpcLayout | 返回本地RPC邮箱的布局描述字符串 |
 
-连通性冒烟测试：返回`x + 1`。
+返回的字符串由库管理，调用方不得释放，应及时复制。
 
-## 运行时配置（RuntimeConfig）
+## 索引构建（C++）
 
-以下配置经`UbSetConfig`/`UbSetMemoryBudget`/`UbSetTimeouts`/`UbSetExpandBatch`或基准CLI设置，默认值见`config.hpp`。
-
-**表 1** 主要运行时配置
-
-| 配置 | 默认值 | 说明 |
-|------|--------|------|
-| topk | 10 | top-K结果数 |
-| ef_search | auto（索引内默认值） | 查询候选集宽度 |
-| expand_batch | 1 | 第0层每轮展开节点数；maximum_batch = max(1, M, M0 × expand_batch) |
-| distance_policy | auto | 距离策略：auto / pull / pushdown |
-| pull_threshold | 4 | auto策略下组内ID数量阈值，小于则拉取否则下推 |
-| use_dot_norm | false | 是否启用dot+norm L2距离优化路径（以‖q‖²+‖x‖²−2q·x计算平方L2距离，仅限L2度量） |
-| layer0_sort_mode | all | 第0层组内ID排序范围 |
-| max_active_queries | 16 | 查询池大小（在途查询上限） |
-| operation_timeout_ms | 5000 | 单次尝试阶段超时（毫秒） |
-| query_timeout_ms | 30000 | 查询级墙钟超时（毫秒） |
-| drain_timeout_ms | 30000 | 优雅退出超时（毫秒） |
-| queue_memory_budget_bytes | 1 GiB | 队列计划内存上限 |
-| registered_rpc_memory_budget_bytes | 8 GiB | 注册RPC计划内存上限 |
-| read_jfs_depth | auto | URMA READ JFS深度：max(64, maximum_batch, max_active_queries × expand_batch × 2) |
-| request_ring_depth | 8 | RPC请求环深度 |
-| warmup / rounds | 2 / 5 | 基准预热轮数 / 正式轮数 |
-
-## 索引构建（C++，index/builder.hpp）
-
-### ReferenceBuildOptions
-
-```cpp
-struct ReferenceBuildOptions {
-  std::uint32_t num_shards{1};
-  std::uint32_t M{16};
-  std::uint32_t M0{32};
-  std::uint32_t ef_search{64};
-  std::uint32_t metric{0};  // 0=L2, 1=负内积
-};
-```
+头文件：`hnsw_urma/index/builder.hpp`。
 
 ### BuildReferenceIndex
 
@@ -441,78 +416,57 @@ Status BuildReferenceIndex(const std::filesystem::path& root,
 
 **接口用途**
 
-确定性O(N²)构建器，用于测试夹具与本地正确性校验。输入超过`max_rows`（默认100,000）即拒绝，除非调用方显式调高上限；生产大索引请使用Faiss适配构建。
+用小规模数据构建索引三元组，供测试和正确性验证。生产环境的大规模Faiss建库由宿主侧构建组件提供。
 
-### Faiss适配构建
+**参数说明**
 
-**接口定义**
-
-```cpp
-bool FaissBuilderAvailable() noexcept;
-Status BuildFaissIndex(const std::filesystem::path& root,
-                       std::span<const float> vectors,
-                       std::uint64_t rows, std::uint32_t dim,
-                       const ReferenceBuildOptions& options,
-                       std::uint32_t ef_construction);
-Status FaissStreamBegin(const std::filesystem::path& root,
-                        std::uint64_t rows, std::uint32_t dim,
-                        const ReferenceBuildOptions& options,
-                        std::uint32_t ef_construction,
-                        FaissStreamBuilder** out);
-Status FaissStreamAdd(FaissStreamBuilder* builder,
-                      std::span<const float> vectors, std::uint64_t rows);
-Status FaissStreamFinish(FaissStreamBuilder* builder);
-void FaissStreamDestroy(FaissStreamBuilder* builder) noexcept;
-```
-
-**接口用途**
-
-基于Faiss构建生产级HNSW图并产出索引三元组。`FaissStreamBuilder`为增量构建器：按有界数据块喂入向量，调用方无需一次性物化全部数据；句柄不透明，用毕以`FaissStreamDestroy`释放。
-
->![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
->Faiss构建接口声明于构建插件头文件`faiss_builder.hpp`，位于**全局命名空间**（不在`namespace hnsw_urma`内；签名中的`Status`/`ReferenceBuildOptions`来自`hnsw_urma`）。`BuildReferenceIndex`位于`namespace hnsw_urma`（`index/builder.hpp`），两者命名空间不同，调用时注意区分。
-
-**构建产物**（写入`root`目录）
-
-| 文件 | 内容 |
+| 参数 | 说明 |
 |------|------|
-| `global.meta` | 全局元信息与各分片ID范围 |
-| `upper_graph.index` | 全局上层图（第1层及以上）完整邻接关系 |
-| `shard_N.index` | 分片N的第0层邻接表与原始向量 |
+| root | 输出目录 |
+| vectors | `rows × dim`个连续float值 |
+| rows / dim | 向量数/维度，均须大于0 |
+| options | 构建参数，见下表 |
+| max_rows | 允许的最大向量数，默认100000；超出时返回错误 |
 
-## 索引文件读写（C++，index/format.hpp）
+**ReferenceBuildOptions参数说明**
 
-format V2：魔数`0x3258444E494D5248`，版本2，4096字节定长头（`IndexHeaderV2`），数据块4KB对齐并带校验。文件类型三种：`kGlobalMeta`/`kUpperGraph`/`kShard`。
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| num_shards | uint32_t | 分片数，默认1，范围[1, rows] |
+| M | uint32_t | 上层最大邻居数，默认16，须大于0 |
+| M0 | uint32_t | 第0层最大邻居数，默认32，须大于0 |
+| ef_search | uint32_t | 写入索引的默认搜索宽度，默认64，须大于0 |
+| metric | uint32_t | 0=L2，1=负内积；默认0 |
+
+**返回值**：`Status`，使用`ok()`判断是否成功。
+
+## 索引文件读写（C++）
+
+头文件：`hnsw_urma/index/format.hpp`。索引使用format V2，由`global.meta`、`upper_graph.index`和`shard_N.index`组成。
 
 | 接口 | 用途 |
 |------|------|
-| `WriteGlobalIndexFile` / `WriteUpperGraphFile` / `WriteShardFile` | 分别写出三元组文件 |
-| `LoadGlobalIndexFile` | 读取`global.meta`（元信息+分片范围） |
-| `LoadUpperGraphFile` | 读取并物化上层图副本（`UpperGraphReplica`） |
-| `LoadShardFile` | 读取分片（`LocalShard`：第0层邻接表+向量） |
-| `LoadIndexForShard` | 一次性装载某分片运行所需全部数据（`LoadedIndex`） |
-| `ShardFilePath` | 计算分片文件路径（`shard_N.index`） |
-
-`GlobalIndexMeta`关键字段：`ntotal`、`dim`、`metric`、`M`、`M0`、`ef_search_default`、`entry_point`、`max_level`、`num_shards`。装载时校验元信息一致性（`ValidateGlobalMeta`），不一致即拒绝。
+| WriteGlobalIndexFile / LoadGlobalIndexFile | 写入/读取全局元信息和分片范围 |
+| WriteUpperGraphFile / LoadUpperGraphFile | 写入/读取上层图 |
+| WriteShardFile / LoadShardFile | 写入/读取一个分片的第0层图和向量 |
+| LoadIndexForShard | 装载指定分片检索所需的数据 |
+| ShardFilePath | 获取`shard_N.index`文件路径 |
 
 ## 缩略语
 
 | 缩略语 | 英文全称 | 中文全称 |
 |--------|----------|----------|
-| ABI | Application Binary Interface | 应用二进制接口 |
 | API | Application Programming Interface | 应用程序编程接口 |
-| CLI | Command Line Interface | 命令行界面 |
 | CPU | Central Processing Unit | 中央处理器 |
+| EID | Endpoint Identifier | 端点标识符 |
+| GiB | Gibibyte | 吉比字节 |
 | HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
+| ID | Identifier | 标识符 |
 | IP | Inner Product | 内积 |
-| JFS | Jetty Frame Sender | Jetty帧发送端 |
 | L2 | L2 Norm | 欧氏距离 |
-| NUMA | Non-Uniform Memory Access | 非一致内存访问 |
+| NaN | Not a Number | 非数值 |
 | RPC | Remote Procedure Call | 远程过程调用 |
-| STL | Standard Template Library | 标准模板库 |
-| UMDK | Unified Memory Development Kit | 统一内存开发工具包 |
 | URMA | Unified Remote Memory Access | 统一远端内存访问 |
-| WR | Work Request | 工作请求 |
 
 ## 修订记录
 

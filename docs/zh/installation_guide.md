@@ -10,28 +10,27 @@
 
 | 操作系统 | 处理器类型 | 编译器 | 其他 |
 |----------|------------|--------|------|
-| openEuler 24.03 LTS（Long Term Support，长期支持） SP3 | 鲲鹏950处理器（AArch64） | GCC（GNU Compiler Collection，GNU编译器套件） 12.3 | CMake（Cross-platform Make，跨平台构建工具） 3.26及以上版本，C++20编译环境，需UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA（Unified Remote Memory Access，统一远端内存访问） |
+| openEuler 24.03 LTS（Long Term Support，长期支持） SP3 | 鲲鹏950处理器（AArch64） | GCC（GNU Compiler Collection，GNU编译器套件） 12.3 | CMake（Cross-platform Make，跨平台构建工具） 3.22及以上版本，C++20编译环境；跨节点数据面需UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA（Unified Remote Memory Access，统一远端内存访问） |
 
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >
 > - gd_hnsw核心代码使用C++20（`std::jthread`、`std::span`、`std::stop_token`等），编译器与标准库须支持C++20。
-> - 跨节点数据面依赖UMDK/URMA；无URMA设备的环境只能以共享内存传输做本机功能验证，无法获得跨节点能力。
+> - 跨节点数据面依赖UMDK/URMA，编译时需开启`ENABLE_URMA`；以`ENABLE_URMA=OFF`（默认）构建的库不含URMA数据面，启用分布式检索与检索接口将返回`kInvalidArgument`。
 
 ## 依赖说明
 
-gd_hnsw编译依赖如下组件。
+gd_hnsw算法库的编译依赖如下组件。
 
 **表 2** gd_hnsw依赖组件
 
 | 依赖 | 说明 | 获取方式 |
 |------|------|----------|
-| CMake 3.26及以上版本 | 构建系统 | 系统包管理器或pip |
+| CMake 3.22及以上版本 | 构建系统 | 系统包管理器或pip |
 | GCC 12.3 | C++20编译器 | 系统包管理器 |
-| MPI（Message Passing Interface，消息传递接口） | 独立基准的集群控制面（Milvus集成不依赖MPI） | yum install openmpi-devel等 |
-| UMDK/URMA及UB（Unified Bus，统一总线）相关组件 | 跨节点数据面（READ/WRITE_NOTIFY） | 请参见下文"[安装UB相关组件与驱动](./installation_guide.md#安装ub相关组件与驱动)" |
-| Faiss 1.13.2及以上版本 | 离线HNSW（Hierarchical Navigable Small World，分层可导航小世界）图构建 | 请参见下文"[获取Faiss](./installation_guide.md#获取faiss)" |
-| OpenBLAS（Open Basic Linear Algebra Subprograms，开放基础线性代数子程序库） | Faiss数学库依赖 | 请参见下文"[获取OpenBLAS](./installation_guide.md#获取openblas)" |
-| googletest | 单元测试框架（仅跑测试时需要） | 系统包管理器或源码 |
+| fmt | 日志后端（`core/log.hpp`），必需 | 系统包管理器（如fmt-devel）或conan |
+| UMDK/URMA及UB（Unified Bus，统一总线）相关组件 | 跨节点数据面（READ/WRITE_NOTIFY），`ENABLE_URMA=ON`时必需 | 请参见下文"[安装UB相关组件与驱动](./installation_guide.md#安装ub相关组件与驱动)" |
+
+索引构建依赖（Faiss/OpenBLAS（Open Basic Linear Algebra Subprograms，开放基础线性代数子程序库）等）由宿主侧构建组件承担，不属于本库构建范围。
 
 ## 编译安装
 
@@ -40,43 +39,10 @@ gd_hnsw编译依赖如下组件。
 以openEuler 24.03 LTS SP3为例。
 
 ```bash
-yum install make cmake gcc g++ openmpi-devel blas-devel lapack-devel
+yum install make cmake gcc g++ fmt-devel
 ```
 
-### 获取OpenBLAS
-
-Faiss依赖数学库OpenBLAS，按构建场景区分获取方式：
-
-- **随Milvus一体构建**（当前可复现路径）：OpenBLAS由Milvus的Conan依赖管理自动引入，Linux下固定为openblas/0.3.30，无需手动编译，可跳过本小节。
-- **独立手动构建Faiss**：按下述步骤手动编译。为保证构建输入可复现，须固定发布标签，建议使用v0.3.30（与Milvus依赖版本一致）。
-
-1. 从GitHub仓下载开源OpenBLAS源代码，标签为v0.3.30。保存在编译机器可访问的路径中，假设位于"/path/to/OpenBLAS-0.3.30"。
-
-   ```bash
-   git clone --branch v0.3.30 --single-branch https://github.com/OpenMathLib/OpenBLAS.git /path/to/OpenBLAS-0.3.30
-   ```
-
-2. 编译源代码获取libopenblas.so。
-
-   ```bash
-   cd /path/to/OpenBLAS-0.3.30
-   make
-   make install
-   ```
-
-3. 构建前确保动态库可被找到（以实际安装路径为准，示例如下）。
-
-   ```bash
-   export LD_LIBRARY_PATH=/opt/OpenBLAS/lib:$LD_LIBRARY_PATH
-   ```
-
-### 获取Faiss
-
-从GitHub仓下载Faiss源代码（1.13.2及以上版本），按其官方文档以CMake编译安装。
-
-```bash
-git clone --branch v1.13.2 --single-branch https://github.com/facebookresearch/faiss.git
-```
+如系统源无fmt开发包，可经conan或源码安装fmt，并将其CMake包路径加入`CMAKE_PREFIX_PATH`。
 
 ### 安装UB相关组件与驱动
 
@@ -108,71 +74,69 @@ git clone https://gitcode.com/boostkit/gd-hnsw.git
 
 ### 编译gd_hnsw
 
-当前可复现的构建路径是**随Milvus一体构建**：运行时源码位于Milvus仓`internal/core/src/index/ub_hnsw/urma_runtime/`，随`milvus_index`对象库一同编译（Milvus集成定义`HNSW_URMA_HAS_MPI=0`，资源发现走Milvus目录机制，不依赖MPI）；Faiss构建插件见`internal/core/urma_builder/`。按Milvus官方构建流程编译即可包含本运行时。
-
-独立交付包的形态（含CMake包配置，下游经`find_package(hnsw_urma CONFIG)`引用，如`hnsw_urma::builder`目标）**以正式发布包为准**；正式发布后按包内说明执行CMake构建：
+算法库以独立CMake工程交付（`gd_hnsw_urma/`目录）。当前工程未自行初始化GNUInstallDirs，独立构建时需显式补齐安装目录变量。以下示例统一使用`lib`目录，在仓库根目录执行：
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+install_prefix=/path/to/install
+cmake -S gd_hnsw_urma -B build \
+    -DCMAKE_BUILD_TYPE=Release -DENABLE_URMA=ON \
+    -DCMAKE_INSTALL_PREFIX="$install_prefix" \
+    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DCMAKE_INSTALL_BINDIR=bin \
+    -DCMAKE_INSTALL_FULL_LIBDIR="$install_prefix/lib" \
+    -DCMAKE_INSTALL_FULL_INCLUDEDIR="$install_prefix/include"
 cmake --build build --parallel $(nproc)
-cmake --install build --prefix /path/to/install
+cmake --install build
 ```
 
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
->编译需能找到UMDK/URMA头文件与库；如安装在非系统默认路径，请通过`CMAKE_PREFIX_PATH`或对应变量指定。
+>
+> - `ENABLE_URMA`默认为`OFF`；开启后编译需能找到UMDK/URMA头文件与库（默认查找系统路径，亦可通过`UMDK_ROOT`环境变量或`CMAKE_PREFIX_PATH`指定安装路径）。
+> - `ENABLE_URMA=OFF`构建的库不含跨节点数据面，仅供编译与便携验证，无法启用分布式检索。
+> - 安装前缀须在**配置阶段**经`-DCMAKE_INSTALL_PREFIX`指定：pkg-config与CMake包配置文件在配置阶段固化安装路径，仅在`cmake --install`阶段使用`--prefix`会导致包内路径与实际安装位置不一致。
+> - 当前版本安装规则未初始化GNUInstallDirs。若外部也未定义相关变量，`CMAKE_INSTALL_LIBDIR`为空会使部分安装目标展开为`/pkgconfig`、`/cmake/ub_hnsw`等绝对路径；`CMAKE_INSTALL_FULL_LIBDIR`或`CMAKE_INSTALL_FULL_INCLUDEDIR`为空还会使包配置缺失库或头文件路径。因此独立构建须按示例显式提供这些变量。若使用`lib64`，须同步调整`CMAKE_INSTALL_LIBDIR`与`CMAKE_INSTALL_FULL_LIBDIR`；安装前缀应使用绝对路径。
+> - 安装后检查`lib/pkgconfig/ub_hnsw.pc`中的`libdir`、`includedir`及`lib/cmake/ub_hnsw/ub_hnsw-config.cmake`中的头文件路径，确认其与实际安装位置一致；使用`lib64`时相应替换目录名。宿主接入前仍需在目标Linux/URMA环境完成构建与链接验证。
+
+Milvus侧经`find_package(ub_hnsw)`引用本库（导入目标`ub_hnsw::ub_hnsw`），接入细节请参见Milvus侧资料。
 
 ### 编译产物
 
-**表 4** gd_hnsw编译产物（独立交付包形态，以正式发布包为准）
+**表 4** gd_hnsw编译产物
 
 | 产物 | 类型 | 说明 |
 |------|------|------|
-| hnsw_urma运行时库 | 库 | 核心检索运行时（core/index/compute/search/transport/runtime/protocol/control） |
-| hnsw_urma::builder | 库 | Faiss适配的离线索引构建模块 |
-| 索引构建应用 | 可执行 | 基于Faiss的离线建库工具（产出索引三元组） |
-| 检索基准应用 | 可执行 | 多进程基准：加载索引、启动五类线程运行时、统计召回率/QPS（Queries Per Second，每秒查询数）/时延分位 |
-
-## 单元测试验证
-
-测试基于googletest，覆盖以下范围：
-
-- **单元**：索引格式与校验、ShardMap分片映射、VisitedTable、MinimaxHeap、距离计算、数据集加载、状态码、页对齐缓冲区、无锁环、运行时配置解析；
-- **运行时**：调度器、RPC（Remote Procedure Call，远程过程调用）传输/运行时/邮箱、距离下推、负载均衡、优雅退出；
-- **集成**：本地搜索、远端拉取、端到端服务；
-- **格式**：索引文件format V2的写出/读取与全局元信息一致性校验。
+| libub_hnsw.so | 库 | 检索运行时（core/index/compute/search/transport/runtime/protocol/control）与对外C ABI、C++接口 |
+| 公共头文件 | 头文件 | `include/hnsw_urma/`（算法接口）与`include/ub_hnsw/ub_c_api.h`（C ABI） |
+| ub_hnsw.pc | pkg-config文件 | 供CGO等经pkg-config链接（`-lub_hnsw`） |
+| ub_hnsw CMake包 | 包配置 | `find_package(ub_hnsw)`可用，暴露导入目标`ub_hnsw::ub_hnsw` |
 
 ## 常见问题
 
-1. **CMake报找不到UMDK/URMA**
+1. **CMake报"ENABLE_URMA requires the URMA library, headers and bonding header"**
 
-   确认UB相关组件与驱动已安装（见"安装UB相关组件与驱动"），并把头文件/库路径加入`CMAKE_PREFIX_PATH`。
+   确认UB相关组件与驱动已安装（见"安装UB相关组件与驱动"）；如UMDK安装在非系统默认路径，请通过`UMDK_ROOT`环境变量或`CMAKE_PREFIX_PATH`指定。不需要跨节点数据面时可改以`ENABLE_URMA=OFF`构建。
 
-2. **编译报C++20特性缺失（如`std::jthread`）**
+2. **CMake报"ub_hnsw requires fmt"**
+
+   确认fmt开发包已安装（如`fmt-devel`）；如经conan或源码安装，请将其CMake包路径加入`CMAKE_PREFIX_PATH`。
+
+3. **编译报C++20特性缺失（如`std::jthread`）**
 
    编译器或标准库过旧。请使用GCC 12.3及以上版本，并确认以C++20或更高标准编译。
 
-3. **Faiss链接报缺BLAS（Basic Linear Algebra Subprograms，基础线性代数子程序）符号**
-
-   确认OpenBLAS已编译安装，且`LD_LIBRARY_PATH`包含其lib目录（如`/opt/OpenBLAS/lib`）。
-
 4. **运行时无跨节点流量**
 
-   确认各节点URMA设备可用（`ubctl`等工具枚举）、传输模式与设备能力匹配（当前驱动要求`rm`可靠消息模式），且对端资源已在资源目录中发布并完成导入。
+   确认构建时`ENABLE_URMA=ON`，各节点URMA设备可用（`ubctl`等工具枚举）、传输模式与设备能力匹配（当前驱动要求`rm`可靠消息模式），且对端资源已在资源目录中发布并完成导入。
 
 ## 缩略语
 
 | 缩略语 | 英文全称 | 中文全称 |
 |--------|----------|----------|
 | BIOS | Basic Input Output System | 基本输入输出系统 |
-| BLAS | Basic Linear Algebra Subprograms | 基础线性代数子程序 |
 | CMake | Cross-platform Make | 跨平台构建工具 |
 | GCC | GNU Compiler Collection | GNU编译器套件 |
-| HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
 | LTS | Long Term Support | 长期支持 |
-| MPI | Message Passing Interface | 消息传递接口 |
 | OpenBLAS | Open Basic Linear Algebra Subprograms | 开放基础线性代数子程序库 |
-| QPS | Queries Per Second | 每秒查询数 |
-| RPC | Remote Procedure Call | 远程过程调用 |
 | UB | Unified Bus | 统一总线 |
 | UMDK | Unified Memory Development Kit | 统一内存开发工具包 |
 | URMA | Unified Remote Memory Access | 统一远端内存访问 |
