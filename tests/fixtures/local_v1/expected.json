@@ -1,0 +1,7 @@
+{
+  "neighbors": [
+    {"id": 1, "distance": 0.0500000045},
+    {"id": 2, "distance": 0.849999964},
+    {"id": 0, "distance": 1.25}
+  ]
+}

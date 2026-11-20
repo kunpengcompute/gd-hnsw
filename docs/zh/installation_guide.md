@@ -4,29 +4,27 @@
 
 ## 环境要求
 
-以下为本版本的设计典配环境。各组件的验证报告与精确驱动配套版本以发布版本的配套表为准。
+以下为本版本的设计典配环境（开发与设计阶段采用的基准配套环境，实际部署的验证结论以各组件验证报告为准）。各组件的验证报告与精确驱动配套版本以发布版本的配套表为准。
 
 **表 1** gd_hnsw设计典配环境
 
-| 操作系统 | 处理器类型 | 编译器 | 其他 |
-|----------|------------|--------|------|
-| openEuler 24.03 LTS（Long Term Support，长期支持） SP3 | 鲲鹏950处理器（AArch64） | GCC（GNU Compiler Collection，GNU编译器套件） 12.3 | CMake（Cross-platform Make，跨平台构建工具） 3.22及以上版本，C++20编译环境；跨节点数据面需UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA（Unified Remote Memory Access，统一远端内存访问） |
+| 操作系统 | 处理器类型 | 编译器 | 构建工具 |
+|----------|------------|--------|----------|
+| openEuler 24.03 LTS（Long Term Support，长期支持）SP3 | 鲲鹏950处理器（AArch64） | GCC（GNU Compiler Collection，GNU编译器套件）12.3 | CMake（Cross-platform Make，跨平台构建工具）3.22及以上版本，要求C++20编译环境 |
 
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >
 > - gd_hnsw核心代码使用C++20（`std::jthread`、`std::span`、`std::stop_token`等），编译器与标准库须支持C++20。
-> - 跨节点数据面依赖UMDK/URMA，编译时需开启`ENABLE_URMA`；以`ENABLE_URMA=OFF`（默认）构建的库不含URMA数据面，启用分布式检索与检索接口将返回`kInvalidArgument`。
+> - 跨节点数据面依赖UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA（Unified Remote Memory Access，统一远端内存访问），编译时需开启`ENABLE_URMA`。以`ENABLE_URMA=OFF`（默认）构建的库不含URMA数据面：调用启用分布式检索接口将返回`kInvalidArgument`，分布式检索不可用。
 
-## 依赖说明
+## 依赖组件
 
-gd_hnsw算法库的编译依赖如下组件。
+gd_hnsw算法库的编译依赖组件如下（编译器与构建工具版本要求见上文"环境要求"）。
 
 **表 2** gd_hnsw依赖组件
 
 | 依赖 | 说明 | 获取方式 |
 |------|------|----------|
-| CMake 3.22及以上版本 | 构建系统 | 系统包管理器或pip |
-| GCC 12.3 | C++20编译器 | 系统包管理器 |
 | fmt | 日志后端（`core/log.hpp`），必需 | 系统包管理器（如fmt-devel）或conan |
 | UMDK/URMA及UB（Unified Bus，统一总线）相关组件 | 跨节点数据面（READ/WRITE_NOTIFY），`ENABLE_URMA=ON`时必需 | 请参见下文"[安装UB相关组件与驱动](./installation_guide.md#安装ub相关组件与驱动)" |
 
@@ -92,9 +90,12 @@ cmake --install build
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >
 > - `ENABLE_URMA`默认为`OFF`；开启后编译需能找到UMDK/URMA头文件与库（默认查找系统路径，亦可通过`UMDK_ROOT`环境变量或`CMAKE_PREFIX_PATH`指定安装路径）。
-> - `ENABLE_URMA=OFF`构建的库不含跨节点数据面，仅供编译与便携验证，无法启用分布式检索。
+> - `ENABLE_URMA=OFF`构建的库不含跨节点数据面，仅供编译与便捷验证，无法启用分布式检索。
 > - 安装前缀须在**配置阶段**经`-DCMAKE_INSTALL_PREFIX`指定：pkg-config与CMake包配置文件在配置阶段固化安装路径，仅在`cmake --install`阶段使用`--prefix`会导致包内路径与实际安装位置不一致。
-> - 当前版本安装规则未初始化GNUInstallDirs。若外部也未定义相关变量，`CMAKE_INSTALL_LIBDIR`为空会使部分安装目标展开为`/pkgconfig`、`/cmake/ub_hnsw`等绝对路径；`CMAKE_INSTALL_FULL_LIBDIR`或`CMAKE_INSTALL_FULL_INCLUDEDIR`为空还会使包配置缺失库或头文件路径。因此独立构建须按示例显式提供这些变量。若使用`lib64`，须同步调整`CMAKE_INSTALL_LIBDIR`与`CMAKE_INSTALL_FULL_LIBDIR`；安装前缀应使用绝对路径。
+> - 当前版本安装规则未初始化GNUInstallDirs。独立构建时，须按示例显式提供安装目录变量。
+> - `CMAKE_INSTALL_LIBDIR`为空时，部分安装目标会展开为`/pkgconfig`、`/cmake/ub_hnsw`等绝对路径。
+> - `CMAKE_INSTALL_FULL_LIBDIR`为空时，生成的pkg-config文件会缺失库目录。`CMAKE_INSTALL_FULL_INCLUDEDIR`为空时，该文件会缺失头文件目录。
+> - 若使用`lib64`，须同步调整`CMAKE_INSTALL_LIBDIR`与`CMAKE_INSTALL_FULL_LIBDIR`；安装前缀应使用绝对路径。
 > - 安装后检查`lib/pkgconfig/ub_hnsw.pc`中的`libdir`、`includedir`及`lib/cmake/ub_hnsw/ub_hnsw-config.cmake`中的头文件路径，确认其与实际安装位置一致；使用`lib64`时相应替换目录名。宿主接入前仍需在目标Linux/URMA环境完成构建与链接验证。
 
 Milvus侧经`find_package(ub_hnsw)`引用本库（导入目标`ub_hnsw::ub_hnsw`），接入细节请参见Milvus侧资料。
@@ -109,10 +110,6 @@ Milvus侧经`find_package(ub_hnsw)`引用本库（导入目标`ub_hnsw::ub_hnsw`
 | 公共头文件 | 头文件 | `include/hnsw_urma/`（算法接口）与`include/ub_hnsw/ub_c_api.h`（C ABI） |
 | ub_hnsw.pc | pkg-config文件 | 供CGO等经pkg-config链接（`-lub_hnsw`） |
 | ub_hnsw CMake包 | 包配置 | `find_package(ub_hnsw)`可用，暴露导入目标`ub_hnsw::ub_hnsw` |
-
-## 常见问题
-
-安装与使用过程中的常见问题和故障案例，请参见《[常见问题和故障案例（FAQ）](./FAQ.md)》。
 
 ## 缩略语
 

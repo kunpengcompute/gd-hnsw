@@ -9,13 +9,9 @@
 | 项目 | 说明 |
 |------|------|
 | 产品名称 | Kunpeng BoostKit |
-| 产品版本 | 26.2.RC1 |
+| 产品版本 | 26.3.0 |
 | 软件名称 | gd_hnsw |
-| 软件版本 | v1.0.0 |
-| 底层依赖 | UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA（Unified Remote Memory Access，统一远端内存访问）（跨节点数据面）；离线HNSW（Hierarchical Navigable Small World，分层可导航小世界）图构建依赖（Faiss等）由宿主侧构建组件承担 |
-| 目标架构 | 鲲鹏ARM（Advanced RISC Machine，高级精简指令集机器）（AArch64） |
-| C++标准 | C++20 |
-| 构建系统 | CMake（Cross-platform Make，跨平台构建工具） 3.22及以上版本 |
+| 软件版本 | V1.0.0 |
 
 ### 与操作系统、编译器和处理器配套说明
 
@@ -23,7 +19,7 @@
 
 | 操作系统 | 处理器类型 | 编译器 | CMake版本号 |
 |----------|------------|--------|--------------|
-| openEuler 24.03 LTS（Long Term Support，长期支持） SP3 | 鲲鹏950处理器 | GCC（GNU Compiler Collection，GNU编译器套件） 12.3 | CMake 3.22及以上版本 |
+| openEuler 24.03 LTS（Long Term Support，长期支持）SP3 | 鲲鹏950处理器 | GCC（GNU Compiler Collection，GNU编译器套件）12.3 | CMake 3.22及以上版本 |
 
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >
@@ -36,7 +32,7 @@
 
 请参见《[最佳实践](./best_practices.md)》中的"[部署Checklist](./best_practices.md#部署checklist)"。
 
-## v1.0.0
+## V1.0.0
 
 ### 更新说明
 
@@ -45,7 +41,7 @@
 - 提供基于灵衢统一总线URMA通信能力的分布式HNSW全局检索算法：在全部数据上构建一张全局图再分片存储，保留跨分片图边，一次查询直接产出全局top-K。
 - 提供URMA数据面：远端邻接表/向量经URMA READ单边读取，距离任务经WRITE_NOTIFY投递；每个分片以五种角色发布注册内存（topology/vectors/distance-tasks/distance-results/distance-notify）。
 - 提供距离下推（pushdown）：远端分片向量的距离计算下发到数据所在进程就近执行，配合组内ID排序与结果上界过滤，减少跨节点传输。
-- 提供五类线程运行时：Control/Search/Distance/READ Progress/RPC（Remote Procedure Call，远程过程调用） Progress，数量支持auto解析（按可用CPU（Central Processing Unit，中央处理器）的内置公式），支持CPU绑定、拓扑布局与进度模式配置。
+- 提供五类线程运行时：Control/Search/Distance/READ Progress/RPC（Remote Procedure Call，远程过程调用）Progress，数量支持auto解析（按可用CPU（Central Processing Unit，中央处理器）的内置公式），支持CPU绑定、拓扑布局与进度模式配置。
 - 提供并发资源管理：查询池（`max_active_queries`）、查询级与操作级超时、优雅退出（drain）。
 - 提供索引文件format V2与离线构建：三元组组织（global.meta/upper_graph.index/shard_N.index）；生产环境大规模构建由宿主侧构建组件承担，本库提供确定性参考构建。
 - 提供运行时画像能力：分阶段耗时与队列水线等画像计数，用于定位瓶颈在搜索、通信还是距离服务。
@@ -56,7 +52,7 @@
 - 跨节点数据面依赖UMDK/URMA；目标平台为鲲鹏AArch64，编译环境需支持C++20。
 - 采用"一个进程一个分片"的对等部署：运行进程数须等于索引分片数。
 - 索引为离线构建，暂不支持在线增删向量。
-- Milvus接入链路当前仅支持裸向量检索：单个FloatVector查询、无标量过滤/group-by/迭代器、`search_params`仅接受声明的字段，且要求`0 < topk <= ef`。
+- Milvus接入链路当前仅支持裸向量检索：单个FloatVector查询、无标量过滤/group-by/迭代器、`search_params`仅接受声明的字段，且要求`0 < topk <= ef`；请求字段`ef`对应本库接口参数`ef_search`。
 - 底层索引与C ABI的距离度量支持L2（L2 Norm，欧氏距离）与IP（Inner Product，内积）两类。
 
 #### 约束说明
@@ -67,24 +63,6 @@
 | URMA 运行环境发生故障（设备或链路异常） | 算法运行时无故障恢复与断点续跑能力，环境故障后无法接续运行，须重新初始化并全部重新运行 |
 | 查询执行中算法内部进入异常分支（如传输层 fatal 错误、协议错误） | 运行时无自愈能力：fatal 状态置位后不可清除、出错的工作线程直接退出，查询无法自动恢复，须重启运行时恢复 |
 | QueryNode 空载（无查询任务）运行 | 算法运行时线程默认采用忙轮询（busy 模式）以降低查询时延，空载仍占用 CPU |
-
-## 版本配套文档
-
-### v1.0.0版本配套文档
-
-| 文档名称 | 内容简介 | 交付形式 |
-|----------|----------|----------|
-| 《版本说明书》 | 本文档提供gd_hnsw的版本发布信息。 | 开源仓 |
-| 《快速入门》 | 本文档提供gd_hnsw的快速入门指导。 | 开源仓 |
-| 《安装指南》 | 本文档提供gd_hnsw编译安装指导。 | 开源仓 |
-| 《API参考》 | 本文档提供gd_hnsw对外接口定义、接口说明。 | 开源仓 |
-| 《最佳实践》 | 本文档提供gd_hnsw使用的实践案例。 | 开源仓 |
-| 《特性介绍》 | 本文档提供gd_hnsw架构介绍、核心算法原理及特性优化说明。 | 开源仓 |
-| 《常见问题和故障案例》 | 本文档汇总gd_hnsw使用过程中的常见问题与解答。 | 开源仓 |
-
-### 获取文档的方法
-
-您可以通过访问[gd_hnsw仓库](https://gitcode.com/boostkit/gd-hnsw)浏览和获取相关文档。
 
 ## 缩略语
 
@@ -103,8 +81,20 @@
 | UMDK | Unified Memory Development Kit | 统一内存开发工具包 |
 | URMA | Unified Remote Memory Access | 统一远端内存访问 |
 
-## 修订记录
+## 版本配套文档
 
-| 文档版本 | 发布日期 | 修改说明 |
-|------|----------|------------|
-| 01 | 2026-12-30 | 第一次正式发布。 |
+### V1.0.0版本配套文档
+
+| 文档名称 | 内容简介 | 交付形式 |
+|----------|----------|----------|
+| 《版本说明书》 | 本文档提供gd_hnsw的版本发布信息。 | 开源仓 |
+| 《快速入门》 | 本文档提供gd_hnsw的快速入门指导。 | 开源仓 |
+| 《安装指南》 | 本文档提供gd_hnsw编译安装指导。 | 开源仓 |
+| 《API参考》 | 本文档提供gd_hnsw对外接口定义、接口说明。 | 开源仓 |
+| 《最佳实践》 | 本文档提供gd_hnsw使用的实践案例。 | 开源仓 |
+| 《特性介绍》 | 本文档提供gd_hnsw架构介绍、核心算法原理及特性优化说明。 | 开源仓 |
+| 《常见问题和故障案例》 | 本文档汇总gd_hnsw使用过程中的常见问题与解答。 | 开源仓 |
+
+### 获取文档的方法
+
+您可以通过访问[gd_hnsw仓库](https://gitcode.com/boostkit/gd-hnsw)浏览和获取相关文档。

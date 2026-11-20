@@ -84,6 +84,50 @@ URMA 跨节点数据面对网络质量敏感，组网验收建议全部以实测
 
 排查建议：用`ubctl`等工具确认设备可枚举，确认库以`ENABLE_URMA=ON`编译，并检查接入流程已注入上下文。
 
+### 跑通路径验证失败排查
+
+**问题**
+
+按《[快速入门](./quick_start.md)》跑通路径逐步验证时，某环节验证不通过，如何定位？
+
+**回答**
+
+先定位失败环节，再按下表对照排查。算法库接口返回非0时，以本次返回码为准，并读取`UbLastError`中可用的错误详情。部分接口不会更新该字符串，详情为空或残留旧值时，应结合本次调用阶段和宿主日志定位。
+
+**日志查看入口**
+
+算法库默认将带`[ub_hnsw INFO]`等前缀的日志写入进程标准错误，不使用固定日志文件；宿主可接管日志输出。Milvus的`log.file.rootPath`为空时，日志默认输出到标准输出和标准错误；配置该项后，到配置目录查看日志。使用Docker部署时执行`docker logs <容器名> --tail 200`；使用Kubernetes部署时执行`kubectl logs -n <命名空间> <Pod名> -c <容器名> --tail=200`。Kubernetes容器重启后，可加`--previous`查看上一次容器的日志。
+
+| 环节 | 常见失败原因 | 自检命令/接口 |
+|------|--------------|----------------|
+| 环境准备 | URMA设备未识别、传输模式与设备能力不匹配、跨节点网络不通 | `ubctl`枚举设备；`nc`/`wget`实测TCP/HTTP连通性 |
+| 编译/获取算法库 | 未找到UMDK/URMA头文件与库、fmt缺失、编译器过旧 | 见本文"安装编译相关"条目 |
+| 部署集群 | 进程数与分片数不一致、组件未Running | 检查集群各组件状态 |
+| 构建索引三元组 | 三元组文件缺失或不完整 | 确认`global.meta`/`upper_graph.index`/`shard_N.index`齐全 |
+| 装载并启用 | 分片未装载、邮箱未创建、对端句柄未导入、URMA上下文未注入 | `UbGetShardStatus`读取装载状态；`UbRpcDistanceReady`确认运行时是否存在；`UbEnableDistributedSearch`的`msg`参数取失败原因 |
+| 查询验证 | 查询参数越界、运行时未启用 | `UbPing`验证接口连通；`UbLastError`取错误详情 |
+
+**常用自检命令**
+
+将下面的IP、端口、命名空间和索引路径替换为实际部署值。`nc`检查TCP端口，`wget`只用于HTTP服务；不要用HTTP探测命令测试仅提供gRPC的接口。
+
+```bash
+# 查看本版本设备管理工具支持的设备枚举命令。
+ubctl --help
+
+# 检查客户端到Milvus Proxy，以及节点到etcd的TCP连通性。
+nc -vz <Milvus-Proxy-IP> 19530
+nc -vz <etcd-IP> 2379
+
+# 检查本机监听端口和时间同步状态。
+ss -lntp
+timedatectl status
+
+# 检查Kubernetes组件状态与本进程所需的索引文件。
+kubectl get pods -n <命名空间> -o wide
+ls -lh /data/idx/global.meta /data/idx/upper_graph.index /data/idx/shard_<本地分片号>.index
+```
+
 ## 原理与使用相关
 
 ### 全局索引与分片索引的区别是什么？
