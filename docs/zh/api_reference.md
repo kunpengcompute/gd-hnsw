@@ -698,7 +698,7 @@ Status BuildReferenceIndex(const std::filesystem::path& root,
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | root | const std::filesystem::path& | 输出目录 |
-| vectors | std::span<const float> | `rows × dim`个连续float值 |
+| vectors | std::span&lt;const float&gt; | `rows × dim`个连续float值 |
 | rows | std::uint64_t | 向量数，须大于0且不超过max_rows |
 | dim | std::uint32_t | 向量维度，须大于0 |
 | options | const ReferenceBuildOptions& | 构建参数，见下表 |
@@ -740,7 +740,7 @@ Status WriteGlobalIndexFile(const std::filesystem::path& root,
 |------|------|------|
 | root | const std::filesystem::path& | 索引三元组目录 |
 | meta | const GlobalIndexMeta& | 待写入的全局元信息 |
-| ranges | std::span<const ShardRange> | 覆盖全部分片的范围表 |
+| ranges | std::span&lt;const ShardRange&gt; | 覆盖全部分片的范围表 |
 
 ### LoadGlobalIndexFile
 
@@ -781,8 +781,8 @@ Status WriteUpperGraphFile(const std::filesystem::path& root,
 |------|------|------|
 | root | const std::filesystem::path& | 索引三元组目录 |
 | meta | const GlobalIndexMeta& | 与该图一致的全局元信息 |
-| nodes | std::span<const UpperNodeMeta> | 上层节点元信息 |
-| neighbors | std::span<const node_id_t> | 上层邻接表中的节点ID |
+| nodes | std::span&lt;const UpperNodeMeta&gt; | 上层节点元信息 |
+| neighbors | std::span&lt;const node_id_t&gt; | 上层邻接表中的节点ID |
 
 ### LoadUpperGraphFile
 
@@ -826,8 +826,8 @@ Status WriteShardFile(const std::filesystem::path& root,
 | root | const std::filesystem::path& | 索引三元组目录 |
 | meta | const GlobalIndexMeta& | 与该分片一致的全局元信息 |
 | range | const ShardRange& | 分片编号、起始ID与向量数 |
-| layer0 | std::span<const node_id_t> | 第0层邻接表，含各节点的M0个邻居槽位 |
-| vectors | std::span<const float> | 按行连续存储的本分片向量 |
+| layer0 | std::span&lt;const node_id_t&gt; | 第0层邻接表，含各节点的M0个邻居槽位 |
+| vectors | std::span&lt;const float&gt; | 按行连续存储的本分片向量 |
 
 ### LoadShardFile
 
