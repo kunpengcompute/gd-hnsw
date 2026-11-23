@@ -1,0 +1,39 @@
+name: pr build
+
+on:
+  workflow_call:
+    inputs:
+      CP_DOCKER_IMG:
+        required: true
+        type: string
+      pr_id:
+        required: true
+        type: string
+      target_branch:
+        required: true
+        type: string
+jobs:
+  JOB_Compile:
+    name: Compile
+    select: selected_by_default
+    needs: [ ]
+    runs-on: [ self-hosted, os=euler, arch=arm64, type=pr, flavor=medium ]
+    container:
+      image: ${{ inputs.CP_DOCKER_IMG }}
+      # options: --user root
+
+    steps:
+      - name: Checkout repository with pre merge
+        uses: checkout
+        with:
+          repository: ${{atomgit.repositoryurl}}
+          allow-unsafe-pr-checkout: true
+          ref: refs/merge-requests/${{ inputs.pr_id }}/merge
+
+      - name: Execute_shell
+        id: exec_shell_step
+        run: |-
+            set -e
+            export CI_TARGET_BRANCH="${{ inputs.target_branch }}"
+            chmod +x scripts/build.sh
+            sh scripts/build.sh -t release

@@ -1,0 +1,159 @@
+name: PR-pipeline_gd-hnsw
+
+on:
+  pull_request_target:
+    types: ["open", "reopen", "update"]
+    branches: ["**"]
+  pull_request_comment:
+    types: [created]
+    branches: [ '*' ]
+    comments: [ '^(?:\/)?compile*' ]
+  workflow_dispatch:
+
+env:
+  pr_id: ${{ atomgit.event.pull_request.number }}
+  owner_name: boostkit
+  target_branch: ${{ atomgit.event.pull_request.base.ref }}
+
+stages:
+  stage0:  #stage identifier 仅支持大小写英文字母、数字、“-”或“_”，长度介于1~128之间
+    name: 初始化阶段 # 阶段名称
+    select: selected_by_default  # always, selected_by_default，不配置的话默认为selected_by_default(任务根据其所属阶段的 select 属性或全局配置决定是否默认选中)
+    jobs:  #任务，单stage下最多100个
+      associate_pr_comment:
+        name: associate_pr_comment
+        select: selected_by_default
+        runs-on: ["ubuntu-latest", "x64", "slim"]
+        steps:
+          - name: associate-pr-comment
+            uses: associate-pr-comment
+      init_pipeline_status:
+        name: init_pipeline_status
+        select: selected_by_default
+        runs-on: [ "ubuntu-latest", "x64", "slim" ]
+        steps:
+          - name: Add running label
+            uses: openlibing/pr-label-action@v1.0.0
+            with:
+              add_labels: ci-pipeline-running # 填写流水线开始时需要添加的标签
+              remove_labels: ci-pipeline-passed,ci-pipeline-failed # 填写流水线开始时需要移除的标签
+              token: ${{secrets.PR_LABEL_TOKEN}}
+  stage1:  #stage identifier 仅支持大小写英文字母、数字、“-”或“_”，长度介于1~128之间
+    name: 校验阶段 # 阶段名称
+    select: selected_by_default  # always, selected_by_default，不配置的话默认为selected_by_default(任务根据其所属阶段的 select 属性或全局配置决定是否默认选中)
+    jobs:  #任务，单stage下最多100个
+      Detect_file_changes:
+        name: Detect_file_changes
+        runs-on: ["ubuntu-latest", "x64", "slim"]
+        outputs:
+          need_build: ${{ steps.set-skip.outputs.need_build }}
+        steps:
+          - name: checkout
+            uses: checkout
+            with:
+              allow-unsafe-pr-checkout: true
+              ref: refs/merge-requests/${{ env.pr_id }}/merge
+              fetch-depth: 0
+          - name: Only_doc_commit
+            id: filter
+            uses: paths-changes-filter
+            with:
+              event-name: 'pull_request'
+              base: ${{ atomgit.event.pull_request.base.ref }}
+              repo: ${{ atomgit.repository }}
+              number: ${{ env.pr_id }}
+              list-files: json
+              predicate-quantifier: every
+              filters: |
+                changed:
+                  - '**'
+                non-doc:
+                  - '!docs/**'
+                  - '!**/*.md'
+                  - '!**/*.rst'
+                  - '!**/*.log'
+                  - '!**/*.png'
+                  - '!**/*.jpg'
+                  - '!**/*.doc'
+                  - '!**/*.eddx'
+                  - '!**/*.svg'
+          - name: set build skip flag
+            id: set-skip
+            run: |
+              echo "changed: ${{ steps.filter.outputs.changed_files }}"
+              echo "non-doc: ${{ steps.filter.outputs.non-doc }}"
+              if [ "${{ steps.filter.outputs.non-doc }}" = "true" ]; then
+                echo "need_build=yes" >> "$ATOMGIT_OUTPUT"
+              else
+                echo "need_build=no" >> "$ATOMGIT_OUTPUT"
+              fi
+      pre-commit:
+        runs-on: [ self-hosted, os=euler, arch=arm64, type=pr, flavor=small ]
+        container:
+          image: swr.cn-north-4.myhuaweicloud.com/cloud_boostkit/openeuler_24.03_lts_sp3:pre-commit_arm_01
+        steps:
+          - name: Checkout
+            uses: checkout
+            with:
+              allow-unsafe-pr-checkout: true
+              ref: refs/merge-requests/${{ env.pr_id }}/merge
+          - name: install gitleaks
+            run: |
+              cd ${ATOMGIT_WORKSPACE}
+              wget -q https://pytorch-package.obs.cn-north-4.myhuaweicloud.com/pta-codecheck/gitleaks
+              chmod +x gitleaks
+              cd -
+          - name: Run pre-commit
+            uses: openlibing/pre-commit-action@v1.0.0
+      sca-pr:
+        name: sca-pr
+        runs-on: [ "ubuntu-latest", "x64", "slim" ]
+        permissions:
+          id-token: write
+          repository: read
+        steps:
+          - name: Run SCA PR scan
+            uses: openlibing/sca-action/sca-pr-action@v1.0.0
+            with:
+              project-name: "boostkit"
+      AntiPoison-scan:
+        name: AntiPoison-scan
+        runs-on: [ "ubuntu-latest", "x64", "slim" ]
+        permissions:
+          id-token: write
+          repository: read
+        steps:
+          - name: Run malicious code scan
+            uses: openlibing/malicious-code-scan-action/malicious-code-pr-scan-action@v1.0.0
+            with:
+              project-name: "boostkit"
+      build:
+        name: build
+        needs: [ Detect_file_changes ]
+        if: ${{ jobs.Detect_file_changes.outputs.need_build == 'yes' }}
+        uses: .gitcode/workflows/pr_build.yml
+        with:
+          CP_DOCKER_IMG: "swr.cn-north-4.myhuaweicloud.com/cloud_boostkit/openeuler24.03_lts_sp3:arm_gd_hnsw_v1.0"
+          pr_id: "${{ env.pr_id }}"
+          target_branch: "${{ env.target_branch }}"
+      UT:
+        name: UT
+        needs: [ Detect_file_changes ]
+        if: ${{ jobs.Detect_file_changes.outputs.need_build == 'yes' }}
+        uses: .gitcode/workflows/pr_ut.yml
+        with:
+          CP_DOCKER_IMG: "swr.cn-north-4.myhuaweicloud.com/cloud_boostkit/openeuler24.03_lts_sp3:arm_gd_hnsw_v1.0"
+          pr_id: "${{ env.pr_id }}"
+          target_branch: "${{ env.target_branch }}"
+post:
+  jobs:
+    update_pipeline_status:
+      name: update_pipeline_status
+      runs-on: ["ubuntu-latest", "x64", "slim"]
+      steps:
+        - name: Set result label
+          uses: openlibing/pr-label-action@v1.0.0
+          with:
+            add_labels: ${{ pipeline.upstream_status == 'COMPLETED' && 'ci-pipeline-passed' || 'ci-pipeline-failed' }}
+            remove_labels: ci-pipeline-running,${{ pipeline.upstream_status == 'COMPLETED' && 'ci-pipeline-failed' || 'ci-pipeline-passed' }}
+            token: ${{secrets.PR_LABEL_TOKEN}}
