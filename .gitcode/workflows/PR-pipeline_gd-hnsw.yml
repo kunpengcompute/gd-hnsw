@@ -1,7 +1,7 @@
 name: PR-pipeline_gd-hnsw
 
 on:
-  pull_request:
+  pull_request_target:
     types: ["open", "reopen", "update"]
     branches: ["**"]
   pull_request_comment:
@@ -27,17 +27,17 @@ stages:
         steps:
           - name: associate-pr-comment
             uses: associate-pr-comment
-      # init_pipeline_status:
-      #   name: init_pipeline_status
-      #   select: selected_by_default
-      #   runs-on: [ "ubuntu-latest", "x64", "slim" ]
-      #   steps:
-      #     - name: Add running label
-      #       uses: openlibing/pr-label-action@v1.0.0
-      #       with:
-      #         add_labels: ci-pipeline-running # 填写流水线开始时需要添加的标签
-      #         remove_labels: ci-pipeline-passed,ci-pipeline-failed # 填写流水线开始时需要移除的标签
-      #         token: ${{secrets.PR_LABEL_TOKEN}}
+      init_pipeline_status:
+        name: init_pipeline_status
+        select: selected_by_default
+        runs-on: [ "ubuntu-latest", "x64", "slim" ]
+        steps:
+          - name: Add running label
+            uses: openlibing/pr-label-action@v1.0.0
+            with:
+              add_labels: ci-pipeline-running # 填写流水线开始时需要添加的标签
+              remove_labels: ci-pipeline-passed,ci-pipeline-failed # 填写流水线开始时需要移除的标签
+              token: ${{secrets.PR_LABEL_TOKEN}}
   stage1:  #stage identifier 仅支持大小写英文字母、数字、“-”或“_”，长度介于1~128之间
     name: 校验阶段 # 阶段名称
     select: selected_by_default  # always, selected_by_default，不配置的话默认为selected_by_default(任务根据其所属阶段的 select 属性或全局配置决定是否默认选中)
