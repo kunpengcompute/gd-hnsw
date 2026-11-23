@@ -1,0 +1,9 @@
+libdir=@CMAKE_INSTALL_FULL_LIBDIR@
+includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@
+
+Name: ub_hnsw
+Description: Distributed HNSW (hnsw_urma) retrieval algorithm library for Milvus
+Version: @UB_HNSW_VERSION@
+
+Libs: -L${libdir} -lub_hnsw
+Cflags: -I${includedir} -I${includedir}/ub_hnsw
