@@ -19,180 +19,177 @@ constexpr std::uint64_t kPayloadMagic = 0x344D42414D525548ULL;
 constexpr std::uint64_t kPayloadVersion = 9;
 constexpr std::size_t kTimingHistogramBuckets = 64;
 
-#define SEARCH_PROFILE_FIELDS(X) \
-  X(nodes_expanded) X(edges_scanned) X(visited_hits) X(heap_pushes) \
-  X(heap_rejections) X(heap_prefilter_rejections) X(heap_suffix_rejections) \
-  X(heap_full_pushes) X(upper_steps) X(upper_same_level_moves) \
-  X(upper_level_drops) X(upper_empty_neighbor_level_drops) \
-  X(upper_level_drop_runs) X(upper_max_consecutive_level_drops) \
-  X(upper_level_drop_runs_length_1) X(upper_level_drop_runs_length_2) \
-  X(upper_level_drop_runs_length_3) X(upper_level_drop_runs_length_4_plus) \
-  X(upper_distance_candidate_values) X(upper_distance_visited_hits) \
-  X(upper_distance_unique_values) X(upper_distance_fully_visited_steps) \
-  X(upper_remote_candidate_values) X(upper_remote_visited_hits) \
-  X(upper_remote_operations) X(upper_eliminated_remote_operations) \
-  X(local_distance_count) X(suspend_count) X(resume_count) \
-  X(routing_group_owner_writes) X(routing_local_offset_writes) \
-  X(routing_layer0_sorted_values) X(routing_layer0_unsorted_values)
+#define SEARCH_PROFILE_FIELDS(X)                                                \
+  X(nodes_expanded)                                                             \
+  X(edges_scanned)                                                              \
+  X(visited_hits) X(heap_pushes) X(heap_rejections) X(                          \
+      heap_prefilter_rejections) X(heap_suffix_rejections) X(heap_full_pushes)  \
+      X(upper_steps) X(upper_same_level_moves) X(upper_level_drops) X(          \
+          upper_empty_neighbor_level_drops) X(upper_level_drop_runs)            \
+          X(upper_max_consecutive_level_drops) X(                               \
+              upper_level_drop_runs_length_1) X(upper_level_drop_runs_length_2) \
+              X(upper_level_drop_runs_length_3) X(                              \
+                  upper_level_drop_runs_length_4_plus)                          \
+                  X(upper_distance_candidate_values) X(                         \
+                      upper_distance_visited_hits)                              \
+                      X(upper_distance_unique_values) X(                        \
+                          upper_distance_fully_visited_steps)                   \
+                          X(upper_remote_candidate_values) X(                   \
+                              upper_remote_visited_hits)                        \
+                              X(upper_remote_operations) X(                     \
+                                  upper_eliminated_remote_operations)           \
+                                  X(local_distance_count) X(suspend_count) X(   \
+                                      resume_count)                             \
+                                      X(routing_group_owner_writes) X(          \
+                                          routing_local_offset_writes)          \
+                                          X(routing_layer0_sorted_values) X(    \
+                                              routing_layer0_unsorted_values)
 
-#define RECORD_TIMING_FIELDS(X) \
-  X(queue_wait_nanoseconds) X(execution_nanoseconds) \
-  X(upper_elapsed_nanoseconds) X(layer0_elapsed_nanoseconds) \
-  X(local_execution_nanoseconds) X(graph_wait_nanoseconds) \
-  X(distance_wait_nanoseconds) X(ready_queue_nanoseconds) \
-  X(upper_search_nanoseconds) X(graph_plan_nanoseconds) \
-  X(graph_publish_nanoseconds) X(graph_consume_nanoseconds) \
-  X(neighbor_scan_visited_nanoseconds) X(route_group_sort_nanoseconds) \
-  X(local_distance_nanoseconds) X(remote_prepare_publish_nanoseconds) \
-  X(remote_finish_nanoseconds) X(commit_heap_nanoseconds) \
-  X(controller_other_nanoseconds)
+#define RECORD_TIMING_FIELDS(X)                                                \
+  X(queue_wait_nanoseconds)                                                    \
+  X(execution_nanoseconds)                                                     \
+  X(upper_elapsed_nanoseconds) X(layer0_elapsed_nanoseconds)                   \
+      X(local_execution_nanoseconds) X(graph_wait_nanoseconds)                 \
+          X(distance_wait_nanoseconds) X(ready_queue_nanoseconds)              \
+              X(upper_search_nanoseconds) X(graph_plan_nanoseconds)            \
+                  X(graph_publish_nanoseconds) X(graph_consume_nanoseconds)    \
+                      X(neighbor_scan_visited_nanoseconds)                     \
+                          X(route_group_sort_nanoseconds)                      \
+                              X(local_distance_nanoseconds)                    \
+                                  X(remote_prepare_publish_nanoseconds)        \
+                                      X(remote_finish_nanoseconds)             \
+                                          X(commit_heap_nanoseconds)           \
+                                              X(controller_other_nanoseconds)
 
-#define PROFILE_SCALAR_FIELDS(X) \
-  X(rpc_reclaim_events_published) X(rpc_reclaim_events_consumed) \
-  X(rpc_exceptional_slots_in_use) X(rpc_exceptional_slots_high_watermark) \
-  X(read_batches_submitted) X(read_batches_failed) \
-  X(read_batches_timed_out) X(read_batches_cancelled) \
-  X(read_requests_posted) X(read_requests_completed) \
-  X(read_bytes_completed) X(read_wr_completion_samples) \
-  X(read_wr_completion_nanoseconds) X(read_cqe_failure_count) \
-  X(pushdown_requests) \
-  X(pushdown_responses) X(request_bytes) X(response_bytes) \
-  X(admission_high_watermark) X(lane_affinity_hits) \
-  X(lane_affinity_inserts) X(lane_affinity_replacements) \
-  X(lane_candidate_capacity_rejections) X(read_exceptional_batches_high_watermark) \
-  X(read_late_completion_count) X(rpc_quarantine_high_watermark) \
-  X(rpc_detached_records) X(rpc_late_completion_count) \
-  X(rpc_late_response_count) X(read_thread_count) X(rpc_thread_count) \
-  X(request_jfs_per_rpc_lane) X(response_jfs_per_rpc_lane) \
-  X(read_result_slots_high_watermark) \
-  X(read_in_flight_high_watermark) X(read_native_descriptors_high_watermark) \
-  X(read_post_calls) \
-  X(read_post_list_wrs) \
-  X(read_post_list_high_watermark) \
-  X(read_submit_wait_nanoseconds) \
-  X(read_reclaim_wait_nanoseconds) \
-  X(read_result_allocation_retries) \
-  X(read_result_registered_bytes) \
-  X(rpc_submit_queue_high_watermark) X(rpc_operation_slots_in_use) \
-  X(rpc_operation_slots_high_watermark) X(rpc_active_audit_passes) \
-  X(rpc_active_audit_operations) X(rpc_pool_backpressure) \
-  X(rpc_submit_backpressure) X(rpc_exceptional_reclaimed) \
-  X(rpc_ticket_block_refills) X(logical_distance_tasks) \
-  X(completed_distance_tasks) X(request_batches) X(request_batch_tasks) \
-  X(request_batch_bytes) X(response_batches) X(response_batch_tasks) \
-  X(response_batch_bytes) X(request_physical_writes) \
-  X(response_physical_writes) X(request_completions) \
-  X(response_completions) X(request_write_completion_nanoseconds) \
-  X(response_write_completion_nanoseconds) \
-  X(rpc_client_owner_queue_nanoseconds) X(rpc_client_owner_queue_samples) \
-  X(rpc_client_owner_pending_nanoseconds) \
-  X(rpc_client_request_prepare_nanoseconds) \
-  X(rpc_client_request_post_wait_nanoseconds) \
-  X(rpc_client_round_trip_nanoseconds) X(rpc_client_round_trip_samples) \
-  X(rpc_client_response_notify_to_receive_nanoseconds) \
-  X(rpc_client_response_notify_to_receive_samples) \
-  X(rpc_client_response_notify_to_receive_task_nanoseconds) \
-  X(rpc_client_response_notify_to_receive_task_samples) \
-  X(cluster_bidirectional_post_to_notify_observed_nanoseconds) \
-  X(cluster_bidirectional_post_to_notify_observed_samples) \
-  X(rpc_client_response_received_to_task_terminal_nanoseconds) \
-  X(rpc_client_response_received_to_task_terminal_samples) \
-  X(rpc_exceptional_retained_nanoseconds) \
-  X(rpc_client_response_to_stage_terminal_nanoseconds) \
-  X(rpc_client_response_to_stage_terminal_samples) \
-  X(rpc_client_response_decode_nanoseconds) \
-  X(rpc_client_response_decode_samples) X(request_slot_scans) \
-  X(request_slot_hits) X(request_slot_blocked_by_result_inflight) \
-  X(server_request_batches) X(server_request_tasks) \
-  X(server_distance_values) X(request_poll_hit_to_claim_nanoseconds) \
-  X(request_poll_hit_to_claim_samples) X(request_decode_nanoseconds) \
-  X(query_slot_store_nanoseconds) X(query_slot_load_nanoseconds) \
-  X(distance_compute_nanoseconds) X(filter_and_response_encode_nanoseconds) \
-  X(result_ready_publications) X(distance_busy_iterations) \
-  X(distance_idle_iterations) X(result_slot_scans) X(result_slot_hits) \
-  X(request_notify_observed_to_response_post_nanoseconds) \
-  X(request_notify_observed_to_response_post_samples) \
-  X(result_ready_to_post_nanoseconds) X(result_ready_to_post_samples) \
-  X(result_post_retries) X(result_post_to_completion_nanoseconds) \
-  X(result_post_to_completion_samples) X(response_scan_slots) \
-  X(response_scan_hits) X(request_slots_in_use) \
-  X(request_slots_high_watermark) X(request_post_free_slot_waits) \
-  X(request_post_staging_unavailable) X(request_post_tx_unavailable) \
-  X(request_post_provider_backpressure_batches) X(ready_events_published) \
-  X(ready_events_consumed) X(ready_queue_high_watermark)
+#define PROFILE_SCALAR_FIELDS(X)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
+  X(rpc_reclaim_events_published)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   \
+  X(rpc_reclaim_events_consumed)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
+  X(rpc_exceptional_slots_in_use) X(rpc_exceptional_slots_high_watermark) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        \
+      read_batches_submitted) X(read_batches_failed) X(read_batches_timed_out) X(read_batches_cancelled) X(read_requests_posted) X(read_requests_completed) X(read_bytes_completed) X(read_wr_completion_samples) X(read_wr_completion_nanoseconds) X(read_cqe_failure_count) X(pushdown_requests) X(pushdown_responses) X(request_bytes) X(response_bytes) X(admission_high_watermark) X(lane_affinity_hits) X(lane_affinity_inserts) X(lane_affinity_replacements) X(lane_candidate_capacity_rejections)                                                                                          \
+      X(read_exceptional_batches_high_watermark) X(read_late_completion_count) X(rpc_quarantine_high_watermark) X(rpc_detached_records) X(rpc_late_completion_count) X(rpc_late_response_count) X(read_thread_count) X(rpc_thread_count) X(request_jfs_per_rpc_lane) X(response_jfs_per_rpc_lane) X(read_result_slots_high_watermark) X(                                                                                                                                                                                                                                                            \
+          read_in_flight_high_watermark) X(read_native_descriptors_high_watermark) X(read_post_calls) X(read_post_list_wrs)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         \
+          X(read_post_list_high_watermark) X(read_submit_wait_nanoseconds) X(read_reclaim_wait_nanoseconds) X(read_result_allocation_retries) X(read_result_registered_bytes) X(                                                                                                                                                                                                                                                                                                                                                                                                                    \
+              rpc_submit_queue_high_watermark) X(rpc_operation_slots_in_use) X(rpc_operation_slots_high_watermark)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  \
+              X(rpc_active_audit_passes) X(rpc_active_audit_operations) X(rpc_pool_backpressure) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 \
+                  rpc_submit_backpressure) X(rpc_exceptional_reclaimed) X(rpc_ticket_block_refills)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 \
+                  X(logical_distance_tasks) X(completed_distance_tasks) X(request_batches) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       \
+                      request_batch_tasks) X(request_batch_bytes) X(response_batches) X(response_batch_tasks) X(response_batch_bytes)                                                                                                                                                                                                                                                                                                                                                                                                                                                               \
+                      X(request_physical_writes) X(response_physical_writes) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
+                          request_completions) X(response_completions) X(request_write_completion_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      \
+                          X(response_write_completion_nanoseconds) X(rpc_client_owner_queue_nanoseconds) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         \
+                              rpc_client_owner_queue_samples) X(rpc_client_owner_pending_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               \
+                              X(rpc_client_request_prepare_nanoseconds) X(rpc_client_request_post_wait_nanoseconds) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                              \
+                                  rpc_client_round_trip_nanoseconds) X(rpc_client_round_trip_samples)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               \
+                                  X(rpc_client_response_notify_to_receive_nanoseconds) X(rpc_client_response_notify_to_receive_samples) X(rpc_client_response_notify_to_receive_task_nanoseconds) X(rpc_client_response_notify_to_receive_task_samples) X(cluster_bidirectional_post_to_notify_observed_nanoseconds) X(cluster_bidirectional_post_to_notify_observed_samples) X(rpc_client_response_received_to_task_terminal_nanoseconds) X(rpc_client_response_received_to_task_terminal_samples) X(rpc_exceptional_retained_nanoseconds) X(rpc_client_response_to_stage_terminal_nanoseconds) X( \
+                                      rpc_client_response_to_stage_terminal_samples) X(rpc_client_response_decode_nanoseconds) X(rpc_client_response_decode_samples) X(request_slot_scans)                                                                                                                                                                                                                                                                                                                                                                                                          \
+                                      X(request_slot_hits) X(request_slot_blocked_by_result_inflight) X(server_request_batches) X(server_request_tasks) X(                                                                                                                                                                                                                                                                                                                                                                                                                                          \
+                                          server_distance_values) X(request_poll_hit_to_claim_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          \
+                                          X(request_poll_hit_to_claim_samples) X(request_decode_nanoseconds) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
+                                              query_slot_store_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         \
+                                              X(query_slot_load_nanoseconds) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
+                                                  distance_compute_nanoseconds) X(filter_and_response_encode_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                           \
+                                                  X(result_ready_publications) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   \
+                                                      distance_busy_iterations) X(distance_idle_iterations)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         \
+                                                      X(result_slot_scans) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       \
+                                                          result_slot_hits) X(request_notify_observed_to_response_post_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                 \
+                                                          X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        \
+                                                              request_notify_observed_to_response_post_samples) X(result_ready_to_post_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                 \
+                                                              X(result_ready_to_post_samples) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
+                                                                  result_post_retries) X(result_post_to_completion_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
+                                                                  X(result_post_to_completion_samples) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           \
+                                                                      response_scan_slots) X(response_scan_hits)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
+                                                                      X(request_slots_in_use) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
+                                                                          request_slots_high_watermark)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             \
+                                                                          X(request_post_free_slot_waits) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        \
+                                                                              request_post_staging_unavailable)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
+                                                                              X(request_post_tx_unavailable)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        \
+                                                                                  X(request_post_provider_backpressure_batches)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
+                                                                                      X(ready_events_published)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
+                                                                                          X(ready_events_consumed)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  \
+                                                                                              X(ready_queue_high_watermark)
 
-
-#define PROFILE_VECTOR_FIELDS(X) \
-  X(rpc_slots_in_use_per_search) \
-  X(rpc_slots_high_watermark_per_search) \
-  X(rpc_pool_backpressure_per_search) \
-  X(rpc_submit_backpressure_per_search) \
-  X(rpc_audit_operations_per_owner) \
-  X(ready_published_per_worker) \
-  X(ready_consumed_per_worker) \
-  X(ready_producer_worker_counts) \
-  X(ready_converged_to_publish_ns_per_worker) \
-  X(ready_publish_to_pop_ns_per_worker) \
-  X(ready_pop_to_step_ns_per_worker) \
-  X(ready_run_ns_per_worker) \
-  X(search_event_depth) X(search_event_high_watermark) \
-  X(read_owned_ranks_per_thread) X(rpc_owned_ranks_per_thread) \
-  X(search_busy_nanoseconds_per_thread) X(search_idle_nanoseconds_per_thread) \
-  X(search_iterations_per_thread) X(search_new_queries_per_thread) \
-  X(search_ready_resumes_per_thread) X(search_retry_runs_per_thread) \
-  X(distance_busy_nanoseconds_per_thread) \
-  X(distance_idle_nanoseconds_per_thread) X(distance_iterations_per_thread) \
-  X(read_busy_nanoseconds_per_thread) X(read_idle_nanoseconds_per_thread) \
-  X(read_progress_iterations_per_thread) X(rpc_busy_nanoseconds_per_thread) \
-  X(rpc_idle_nanoseconds_per_thread) X(rpc_progress_iterations_per_thread) \
-  X(rpc_poll_completions_nanoseconds_per_thread) \
-  X(rpc_scan_responses_nanoseconds_per_thread) \
-  X(rpc_post_responses_nanoseconds_per_thread) \
-  X(rpc_drain_client_submissions_nanoseconds_per_thread) \
-  X(rpc_post_requests_nanoseconds_per_thread) \
-  X(distance_request_slot_scans_per_thread) \
-  X(distance_request_slot_hits_per_thread) \
-  X(distance_request_batches_per_thread) \
-  X(distance_request_tasks_per_thread) X(distance_values_per_thread) \
-  X(wait_event_counts) X(wait_nanoseconds) X(wait_publish_nanoseconds) \
-  X(wait_first_completion_nanoseconds) \
-  X(wait_completion_spread_nanoseconds) X(wait_remote_operations) \
-  X(wait_distance_values) X(wait_remote_operations_high_watermark) \
-  X(wait_distance_values_high_watermark) X(wait_critical_lane_counts) \
-  X(wait_histograms) X(wait_publish_histograms) \
-  X(wait_first_completion_histograms) \
-  X(wait_completion_spread_histograms)
+#define PROFILE_VECTOR_FIELDS(X)                                                                  \
+  X(rpc_slots_in_use_per_search)                                                                  \
+  X(rpc_slots_high_watermark_per_search)                                                          \
+  X(rpc_pool_backpressure_per_search)                                                             \
+  X(rpc_submit_backpressure_per_search)                                                           \
+  X(rpc_audit_operations_per_owner)                                                               \
+  X(ready_published_per_worker)                                                                   \
+  X(ready_consumed_per_worker)                                                                    \
+  X(ready_producer_worker_counts)                                                                 \
+  X(ready_converged_to_publish_ns_per_worker)                                                     \
+  X(ready_publish_to_pop_ns_per_worker)                                                           \
+  X(ready_pop_to_step_ns_per_worker)                                                              \
+  X(ready_run_ns_per_worker)                                                                      \
+  X(search_event_depth)                                                                           \
+  X(search_event_high_watermark)                                                                  \
+  X(read_owned_ranks_per_thread) X(rpc_owned_ranks_per_thread) X(                                 \
+      search_busy_nanoseconds_per_thread) X(search_idle_nanoseconds_per_thread)                   \
+      X(search_iterations_per_thread) X(search_new_queries_per_thread) X(                         \
+          search_ready_resumes_per_thread) X(search_retry_runs_per_thread)                        \
+          X(distance_busy_nanoseconds_per_thread) X(distance_idle_nanoseconds_per_thread) X(      \
+              distance_iterations_per_thread) X(read_busy_nanoseconds_per_thread)                 \
+              X(read_idle_nanoseconds_per_thread) X(read_progress_iterations_per_thread) X(       \
+                  rpc_busy_nanoseconds_per_thread) X(rpc_idle_nanoseconds_per_thread)             \
+                  X(rpc_progress_iterations_per_thread) X(                                        \
+                      rpc_poll_completions_nanoseconds_per_thread)                                \
+                      X(rpc_scan_responses_nanoseconds_per_thread) X(                             \
+                          rpc_post_responses_nanoseconds_per_thread)                              \
+                          X(rpc_drain_client_submissions_nanoseconds_per_thread) X(               \
+                              rpc_post_requests_nanoseconds_per_thread)                           \
+                              X(distance_request_slot_scans_per_thread) X(                        \
+                                  distance_request_slot_hits_per_thread)                          \
+                                  X(distance_request_batches_per_thread) X(                       \
+                                      distance_request_tasks_per_thread)                          \
+                                      X(distance_values_per_thread) X(                            \
+                                          wait_event_counts) X(wait_nanoseconds)                  \
+                                          X(wait_publish_nanoseconds) X(                          \
+                                              wait_first_completion_nanoseconds)                  \
+                                              X(wait_completion_spread_nanoseconds) X(            \
+                                                  wait_remote_operations)                         \
+                                                  X(wait_distance_values) X(                      \
+                                                      wait_remote_operations_high_watermark)      \
+                                                      X(wait_distance_values_high_watermark) X(   \
+                                                          wait_critical_lane_counts)              \
+                                                          X(wait_histograms) X(                   \
+                                                              wait_publish_histograms)            \
+                                                              X(wait_first_completion_histograms) \
+                                                                  X(wait_completion_spread_histograms)
 
 double Percentile(std::vector<std::uint64_t> values, double percentile) {
-  if (values.empty()) return 0.0;
+  if (values.empty())
+    return 0.0;
   std::sort(values.begin(), values.end());
   const auto index = static_cast<std::size_t>(std::ceil(
-      percentile * static_cast<double>(values.size()))) - 1U;
+                         percentile * static_cast<double>(values.size()))) -
+                     1U;
   return static_cast<double>(values[std::min(index, values.size() - 1U)]) /
          1.0e6;
 }
 
 LatencySummary MakeLatency(std::vector<std::uint64_t> values) {
   LatencySummary result;
-  if (values.empty()) return result;
+  if (values.empty())
+    return result;
   long double total = 0;
-  for (const auto value : values) total += static_cast<long double>(value);
-  result.mean_ms = static_cast<double>(
-      total / static_cast<long double>(values.size())) / 1.0e6;
+  for (const auto value : values)
+    total += static_cast<long double>(value);
+  result.mean_ms =
+      static_cast<double>(total / static_cast<long double>(values.size())) /
+      1.0e6;
   result.p50_ms = Percentile(values, 0.50);
   result.p95_ms = Percentile(values, 0.95);
   result.p99_ms = Percentile(std::move(values), 0.99);
   return result;
 }
 
-void AddSearchProfile(SearchProfile& total, const SearchProfile& value) {
+void AddSearchProfile(SearchProfile &total, const SearchProfile &value) {
   const auto previous_max = total.upper_max_consecutive_level_drops;
 #define ADD_SEARCH(name) total.name += value.name;
   SEARCH_PROFILE_FIELDS(ADD_SEARCH)
 #undef ADD_SEARCH
-  total.upper_max_consecutive_level_drops = std::max(
-      previous_max,
-      value.upper_max_consecutive_level_drops);
+  total.upper_max_consecutive_level_drops =
+      std::max(previous_max, value.upper_max_consecutive_level_drops);
 }
 
 std::string EscapeJson(std::string_view value) {
@@ -200,28 +197,41 @@ std::string EscapeJson(std::string_view value) {
   output.reserve(value.size());
   for (const char ch : value) {
     switch (ch) {
-      case '\\': output += "\\\\"; break;
-      case '"': output += "\\\""; break;
-      case '\n': output += "\\n"; break;
-      case '\r': output += "\\r"; break;
-      case '\t': output += "\\t"; break;
-      default: output += ch; break;
+    case '\\':
+      output += "\\\\";
+      break;
+    case '"':
+      output += "\\\"";
+      break;
+    case '\n':
+      output += "\\n";
+      break;
+    case '\r':
+      output += "\\r";
+      break;
+    case '\t':
+      output += "\\t";
+      break;
+    default:
+      output += ch;
+      break;
     }
   }
   return output;
 }
 
-void AppendU64(std::vector<std::byte>& output, std::uint64_t value) {
+void AppendU64(std::vector<std::byte> &output, std::uint64_t value) {
   const auto offset = output.size();
   output.resize(offset + sizeof(value));
   std::memcpy(output.data() + offset, &value, sizeof(value));
 }
 
 class PayloadReader {
- public:
+public:
   explicit PayloadReader(std::span<const std::byte> input) : input_(input) {}
   Result<std::uint64_t> U64() {
-    if (offset_ > input_.size() || sizeof(std::uint64_t) > input_.size() - offset_) {
+    if (offset_ > input_.size() ||
+        sizeof(std::uint64_t) > input_.size() - offset_) {
       return Status(StatusCode::kInvalidArgument,
                     "distributed benchmark payload is truncated");
     }
@@ -232,20 +242,22 @@ class PayloadReader {
   }
   [[nodiscard]] bool done() const noexcept { return offset_ == input_.size(); }
 
- private:
+private:
   std::span<const std::byte> input_;
   std::size_t offset_{0};
 };
 
-void AppendVector(std::vector<std::byte>& output,
-                  const std::vector<std::uint64_t>& values) {
+void AppendVector(std::vector<std::byte> &output,
+                  const std::vector<std::uint64_t> &values) {
   AppendU64(output, values.size());
-  for (const auto value : values) AppendU64(output, value);
+  for (const auto value : values)
+    AppendU64(output, value);
 }
 
-Result<std::vector<std::uint64_t>> ReadVector(PayloadReader& reader) {
+Result<std::vector<std::uint64_t>> ReadVector(PayloadReader &reader) {
   auto size = reader.U64();
-  if (!size.ok()) return size.status();
+  if (!size.ok())
+    return size.status();
   if (size.value() > (1U << 20U)) {
     return Status(StatusCode::kOutOfRange,
                   "distributed profile vector is too large");
@@ -255,11 +267,12 @@ Result<std::vector<std::uint64_t>> ReadVector(PayloadReader& reader) {
     result.reserve(static_cast<std::size_t>(size.value()));
     for (std::uint64_t index = 0; index < size.value(); ++index) {
       auto value = reader.U64();
-      if (!value.ok()) return value.status();
+      if (!value.ok())
+        return value.status();
       result.push_back(value.value());
     }
     return result;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to decode distributed profile vector");
   }
@@ -269,44 +282,45 @@ double Ratio(double part, double total) noexcept {
   return total == 0.0 ? 0.0 : part / total;
 }
 
-void RenderLatencyJson(std::ostringstream& output, std::string_view name,
-                       const LatencySummary& latency, bool comma = true) {
+void RenderLatencyJson(std::ostringstream &output, std::string_view name,
+                       const LatencySummary &latency, bool comma = true) {
   output << "\"" << name << "\":{\"mean_ms\":" << latency.mean_ms
-         << ",\"p50_ms\":" << latency.p50_ms
-         << ",\"p95_ms\":" << latency.p95_ms
+         << ",\"p50_ms\":" << latency.p50_ms << ",\"p95_ms\":" << latency.p95_ms
          << ",\"p99_ms\":" << latency.p99_ms << "}";
-  if (comma) output << ',';
+  if (comma)
+    output << ',';
 }
 
-void RenderU64Values(std::ostringstream& output,
+void RenderU64Values(std::ostringstream &output,
                      std::span<const std::uint64_t> values) {
   output << '[';
   for (std::size_t index = 0; index < values.size(); ++index) {
-    if (index != 0) output << ',';
+    if (index != 0)
+      output << ',';
     output << values[index];
   }
   output << ']';
 }
 
-void RenderMeanValues(std::ostringstream& output,
+void RenderMeanValues(std::ostringstream &output,
                       std::span<const std::uint64_t> totals,
                       std::span<const std::uint64_t> counts) {
   output << '[';
   const auto size = std::min(totals.size(), counts.size());
   for (std::size_t index = 0; index < size; ++index) {
-    if (index != 0) output << ',';
-    output << (counts[index] == 0
-                   ? 0.0
-                   : static_cast<double>(totals[index]) /
-                         static_cast<double>(counts[index]));
+    if (index != 0)
+      output << ',';
+    output << (counts[index] == 0 ? 0.0
+                                  : static_cast<double>(totals[index]) /
+                                        static_cast<double>(counts[index]));
   }
   output << ']';
 }
 
-std::uint64_t HistogramPercentile(
-    std::span<const std::uint64_t> histogram, std::size_t group,
-    std::size_t buckets, std::uint32_t numerator,
-    std::uint32_t denominator) noexcept {
+std::uint64_t HistogramPercentile(std::span<const std::uint64_t> histogram,
+                                  std::size_t group, std::size_t buckets,
+                                  std::uint32_t numerator,
+                                  std::uint32_t denominator) noexcept {
   if (buckets == 0 || numerator == 0 || denominator == 0 ||
       numerator > denominator || group >= histogram.size() / buckets) {
     return 0;
@@ -316,12 +330,12 @@ std::uint64_t HistogramPercentile(
   for (std::size_t bucket = 0; bucket < buckets; ++bucket) {
     samples += histogram[begin + bucket];
   }
-  if (samples == 0) return 0;
+  if (samples == 0)
+    return 0;
   const auto quotient = samples / denominator;
   const auto remainder = samples % denominator;
   const auto target = quotient * numerator +
-                      (remainder * numerator + denominator - 1U) /
-                          denominator;
+                      (remainder * numerator + denominator - 1U) / denominator;
   std::uint64_t cumulative = 0;
   for (std::size_t bucket = 0; bucket < buckets; ++bucket) {
     cumulative += histogram[begin + bucket];
@@ -332,20 +346,22 @@ std::uint64_t HistogramPercentile(
   return std::numeric_limits<std::uint64_t>::max();
 }
 
-void RenderHistogramPercentiles(
-    std::ostringstream& output, std::span<const std::uint64_t> histogram,
-    std::size_t groups, std::size_t buckets, std::uint32_t numerator,
-    std::uint32_t denominator) {
+void RenderHistogramPercentiles(std::ostringstream &output,
+                                std::span<const std::uint64_t> histogram,
+                                std::size_t groups, std::size_t buckets,
+                                std::uint32_t numerator,
+                                std::uint32_t denominator) {
   output << '[';
   for (std::size_t group = 0; group < groups; ++group) {
-    if (group != 0) output << ',';
+    if (group != 0)
+      output << ',';
     output << HistogramPercentile(histogram, group, buckets, numerator,
                                   denominator);
   }
   output << ']';
 }
 
-void RenderEventTiming(std::ostringstream& output,
+void RenderEventTiming(std::ostringstream &output,
                        std::span<const std::uint64_t> totals,
                        std::span<const std::uint64_t> groups,
                        std::span<const std::uint64_t> histogram,
@@ -353,7 +369,8 @@ void RenderEventTiming(std::ostringstream& output,
   std::vector<std::uint64_t> samples(groups.size());
   for (std::size_t group = 0; group < groups.size(); ++group) {
     const auto begin = group * buckets;
-    if (begin > histogram.size() || buckets > histogram.size() - begin) break;
+    if (begin > histogram.size() || buckets > histogram.size() - begin)
+      break;
     for (std::size_t bucket = 0; bucket < buckets; ++bucket) {
       samples[group] += histogram[begin + bucket];
     }
@@ -376,22 +393,25 @@ void RenderEventTiming(std::ostringstream& output,
   output << '}';
 }
 
-void RenderCounterArray(std::ostringstream& output, std::string_view name,
+void RenderCounterArray(std::ostringstream &output, std::string_view name,
                         std::span<const std::uint64_t> values,
                         bool comma = true) {
   output << '"' << name << "\":[";
   for (std::size_t index = 0; index < values.size(); ++index) {
-    if (index != 0) output << ',';
+    if (index != 0)
+      output << ',';
     output << values[index];
   }
   output << ']';
-  if (comma) output << ',';
+  if (comma)
+    output << ',';
 }
 
-}  // namespace
+} // namespace
 
-BenchmarkSummary SummarizeBenchmark(
-    std::span<const QueryBenchmarkRecord> records, double elapsed_seconds) {
+BenchmarkSummary
+SummarizeBenchmark(std::span<const QueryBenchmarkRecord> records,
+                   double elapsed_seconds) {
   BenchmarkSummary summary;
   summary.query_count = records.size();
   summary.elapsed_seconds = elapsed_seconds;
@@ -417,8 +437,11 @@ BenchmarkSummary SummarizeBenchmark(
   std::vector<std::uint64_t> controller_other;
   long double recall_total = 0;
   std::uint64_t recall_count = 0;
-  for (const auto& record : records) {
-    if (record.success) ++summary.succeeded; else ++summary.failed;
+  for (const auto &record : records) {
+    if (record.success)
+      ++summary.succeeded;
+    else
+      ++summary.failed;
     latency.push_back(record.latency_nanoseconds);
     queue_wait.push_back(record.queue_wait_nanoseconds);
     execution.push_back(record.execution_nanoseconds);
@@ -465,7 +488,8 @@ BenchmarkSummary SummarizeBenchmark(
   summary.neighbor_scan_visited_latency = MakeLatency(std::move(neighbor_scan));
   summary.route_group_sort_latency = MakeLatency(std::move(route_sort));
   summary.local_distance_latency = MakeLatency(std::move(local_distance));
-  summary.remote_prepare_publish_latency = MakeLatency(std::move(remote_prepare));
+  summary.remote_prepare_publish_latency =
+      MakeLatency(std::move(remote_prepare));
   summary.remote_finish_latency = MakeLatency(std::move(remote_finish));
   summary.commit_heap_latency = MakeLatency(std::move(commit_heap));
   summary.controller_other_latency = MakeLatency(std::move(controller_other));
@@ -482,27 +506,29 @@ BenchmarkSummary SummarizeBenchmark(
 double RecallAtK(std::span<const HeapEntry> result,
                  std::span<const node_id_t> truth,
                  std::uint32_t topk) noexcept {
-  if (topk == 0) return 0.0;
+  if (topk == 0)
+    return 0.0;
   const auto result_count = std::min<std::size_t>(result.size(), topk);
   const auto truth_count = std::min<std::size_t>(truth.size(), topk);
   std::uint32_t matches = 0;
   for (std::size_t index = 0; index < result_count; ++index) {
-    if (result[index].id == INVALID_NODE_ID) continue;
+    if (result[index].id == INVALID_NODE_ID)
+      continue;
     bool duplicate = false;
     for (std::size_t prior = 0; prior < index; ++prior) {
       duplicate |= result[prior].id == result[index].id;
     }
-    const auto truth_end = truth.begin() +
-        static_cast<std::ptrdiff_t>(truth_count);
-    if (!duplicate && std::find(truth.begin(), truth_end,
-                                result[index].id) != truth_end) {
+    const auto truth_end =
+        truth.begin() + static_cast<std::ptrdiff_t>(truth_count);
+    if (!duplicate &&
+        std::find(truth.begin(), truth_end, result[index].id) != truth_end) {
       ++matches;
     }
   }
   return static_cast<double>(matches) / static_cast<double>(topk);
 }
 
-std::string RenderBenchmarkSummary(const BenchmarkSummary& summary,
+std::string RenderBenchmarkSummary(const BenchmarkSummary &summary,
                                    OutputFormat format) {
   std::ostringstream output;
   output << std::fixed << std::setprecision(6);
@@ -521,24 +547,24 @@ std::string RenderBenchmarkSummary(const BenchmarkSummary& summary,
     }
     output << "}\n";
   } else if (format == OutputFormat::kCsv) {
-    output << "query_count,succeeded,failed,elapsed_seconds,qps,latency_mean_ms,"
-              "latency_p50_ms,latency_p95_ms,latency_p99_ms,recall_mean\n"
-           << summary.query_count << ',' << summary.succeeded << ','
-           << summary.failed << ',' << summary.elapsed_seconds << ','
-           << summary.qps << ',' << summary.latency_mean_ms << ','
-           << summary.latency_p50_ms << ',' << summary.latency_p95_ms << ','
-           << summary.latency_p99_ms << ',';
-    if (summary.recall_mean.has_value()) output << *summary.recall_mean;
+    output
+        << "query_count,succeeded,failed,elapsed_seconds,qps,latency_mean_ms,"
+           "latency_p50_ms,latency_p95_ms,latency_p99_ms,recall_mean\n"
+        << summary.query_count << ',' << summary.succeeded << ','
+        << summary.failed << ',' << summary.elapsed_seconds << ','
+        << summary.qps << ',' << summary.latency_mean_ms << ','
+        << summary.latency_p50_ms << ',' << summary.latency_p95_ms << ','
+        << summary.latency_p99_ms << ',';
+    if (summary.recall_mean.has_value())
+      output << *summary.recall_mean;
     output << '\n';
   } else {
     output << "queries=" << summary.query_count
-           << " succeeded=" << summary.succeeded
-           << " failed=" << summary.failed
-           << " elapsed_s=" << summary.elapsed_seconds
-           << " qps=" << summary.qps
-           << " latency_ms(mean/p50/p95/p99)=" << summary.latency_mean_ms
-           << '/' << summary.latency_p50_ms << '/' << summary.latency_p95_ms
-           << '/' << summary.latency_p99_ms;
+           << " succeeded=" << summary.succeeded << " failed=" << summary.failed
+           << " elapsed_s=" << summary.elapsed_seconds << " qps=" << summary.qps
+           << " latency_ms(mean/p50/p95/p99)=" << summary.latency_mean_ms << '/'
+           << summary.latency_p50_ms << '/' << summary.latency_p95_ms << '/'
+           << summary.latency_p99_ms;
     if (summary.recall_mean.has_value()) {
       output << " recall=" << *summary.recall_mean;
     }
@@ -547,8 +573,8 @@ std::string RenderBenchmarkSummary(const BenchmarkSummary& summary,
   return output.str();
 }
 
-std::string RenderProfileJson(const BenchmarkSummary& summary,
-                              const RuntimeProfileSnapshot& profile,
+std::string RenderProfileJson(const BenchmarkSummary &summary,
+                              const RuntimeProfileSnapshot &profile,
                               std::string_view git_commit, std::uint32_t rank,
                               std::uint32_t world_size) {
   std::ostringstream output;
@@ -561,15 +587,14 @@ std::string RenderProfileJson(const BenchmarkSummary& summary,
          << ",\"failed\":" << summary.failed
          << ",\"elapsed_seconds\":" << summary.elapsed_seconds
          << ",\"qps\":" << summary.qps << "},\n  \"latency\":{";
-  RenderLatencyJson(output, "end_to_end", {summary.latency_mean_ms,
-                    summary.latency_p50_ms, summary.latency_p95_ms,
-                    summary.latency_p99_ms});
+  RenderLatencyJson(output, "end_to_end",
+                    {summary.latency_mean_ms, summary.latency_p50_ms,
+                     summary.latency_p95_ms, summary.latency_p99_ms});
   RenderLatencyJson(output, "queue_wait", summary.queue_wait_latency);
   RenderLatencyJson(output, "execution", summary.execution_latency, false);
   output << "},\n  \"query_timing_ms\":{";
   RenderLatencyJson(output, "execution", summary.execution_latency);
-  RenderLatencyJson(output, "local_execution",
-                    summary.local_execution_latency);
+  RenderLatencyJson(output, "local_execution", summary.local_execution_latency);
   RenderLatencyJson(output, "graph_wait", summary.graph_wait_latency);
   RenderLatencyJson(output, "distance_wait", summary.distance_wait_latency);
   RenderLatencyJson(output, "ready_queue", summary.ready_queue_latency);
@@ -611,8 +636,7 @@ std::string RenderProfileJson(const BenchmarkSummary& summary,
                     summary.neighbor_scan_visited_latency);
   RenderLatencyJson(output, "route_group_sort",
                     summary.route_group_sort_latency);
-  RenderLatencyJson(output, "local_distance",
-                    summary.local_distance_latency);
+  RenderLatencyJson(output, "local_distance", summary.local_distance_latency);
   RenderLatencyJson(output, "remote_prepare_publish",
                     summary.remote_prepare_publish_latency);
   RenderLatencyJson(output, "remote_finish", summary.remote_finish_latency);
@@ -690,13 +714,11 @@ std::string RenderProfileJson(const BenchmarkSummary& summary,
   output << ",\"critical_lane_counts\":";
   RenderU64Values(output, profile.wait_critical_lane_counts);
   output << ",\"total_wait\":";
-  RenderEventTiming(output, profile.wait_nanoseconds,
-                    profile.wait_event_counts, profile.wait_histograms,
-                    kTimingHistogramBuckets);
+  RenderEventTiming(output, profile.wait_nanoseconds, profile.wait_event_counts,
+                    profile.wait_histograms, kTimingHistogramBuckets);
   output << ",\"publish\":";
   RenderEventTiming(output, profile.wait_publish_nanoseconds,
-                    profile.wait_event_counts,
-                    profile.wait_publish_histograms,
+                    profile.wait_event_counts, profile.wait_publish_histograms,
                     kTimingHistogramBuckets);
   output << ",\"publish_to_first_completion\":";
   RenderEventTiming(output, profile.wait_first_completion_nanoseconds,
@@ -746,10 +768,9 @@ std::string RenderProfileJson(const BenchmarkSummary& summary,
          << ",\"request_slots_in_use\":" << profile.request_slots_in_use
          << ",\"request_slots_high_watermark\":"
          << profile.request_slots_high_watermark
-         << ",\"distance_busy_iterations\":"
-         << profile.distance_busy_iterations
-         << ",\"distance_idle_iterations\":"
-         << profile.distance_idle_iterations << ',';
+         << ",\"distance_busy_iterations\":" << profile.distance_busy_iterations
+         << ",\"distance_idle_iterations\":" << profile.distance_idle_iterations
+         << ',';
   RenderCounterArray(output, "request_slot_scans_per_worker",
                      profile.distance_request_slot_scans_per_thread);
   RenderCounterArray(output, "request_slot_hits_per_worker",
@@ -768,17 +789,15 @@ std::string RenderProfileJson(const BenchmarkSummary& summary,
                      profile.distance_iterations_per_thread, false);
   output << "},\n  \"rpc\":{\"logical_tasks\":"
          << profile.logical_distance_tasks
-          << ",\"completed_tasks\":" << profile.completed_distance_tasks
+         << ",\"completed_tasks\":" << profile.completed_distance_tasks
          << ",\"request_batches\":" << profile.request_batches
          << ",\"request_batch_tasks\":" << profile.request_batch_tasks
          << ",\"request_batch_bytes\":" << profile.request_batch_bytes
          << ",\"response_batches\":" << profile.response_batches
          << ",\"response_batch_tasks\":" << profile.response_batch_tasks
          << ",\"response_batch_bytes\":" << profile.response_batch_bytes
-          << ",\"request_physical_writes\":"
-          << profile.request_physical_writes
-          << ",\"response_physical_writes\":"
-          << profile.response_physical_writes
+         << ",\"request_physical_writes\":" << profile.request_physical_writes
+         << ",\"response_physical_writes\":" << profile.response_physical_writes
          << ",\"request_completions\":" << profile.request_completions
          << ",\"response_completions\":" << profile.response_completions
          << ",\"request_write_completion_ns\":"
@@ -795,8 +814,8 @@ std::string RenderProfileJson(const BenchmarkSummary& summary,
          << profile.rpc_client_request_prepare_nanoseconds
          << ",\"client_request_post_wait_ns\":"
          << profile.rpc_client_request_post_wait_nanoseconds
-          << ",\"round_trip_ns\":" << profile.rpc_client_round_trip_nanoseconds
-          << ",\"round_trip_samples\":" << profile.rpc_client_round_trip_samples
+         << ",\"round_trip_ns\":" << profile.rpc_client_round_trip_nanoseconds
+         << ",\"round_trip_samples\":" << profile.rpc_client_round_trip_samples
          << ",\"response_notify_to_receive_ns\":"
          << profile.rpc_client_response_notify_to_receive_nanoseconds
          << ",\"response_notify_to_receive_samples\":"
@@ -818,14 +837,11 @@ std::string RenderProfileJson(const BenchmarkSummary& summary,
          << ",\"response_received_to_task_terminal_samples\":"
          << profile.rpc_client_response_received_to_task_terminal_samples
          << ",\"exceptional_retained_ns\":"
-         << profile
-                .rpc_exceptional_retained_nanoseconds
+         << profile.rpc_exceptional_retained_nanoseconds
          << ",\"response_to_stage_terminal_ns\":"
-         << profile
-                .rpc_client_response_to_stage_terminal_nanoseconds
+         << profile.rpc_client_response_to_stage_terminal_nanoseconds
          << ",\"response_to_stage_terminal_samples\":"
-         << profile
-                .rpc_client_response_to_stage_terminal_samples
+         << profile.rpc_client_response_to_stage_terminal_samples
          << ",\"response_scan_slots\":" << profile.response_scan_slots
          << ",\"response_scan_hits\":" << profile.response_scan_hits
          << ",\"request_post_free_slot_waits\":"
@@ -842,8 +858,9 @@ std::string RenderProfileJson(const BenchmarkSummary& summary,
                      profile.rpc_scan_responses_nanoseconds_per_thread);
   RenderCounterArray(output, "post_responses_ns_per_thread",
                      profile.rpc_post_responses_nanoseconds_per_thread);
-  RenderCounterArray(output, "drain_submissions_ns_per_thread",
-                     profile.rpc_drain_client_submissions_nanoseconds_per_thread);
+  RenderCounterArray(
+      output, "drain_submissions_ns_per_thread",
+      profile.rpc_drain_client_submissions_nanoseconds_per_thread);
   RenderCounterArray(output, "post_requests_ns_per_thread",
                      profile.rpc_post_requests_nanoseconds_per_thread);
   RenderCounterArray(output, "busy_ns_per_thread",
@@ -853,8 +870,8 @@ std::string RenderProfileJson(const BenchmarkSummary& summary,
   RenderCounterArray(output, "iterations_per_thread",
                      profile.rpc_progress_iterations_per_thread, false);
   output << "},\n  \"search\":{\"nodes_expanded\":"
-         << summary.search.nodes_expanded << ",\"edges_scanned\":"
-         << summary.search.edges_scanned << ',';
+         << summary.search.nodes_expanded
+         << ",\"edges_scanned\":" << summary.search.edges_scanned << ',';
   RenderCounterArray(output, "busy_ns_per_thread",
                      profile.search_busy_nanoseconds_per_thread);
   RenderCounterArray(output, "idle_ns_per_thread",
@@ -862,25 +879,34 @@ std::string RenderProfileJson(const BenchmarkSummary& summary,
   RenderCounterArray(output, "iterations_per_thread",
                      profile.search_iterations_per_thread, false);
   output << "},\n  \"read\":{\"batches_submitted\":"
-         << profile.read_batches_submitted << ",\"batches_failed\":"
-         << profile.read_batches_failed << ",\"batches_timed_out\":"
-         << profile.read_batches_timed_out << ",\"batches_cancelled\":"
-         << profile.read_batches_cancelled << ",\"requests_posted\":"
-         << profile.read_requests_posted << ",\"requests_completed\":"
-         << profile.read_requests_completed << ",\"bytes_completed\":"
-         << profile.read_bytes_completed << ",\"cqe_failure_count\":"
-         << profile.read_cqe_failure_count << ',';
-  output << "\"native_descriptors_high_watermark\":" << profile.read_native_descriptors_high_watermark << ',';
-  output << "\"in_flight_high_watermark\":" << profile.read_in_flight_high_watermark << ',';
+         << profile.read_batches_submitted
+         << ",\"batches_failed\":" << profile.read_batches_failed
+         << ",\"batches_timed_out\":" << profile.read_batches_timed_out
+         << ",\"batches_cancelled\":" << profile.read_batches_cancelled
+         << ",\"requests_posted\":" << profile.read_requests_posted
+         << ",\"requests_completed\":" << profile.read_requests_completed
+         << ",\"bytes_completed\":" << profile.read_bytes_completed
+         << ",\"cqe_failure_count\":" << profile.read_cqe_failure_count << ',';
+  output << "\"native_descriptors_high_watermark\":"
+         << profile.read_native_descriptors_high_watermark << ',';
+  output << "\"in_flight_high_watermark\":"
+         << profile.read_in_flight_high_watermark << ',';
   output << "\"post_calls\":" << profile.read_post_calls << ',';
   output << "\"post_list_wrs\":" << profile.read_post_list_wrs << ',';
-  output << "\"post_list_high_watermark\":" << profile.read_post_list_high_watermark << ',';
-  output << "\"submit_wait_nanoseconds\":" << profile.read_submit_wait_nanoseconds << ',';
-  output << "\"reclaim_wait_nanoseconds\":" << profile.read_reclaim_wait_nanoseconds << ',';
-  output << "\"result_allocation_retries\":" << profile.read_result_allocation_retries << ',';
-  output << "\"result_registered_bytes\":" << profile.read_result_registered_bytes << ',';
-  output << "\"result_slots_high_watermark\":" << profile.read_result_slots_high_watermark << ',';
-  output << "\"exceptional_batches_high_watermark\":" << profile.read_exceptional_batches_high_watermark << ',';
+  output << "\"post_list_high_watermark\":"
+         << profile.read_post_list_high_watermark << ',';
+  output << "\"submit_wait_nanoseconds\":"
+         << profile.read_submit_wait_nanoseconds << ',';
+  output << "\"reclaim_wait_nanoseconds\":"
+         << profile.read_reclaim_wait_nanoseconds << ',';
+  output << "\"result_allocation_retries\":"
+         << profile.read_result_allocation_retries << ',';
+  output << "\"result_registered_bytes\":"
+         << profile.read_result_registered_bytes << ',';
+  output << "\"result_slots_high_watermark\":"
+         << profile.read_result_slots_high_watermark << ',';
+  output << "\"exceptional_batches_high_watermark\":"
+         << profile.read_exceptional_batches_high_watermark << ',';
   RenderCounterArray(output, "busy_ns_per_thread",
                      profile.read_busy_nanoseconds_per_thread);
   RenderCounterArray(output, "idle_ns_per_thread",
@@ -891,39 +917,57 @@ std::string RenderProfileJson(const BenchmarkSummary& summary,
          << "\"ready_published\":" << profile.ready_events_published
          << ",\"ready_consumed\":" << profile.ready_events_consumed
          << ",\"reclaim_published\":" << profile.rpc_reclaim_events_published
-         << ",\"reclaim_consumed\":" << profile.rpc_reclaim_events_consumed << ',';
+         << ",\"reclaim_consumed\":" << profile.rpc_reclaim_events_consumed
+         << ',';
   RenderCounterArray(output, "depth_per_search", profile.search_event_depth);
-  RenderCounterArray(output, "high_watermark_per_search", profile.search_event_high_watermark);
-  RenderCounterArray(output, "ready_published_per_worker", profile.ready_published_per_worker);
-  RenderCounterArray(output, "ready_consumed_per_worker", profile.ready_consumed_per_worker);
-  RenderCounterArray(output, "ready_producer_worker_counts", profile.ready_producer_worker_counts);
-  RenderCounterArray(output, "ready_converged_to_publish_ns_per_worker", profile.ready_converged_to_publish_ns_per_worker);
-  RenderCounterArray(output, "ready_publish_to_pop_ns_per_worker", profile.ready_publish_to_pop_ns_per_worker);
-  RenderCounterArray(output, "ready_pop_to_step_ns_per_worker", profile.ready_pop_to_step_ns_per_worker);
-  RenderCounterArray(output, "ready_run_ns_per_worker", profile.ready_run_ns_per_worker, false);
+  RenderCounterArray(output, "high_watermark_per_search",
+                     profile.search_event_high_watermark);
+  RenderCounterArray(output, "ready_published_per_worker",
+                     profile.ready_published_per_worker);
+  RenderCounterArray(output, "ready_consumed_per_worker",
+                     profile.ready_consumed_per_worker);
+  RenderCounterArray(output, "ready_producer_worker_counts",
+                     profile.ready_producer_worker_counts);
+  RenderCounterArray(output, "ready_converged_to_publish_ns_per_worker",
+                     profile.ready_converged_to_publish_ns_per_worker);
+  RenderCounterArray(output, "ready_publish_to_pop_ns_per_worker",
+                     profile.ready_publish_to_pop_ns_per_worker);
+  RenderCounterArray(output, "ready_pop_to_step_ns_per_worker",
+                     profile.ready_pop_to_step_ns_per_worker);
+  RenderCounterArray(output, "ready_run_ns_per_worker",
+                     profile.ready_run_ns_per_worker, false);
   output << "},\n  \"rpc_pool\":{"
          << "\"slots_in_use\":" << profile.rpc_operation_slots_in_use
-         << ",\"slots_high_watermark\":" << profile.rpc_operation_slots_high_watermark
+         << ",\"slots_high_watermark\":"
+         << profile.rpc_operation_slots_high_watermark
          << ",\"pool_backpressure\":" << profile.rpc_pool_backpressure
          << ",\"submit_backpressure\":" << profile.rpc_submit_backpressure
-         << ",\"exceptional_slots_in_use\":" << profile.rpc_exceptional_slots_in_use
-         << ",\"exceptional_slots_high_watermark\":" << profile.rpc_exceptional_slots_high_watermark
+         << ",\"exceptional_slots_in_use\":"
+         << profile.rpc_exceptional_slots_in_use
+         << ",\"exceptional_slots_high_watermark\":"
+         << profile.rpc_exceptional_slots_high_watermark
          << ",\"exceptional_reclaimed\":" << profile.rpc_exceptional_reclaimed
-         << ",\"exceptional_retained_ns\":" << profile.rpc_exceptional_retained_nanoseconds
+         << ",\"exceptional_retained_ns\":"
+         << profile.rpc_exceptional_retained_nanoseconds
          << ",\"audit_passes\":" << profile.rpc_active_audit_passes
          << ",\"audit_operations\":" << profile.rpc_active_audit_operations
          << ',';
-  RenderCounterArray(output, "slots_in_use_per_search", profile.rpc_slots_in_use_per_search, true);
-  RenderCounterArray(output, "slots_high_watermark_per_search", profile.rpc_slots_high_watermark_per_search, true);
-  RenderCounterArray(output, "pool_backpressure_per_search", profile.rpc_pool_backpressure_per_search, true);
-  RenderCounterArray(output, "submit_backpressure_per_search", profile.rpc_submit_backpressure_per_search, true);
-  RenderCounterArray(output, "audit_operations_per_owner", profile.rpc_audit_operations_per_owner, false);
+  RenderCounterArray(output, "slots_in_use_per_search",
+                     profile.rpc_slots_in_use_per_search, true);
+  RenderCounterArray(output, "slots_high_watermark_per_search",
+                     profile.rpc_slots_high_watermark_per_search, true);
+  RenderCounterArray(output, "pool_backpressure_per_search",
+                     profile.rpc_pool_backpressure_per_search, true);
+  RenderCounterArray(output, "submit_backpressure_per_search",
+                     profile.rpc_submit_backpressure_per_search, true);
+  RenderCounterArray(output, "audit_operations_per_owner",
+                     profile.rpc_audit_operations_per_owner, false);
   output << "}\n}\n";
   return output.str();
 }
 
-std::string RenderProfileCsv(const BenchmarkSummary& summary,
-                             const RuntimeProfileSnapshot& profile,
+std::string RenderProfileCsv(const BenchmarkSummary &summary,
+                             const RuntimeProfileSnapshot &profile,
                              std::string_view git_commit, std::uint32_t rank,
                              std::uint32_t world_size) {
   std::ostringstream output;
@@ -931,25 +975,33 @@ std::string RenderProfileCsv(const BenchmarkSummary& summary,
             "request_slot_scans,request_slot_hits,server_request_batches,"
             "server_request_tasks,server_distance_values,result_slot_scans,"
             "result_slot_hits,result_post_retries,request_slots_high_watermark,"
-            "query_ready,reclaim_events,rpc_pool_backpressure,rpc_submit_backpressure,"
-            "rpc_exceptional_reclaimed,rpc_exceptional_retained_ns,rpc_audit_operations\n"
+            "query_ready,reclaim_events,rpc_pool_backpressure,rpc_submit_"
+            "backpressure,"
+            "rpc_exceptional_reclaimed,rpc_exceptional_retained_ns,rpc_audit_"
+            "operations\n"
          << "7,\"" << EscapeJson(git_commit) << "\"," << rank << ','
          << world_size << ',' << summary.query_count << ',' << summary.qps
-         << ',' << profile.request_slot_scans << ',' << profile.request_slot_hits
-         << ',' << profile.server_request_batches << ','
-         << profile.server_request_tasks << ',' << profile.server_distance_values
-         << ',' << profile.result_slot_scans << ',' << profile.result_slot_hits
-         << ',' << profile.result_post_retries << ','
-         << profile.request_slots_high_watermark << ',' << profile.ready_events_published
-         << ',' << profile.rpc_reclaim_events_published << ',' << profile.rpc_pool_backpressure
-         << ',' << profile.rpc_submit_backpressure << ',' << profile.rpc_exceptional_reclaimed
-         << ',' << profile.rpc_exceptional_retained_nanoseconds << ',' << profile.rpc_active_audit_operations << '\n';
+         << ',' << profile.request_slot_scans << ','
+         << profile.request_slot_hits << ',' << profile.server_request_batches
+         << ',' << profile.server_request_tasks << ','
+         << profile.server_distance_values << ',' << profile.result_slot_scans
+         << ',' << profile.result_slot_hits << ','
+         << profile.result_post_retries << ','
+         << profile.request_slots_high_watermark << ','
+         << profile.ready_events_published << ','
+         << profile.rpc_reclaim_events_published << ','
+         << profile.rpc_pool_backpressure << ','
+         << profile.rpc_submit_backpressure << ','
+         << profile.rpc_exceptional_reclaimed << ','
+         << profile.rpc_exceptional_retained_nanoseconds << ','
+         << profile.rpc_active_audit_operations << '\n';
   return output.str();
 }
 
-Result<std::vector<std::byte>> EncodeDistributedBenchmarkPayload(
-    std::span<const QueryBenchmarkRecord> records, double elapsed_seconds,
-    const RuntimeProfileSnapshot& profile) {
+Result<std::vector<std::byte>>
+EncodeDistributedBenchmarkPayload(std::span<const QueryBenchmarkRecord> records,
+                                  double elapsed_seconds,
+                                  const RuntimeProfileSnapshot &profile) {
   if (!std::isfinite(elapsed_seconds) || elapsed_seconds < 0.0 ||
       records.size() > std::numeric_limits<std::uint32_t>::max()) {
     return Status(StatusCode::kInvalidArgument,
@@ -962,7 +1014,7 @@ Result<std::vector<std::byte>> EncodeDistributedBenchmarkPayload(
     AppendU64(output, kPayloadVersion);
     AppendU64(output, records.size());
     AppendU64(output, std::bit_cast<std::uint64_t>(elapsed_seconds));
-    for (const auto& record : records) {
+    for (const auto &record : records) {
       AppendU64(output, record.query_id);
       AppendU64(output, record.latency_nanoseconds);
       AppendU64(output, record.recall.has_value() ? 1U : 0U);
@@ -984,14 +1036,14 @@ Result<std::vector<std::byte>> EncodeDistributedBenchmarkPayload(
     PROFILE_VECTOR_FIELDS(APPEND_PROFILE_VECTOR)
 #undef APPEND_PROFILE_VECTOR
     return output;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to encode distributed benchmark payload");
   }
 }
 
-Result<DistributedBenchmarkPayload> DecodeDistributedBenchmarkPayload(
-    std::span<const std::byte> input) {
+Result<DistributedBenchmarkPayload>
+DecodeDistributedBenchmarkPayload(std::span<const std::byte> input) {
   PayloadReader reader(input);
   auto magic = reader.U64();
   auto version = reader.U64();
@@ -1011,20 +1063,25 @@ Result<DistributedBenchmarkPayload> DecodeDistributedBenchmarkPayload(
   }
   DistributedBenchmarkPayload payload;
   payload.elapsed_seconds = std::bit_cast<double>(elapsed.value());
-  if (!std::isfinite(payload.elapsed_seconds) || payload.elapsed_seconds < 0.0) {
+  if (!std::isfinite(payload.elapsed_seconds) ||
+      payload.elapsed_seconds < 0.0) {
     return Status(StatusCode::kProtocolError,
                   "distributed benchmark elapsed time is invalid");
   }
   try {
     payload.records.resize(static_cast<std::size_t>(count.value()));
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate distributed benchmark records");
   }
-  for (auto& record : payload.records) {
-#define READ_RECORD_FIELD(target, field) \
-    do { auto value = reader.U64(); if (!value.ok()) return value.status(); \
-         (target) = value.value(); } while (false)
+  for (auto &record : payload.records) {
+#define READ_RECORD_FIELD(target, field)                                       \
+  do {                                                                         \
+    auto value = reader.U64();                                                 \
+    if (!value.ok())                                                           \
+      return value.status();                                                   \
+    (target) = value.value();                                                  \
+  } while (false)
     READ_RECORD_FIELD(record.query_id, query_id);
     READ_RECORD_FIELD(record.latency_nanoseconds, latency_nanoseconds);
     std::uint64_t has_recall = 0;
@@ -1046,26 +1103,42 @@ Result<DistributedBenchmarkPayload> DecodeDistributedBenchmarkPayload(
       record.recall = recall;
     }
     record.success = success != 0;
-#define READ_SEARCH(name) \
-    do { auto value = reader.U64(); if (!value.ok()) return value.status(); \
-         record.search.name = value.value(); } while (false);
+#define READ_SEARCH(name)                                                      \
+  do {                                                                         \
+    auto value = reader.U64();                                                 \
+    if (!value.ok())                                                           \
+      return value.status();                                                   \
+    record.search.name = value.value();                                        \
+  } while (false);
     SEARCH_PROFILE_FIELDS(READ_SEARCH)
 #undef READ_SEARCH
-#define READ_TIMING(name) \
-    do { auto value = reader.U64(); if (!value.ok()) return value.status(); \
-         record.name = value.value(); } while (false);
+#define READ_TIMING(name)                                                      \
+  do {                                                                         \
+    auto value = reader.U64();                                                 \
+    if (!value.ok())                                                           \
+      return value.status();                                                   \
+    record.name = value.value();                                               \
+  } while (false);
     RECORD_TIMING_FIELDS(READ_TIMING)
 #undef READ_TIMING
 #undef READ_RECORD_FIELD
   }
-#define READ_PROFILE(name) \
-  do { auto value = reader.U64(); if (!value.ok()) return value.status(); \
-       payload.profile.name = value.value(); } while (false);
+#define READ_PROFILE(name)                                                     \
+  do {                                                                         \
+    auto value = reader.U64();                                                 \
+    if (!value.ok())                                                           \
+      return value.status();                                                   \
+    payload.profile.name = value.value();                                      \
+  } while (false);
   PROFILE_SCALAR_FIELDS(READ_PROFILE)
 #undef READ_PROFILE
-#define READ_PROFILE_VECTOR(name) \
-  do { auto value = ReadVector(reader); if (!value.ok()) return value.status(); \
-       payload.profile.name = std::move(value).value(); } while (false);
+#define READ_PROFILE_VECTOR(name)                                              \
+  do {                                                                         \
+    auto value = ReadVector(reader);                                           \
+    if (!value.ok())                                                           \
+      return value.status();                                                   \
+    payload.profile.name = std::move(value).value();                           \
+  } while (false);
   PROFILE_VECTOR_FIELDS(READ_PROFILE_VECTOR)
 #undef READ_PROFILE_VECTOR
   if (!reader.done()) {
@@ -1075,13 +1148,13 @@ Result<DistributedBenchmarkPayload> DecodeDistributedBenchmarkPayload(
   return payload;
 }
 
-Status WriteOutput(const std::filesystem::path& path,
+Status WriteOutput(const std::filesystem::path &path,
                    std::string_view content) {
   if (path == "-") {
     std::cout << content;
     return std::cout.good()
-        ? Status::Ok()
-        : Status(StatusCode::kInternalError, "unable to write stdout");
+               ? Status::Ok()
+               : Status(StatusCode::kInternalError, "unable to write stdout");
   }
   std::ofstream output(path, std::ios::binary | std::ios::trunc);
   if (!output) {
@@ -1096,4 +1169,4 @@ Status WriteOutput(const std::filesystem::path& path,
   return Status::Ok();
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

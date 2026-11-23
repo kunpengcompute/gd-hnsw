@@ -20,8 +20,8 @@
 namespace hnsw_urma {
 namespace {
 
-constexpr std::uint32_t kConfigMagic = 0x43464731U;  // CFG1
-constexpr std::uint32_t kPeerMagic = 0x50454552U;    // PEER
+constexpr std::uint32_t kConfigMagic = 0x43464731U; // CFG1
+constexpr std::uint32_t kPeerMagic = 0x50454552U;   // PEER
 constexpr std::size_t kMaxConfigBytes = 1U << 20U;
 constexpr std::size_t kMaxPeerDescriptorBytes = 16U << 20U;
 constexpr std::size_t kMaxProviderDescriptorBytes = 4096;
@@ -32,19 +32,20 @@ constexpr std::size_t kMaxDevices = 16;
 constexpr std::size_t kMaxSegments = 32;
 constexpr std::size_t kMaxEndpoints = 256;
 
-void AppendU32(std::vector<std::byte>& output, std::uint32_t value) {
+void AppendU32(std::vector<std::byte> &output, std::uint32_t value) {
   for (unsigned shift = 0; shift < 32; shift += 8) {
     output.push_back(static_cast<std::byte>((value >> shift) & 0xffU));
   }
 }
 
-void AppendU64(std::vector<std::byte>& output, std::uint64_t value) {
+void AppendU64(std::vector<std::byte> &output, std::uint64_t value) {
   for (unsigned shift = 0; shift < 64; shift += 8) {
     output.push_back(static_cast<std::byte>((value >> shift) & 0xffU));
   }
 }
 
-Result<std::uint32_t> ReadU32(std::span<const std::byte> bytes, std::size_t& offset) {
+Result<std::uint32_t> ReadU32(std::span<const std::byte> bytes,
+                              std::size_t &offset) {
   if (offset > bytes.size() || sizeof(std::uint32_t) > bytes.size() - offset) {
     return Status(StatusCode::kInvalidFormat, "truncated uint32 field");
   }
@@ -55,7 +56,8 @@ Result<std::uint32_t> ReadU32(std::span<const std::byte> bytes, std::size_t& off
   return value;
 }
 
-Result<std::uint64_t> ReadU64(std::span<const std::byte> bytes, std::size_t& offset) {
+Result<std::uint64_t> ReadU64(std::span<const std::byte> bytes,
+                              std::size_t &offset) {
   if (offset > bytes.size() || sizeof(std::uint64_t) > bytes.size() - offset) {
     return Status(StatusCode::kInvalidFormat, "truncated uint64 field");
   }
@@ -66,10 +68,12 @@ Result<std::uint64_t> ReadU64(std::span<const std::byte> bytes, std::size_t& off
   return value;
 }
 
-Status AppendBlob(std::vector<std::byte>& output, std::span<const std::byte> blob,
-                  std::size_t maximum) {
-  if (blob.size() > maximum || blob.size() > std::numeric_limits<std::uint32_t>::max()) {
-    return Status(StatusCode::kOutOfRange, "metadata blob exceeds its fixed bound");
+Status AppendBlob(std::vector<std::byte> &output,
+                  std::span<const std::byte> blob, std::size_t maximum) {
+  if (blob.size() > maximum ||
+      blob.size() > std::numeric_limits<std::uint32_t>::max()) {
+    return Status(StatusCode::kOutOfRange,
+                  "metadata blob exceeds its fixed bound");
   }
   AppendU32(output, static_cast<std::uint32_t>(blob.size()));
   output.insert(output.end(), blob.begin(), blob.end());
@@ -77,13 +81,16 @@ Status AppendBlob(std::vector<std::byte>& output, std::span<const std::byte> blo
 }
 
 Result<std::span<const std::byte>> ReadBlob(std::span<const std::byte> bytes,
-                                           std::size_t& offset, std::size_t maximum) {
+                                            std::size_t &offset,
+                                            std::size_t maximum) {
   auto length = ReadU32(bytes, offset);
   if (!length.ok()) {
     return length.status();
   }
-  if (length.value() > maximum || offset > bytes.size() || length.value() > bytes.size() - offset) {
-    return Status(StatusCode::kInvalidFormat, "metadata blob length is invalid");
+  if (length.value() > maximum || offset > bytes.size() ||
+      length.value() > bytes.size() - offset) {
+    return Status(StatusCode::kInvalidFormat,
+                  "metadata blob length is invalid");
   }
   auto blob = bytes.subspan(offset, length.value());
   offset += length.value();
@@ -104,7 +111,8 @@ ProcessPlacement DetectPlacement() {
   CPU_ZERO(&cpus);
   if (sched_getaffinity(0, sizeof(cpus), &cpus) == 0) {
     placement.affinity_known = true;
-    for (std::size_t cpu = 0; cpu < static_cast<std::size_t>(CPU_SETSIZE); ++cpu) {
+    for (std::size_t cpu = 0; cpu < static_cast<std::size_t>(CPU_SETSIZE);
+         ++cpu) {
       if (CPU_ISSET(cpu, &cpus)) {
         placement.allowed_cpus.push_back(static_cast<std::uint32_t>(cpu));
       }
@@ -130,20 +138,23 @@ Status MpiStatus(int code, std::string operation) {
   int length = 0;
   MPI_Error_string(code, message.data(), &length);
   return Status(StatusCode::kTransportError, std::move(operation) + " failed")
-      .AddContext("mpi_error", std::string(message.data(), static_cast<std::size_t>(length)))
+      .AddContext("mpi_error",
+                  std::string(message.data(), static_cast<std::size_t>(length)))
       .AddContext("mpi_status", std::to_string(code));
 }
 #endif
 
-}  // namespace
+} // namespace
 
 Status CanonicalConfig::Set(std::string key, std::string value) {
   if (key.empty()) {
-    return Status(StatusCode::kInvalidArgument, "canonical config key must not be empty");
+    return Status(StatusCode::kInvalidArgument,
+                  "canonical config key must not be empty");
   }
   if (key.size() > std::numeric_limits<std::uint32_t>::max() ||
       value.size() > std::numeric_limits<std::uint32_t>::max()) {
-    return Status(StatusCode::kOutOfRange, "canonical config value is too large");
+    return Status(StatusCode::kOutOfRange,
+                  "canonical config value is too large");
   }
   values_.insert_or_assign(std::move(key), std::move(value));
   return Status::Ok();
@@ -154,24 +165,28 @@ Result<std::vector<std::byte>> CanonicalConfig::Encode() const {
     std::vector<std::byte> output;
     AppendU32(output, kConfigMagic);
     AppendU32(output, static_cast<std::uint32_t>(values_.size()));
-    for (const auto& [key, value] : values_) {
-      auto status = AppendBlob(
-          output, std::as_bytes(std::span(key.data(), key.size())), kMaxConfigBytes);
+    for (const auto &[key, value] : values_) {
+      auto status =
+          AppendBlob(output, std::as_bytes(std::span(key.data(), key.size())),
+                     kMaxConfigBytes);
       if (!status.ok()) {
         return status;
       }
-      status = AppendBlob(output, std::as_bytes(std::span(value.data(), value.size())),
+      status = AppendBlob(output,
+                          std::as_bytes(std::span(value.data(), value.size())),
                           kMaxConfigBytes);
       if (!status.ok()) {
         return status;
       }
       if (output.size() > kMaxConfigBytes) {
-        return Status(StatusCode::kOutOfRange, "canonical config exceeds 1 MiB");
+        return Status(StatusCode::kOutOfRange,
+                      "canonical config exceeds 1 MiB");
       }
     }
     return output;
-  } catch (const std::bad_alloc&) {
-    return Status(StatusCode::kResourceExhausted, "unable to encode canonical config");
+  } catch (const std::bad_alloc &) {
+    return Status(StatusCode::kResourceExhausted,
+                  "unable to encode canonical config");
   }
 }
 
@@ -188,7 +203,8 @@ std::uint64_t CanonicalConfig::Hash() const {
   return hash;
 }
 
-Result<CanonicalConfig> CanonicalConfig::Decode(std::span<const std::byte> bytes) {
+Result<CanonicalConfig>
+CanonicalConfig::Decode(std::span<const std::byte> bytes) {
   if (bytes.size() > kMaxConfigBytes) {
     return Status(StatusCode::kInvalidFormat, "canonical config exceeds 1 MiB");
   }
@@ -196,38 +212,46 @@ Result<CanonicalConfig> CanonicalConfig::Decode(std::span<const std::byte> bytes
   auto magic = ReadU32(bytes, offset);
   auto count = ReadU32(bytes, offset);
   if (!magic.ok() || !count.ok() || magic.value() != kConfigMagic) {
-    return Status(StatusCode::kInvalidFormat, "canonical config header is invalid");
+    return Status(StatusCode::kInvalidFormat,
+                  "canonical config header is invalid");
   }
   CanonicalConfig config;
   for (std::uint32_t index = 0; index < count.value(); ++index) {
     auto key = ReadBlob(bytes, offset, kMaxConfigBytes);
     auto value = ReadBlob(bytes, offset, kMaxConfigBytes);
     if (!key.ok() || !value.ok() || key.value().empty()) {
-      return Status(StatusCode::kInvalidFormat, "canonical config entry is invalid");
+      return Status(StatusCode::kInvalidFormat,
+                    "canonical config entry is invalid");
     }
-    std::string key_string(reinterpret_cast<const char*>(key.value().data()), key.value().size());
+    std::string key_string(reinterpret_cast<const char *>(key.value().data()),
+                           key.value().size());
     if (config.values_.contains(key_string)) {
-      return Status(StatusCode::kInvalidFormat, "canonical config contains a duplicate key");
+      return Status(StatusCode::kInvalidFormat,
+                    "canonical config contains a duplicate key");
     }
     config.values_.emplace(
         std::move(key_string),
-        std::string(reinterpret_cast<const char*>(value.value().data()), value.value().size()));
+        std::string(reinterpret_cast<const char *>(value.value().data()),
+                    value.value().size()));
   }
   if (offset != bytes.size()) {
-    return Status(StatusCode::kInvalidFormat, "canonical config has trailing bytes");
+    return Status(StatusCode::kInvalidFormat,
+                  "canonical config has trailing bytes");
   }
   return config;
 }
 
-Result<std::vector<std::byte>> EncodePeerDescriptor(const PeerDescriptor& descriptor) {
+Result<std::vector<std::byte>>
+EncodePeerDescriptor(const PeerDescriptor &descriptor) {
   if (descriptor.version != kPeerDescriptorVersion ||
       descriptor.devices.empty() || descriptor.devices.size() > kMaxDevices ||
       descriptor.hostname.empty() ||
       descriptor.hostname.size() > kMaxHostnameBytes) {
-    return Status(StatusCode::kInvalidArgument, "peer descriptor version or count is invalid");
+    return Status(StatusCode::kInvalidArgument,
+                  "peer descriptor version or count is invalid");
   }
   for (std::size_t index = 0; index < descriptor.devices.size(); ++index) {
-    const auto& device = descriptor.devices[index];
+    const auto &device = descriptor.devices[index];
     if (device.device_name.empty() ||
         device.device_name.size() > kMaxDeviceNameBytes ||
         device.segments.size() > kMaxSegments ||
@@ -235,7 +259,7 @@ Result<std::vector<std::byte>> EncodePeerDescriptor(const PeerDescriptor& descri
         std::any_of(descriptor.devices.begin(),
                     descriptor.devices.begin() +
                         static_cast<std::ptrdiff_t>(index),
-                    [&](const auto& prior) {
+                    [&](const auto &prior) {
                       return prior.device_name == device.device_name;
                     })) {
       return Status(StatusCode::kInvalidArgument,
@@ -248,21 +272,20 @@ Result<std::vector<std::byte>> EncodePeerDescriptor(const PeerDescriptor& descri
     AppendU32(output, descriptor.version);
     AppendU32(output, descriptor.rank);
     AppendU64(output, descriptor.token);
-    auto status = AppendBlob(
-        output,
-        std::as_bytes(std::span(descriptor.hostname.data(),
-                                descriptor.hostname.size())),
-        kMaxHostnameBytes);
+    auto status =
+        AppendBlob(output,
+                   std::as_bytes(std::span(descriptor.hostname.data(),
+                                           descriptor.hostname.size())),
+                   kMaxHostnameBytes);
     if (!status.ok()) {
       return status;
     }
     AppendU32(output, static_cast<std::uint32_t>(descriptor.devices.size()));
-    for (const auto& device : descriptor.devices) {
-      status = AppendBlob(
-          output,
-          std::as_bytes(std::span(device.device_name.data(),
-                                  device.device_name.size())),
-          kMaxDeviceNameBytes);
+    for (const auto &device : descriptor.devices) {
+      status = AppendBlob(output,
+                          std::as_bytes(std::span(device.device_name.data(),
+                                                  device.device_name.size())),
+                          kMaxDeviceNameBytes);
       if (!status.ok()) {
         return status;
       }
@@ -271,7 +294,7 @@ Result<std::vector<std::byte>> EncodePeerDescriptor(const PeerDescriptor& descri
         return status;
       }
       AppendU32(output, static_cast<std::uint32_t>(device.segments.size()));
-      for (const auto& segment : device.segments) {
+      for (const auto &segment : device.segments) {
         AppendU32(output, static_cast<std::uint32_t>(segment.kind));
         AppendU64(output, segment.bytes);
         AppendU32(output, segment.permissions);
@@ -291,10 +314,9 @@ Result<std::vector<std::byte>> EncodePeerDescriptor(const PeerDescriptor& descri
       }
       AppendU32(output,
                 static_cast<std::uint32_t>(device.target_endpoints.size()));
-      for (const auto& endpoint : device.target_endpoints) {
+      for (const auto &endpoint : device.target_endpoints) {
         AppendU32(output, endpoint.lane);
-        AppendU32(output,
-                  static_cast<std::uint32_t>(endpoint.operation_class));
+        AppendU32(output, static_cast<std::uint32_t>(endpoint.operation_class));
         status = AppendBlob(output, endpoint.provider_descriptor,
                             kMaxProviderDescriptorBytes);
         if (!status.ok()) {
@@ -306,8 +328,9 @@ Result<std::vector<std::byte>> EncodePeerDescriptor(const PeerDescriptor& descri
       return Status(StatusCode::kOutOfRange, "peer descriptor exceeds 16 MiB");
     }
     return output;
-  } catch (const std::bad_alloc&) {
-    return Status(StatusCode::kResourceExhausted, "unable to encode peer descriptor");
+  } catch (const std::bad_alloc &) {
+    return Status(StatusCode::kResourceExhausted,
+                  "unable to encode peer descriptor");
   }
 }
 
@@ -321,8 +344,10 @@ Result<PeerDescriptor> DecodePeerDescriptor(std::span<const std::byte> bytes) {
   auto rank = ReadU32(bytes, offset);
   auto token = ReadU64(bytes, offset);
   if (!magic.ok() || !version.ok() || !rank.ok() || !token.ok() ||
-      magic.value() != kPeerMagic || version.value() != kPeerDescriptorVersion) {
-    return Status(StatusCode::kInvalidFormat, "peer descriptor header is invalid");
+      magic.value() != kPeerMagic ||
+      version.value() != kPeerDescriptorVersion) {
+    return Status(StatusCode::kInvalidFormat,
+                  "peer descriptor header is invalid");
   }
   auto hostname = ReadBlob(bytes, offset, kMaxHostnameBytes);
   auto device_count = ReadU32(bytes, offset);
@@ -336,10 +361,10 @@ Result<PeerDescriptor> DecodePeerDescriptor(std::span<const std::byte> bytes) {
   descriptor.rank = rank.value();
   descriptor.token = token.value();
   descriptor.hostname.assign(
-      reinterpret_cast<const char*>(hostname.value().data()),
+      reinterpret_cast<const char *>(hostname.value().data()),
       hostname.value().size());
-  for (std::uint32_t device_index = 0;
-       device_index < device_count.value(); ++device_index) {
+  for (std::uint32_t device_index = 0; device_index < device_count.value();
+       ++device_index) {
     auto device_name = ReadBlob(bytes, offset, kMaxDeviceNameBytes);
     auto eid = ReadBlob(bytes, offset, kMaxProviderDescriptorBytes);
     auto segment_count = ReadU32(bytes, offset);
@@ -350,10 +375,10 @@ Result<PeerDescriptor> DecodePeerDescriptor(std::span<const std::byte> bytes) {
     }
     PeerDeviceDescriptor device;
     device.device_name.assign(
-        reinterpret_cast<const char*>(device_name.value().data()),
+        reinterpret_cast<const char *>(device_name.value().data()),
         device_name.value().size());
     if (std::any_of(descriptor.devices.begin(), descriptor.devices.end(),
-                    [&](const auto& prior) {
+                    [&](const auto &prior) {
                       return prior.device_name == device.device_name;
                     })) {
       return Status(StatusCode::kInvalidFormat,
@@ -365,8 +390,7 @@ Result<PeerDescriptor> DecodePeerDescriptor(std::span<const std::byte> bytes) {
       auto length = ReadU64(bytes, offset);
       auto permissions = ReadU32(bytes, offset);
       auto provider = ReadBlob(bytes, offset, kMaxProviderDescriptorBytes);
-      auto shared_memory = ReadBlob(bytes, offset,
-                                    kMaxSharedMemoryNameBytes);
+      auto shared_memory = ReadBlob(bytes, offset, kMaxSharedMemoryNameBytes);
       if (!kind.ok() || !length.ok() || !permissions.ok() || !provider.ok() ||
           !shared_memory.ok() ||
           kind.value() > static_cast<std::uint32_t>(SegmentKind::kRpcPool) ||
@@ -379,9 +403,9 @@ Result<PeerDescriptor> DecodePeerDescriptor(std::span<const std::byte> bytes) {
            permissions.value(),
            std::vector<std::byte>(provider.value().begin(),
                                   provider.value().end()),
-           std::string(reinterpret_cast<const char*>(
-                           shared_memory.value().data()),
-                       shared_memory.value().size())});
+           std::string(
+               reinterpret_cast<const char *>(shared_memory.value().data()),
+               shared_memory.value().size())});
     }
     auto endpoint_count = ReadU32(bytes, offset);
     if (!endpoint_count.ok() || endpoint_count.value() > kMaxEndpoints) {
@@ -406,7 +430,8 @@ Result<PeerDescriptor> DecodePeerDescriptor(std::span<const std::byte> bytes) {
     descriptor.devices.push_back(std::move(device));
   }
   if (offset != bytes.size()) {
-    return Status(StatusCode::kInvalidFormat, "peer descriptor has trailing bytes");
+    return Status(StatusCode::kInvalidFormat,
+                  "peer descriptor has trailing bytes");
   }
   return descriptor;
 }
@@ -423,10 +448,12 @@ MpiControl::~MpiControl() {
 #endif
 }
 
-Result<std::unique_ptr<MpiControl>> MpiControl::Initialize(int* argc, char*** argv) {
+Result<std::unique_ptr<MpiControl>> MpiControl::Initialize(int *argc,
+                                                           char ***argv) {
   auto control = std::unique_ptr<MpiControl>(new (std::nothrow) MpiControl());
   if (!control) {
-    return Status(StatusCode::kResourceExhausted, "unable to allocate MPI control plane");
+    return Status(StatusCode::kResourceExhausted,
+                  "unable to allocate MPI control plane");
   }
   control->control_thread_ = std::this_thread::get_id();
   control->placement_ = DetectPlacement();
@@ -438,8 +465,9 @@ Result<std::unique_ptr<MpiControl>> MpiControl::Initialize(int* argc, char*** ar
   }
   if (initialized == 0) {
     int provided = 0;
-    status = MpiStatus(MPI_Init_thread(argc, argv, MPI_THREAD_FUNNELED, &provided),
-                       "MPI_Init_thread");
+    status =
+        MpiStatus(MPI_Init_thread(argc, argv, MPI_THREAD_FUNNELED, &provided),
+                  "MPI_Init_thread");
     if (!status.ok()) {
       return status;
     }
@@ -457,11 +485,13 @@ Result<std::unique_ptr<MpiControl>> MpiControl::Initialize(int* argc, char*** ar
   if (!status.ok()) {
     return status;
   }
-  status = MpiStatus(MPI_Comm_rank(MPI_COMM_WORLD, &control->rank_), "MPI_Comm_rank");
+  status = MpiStatus(MPI_Comm_rank(MPI_COMM_WORLD, &control->rank_),
+                     "MPI_Comm_rank");
   if (!status.ok()) {
     return status;
   }
-  status = MpiStatus(MPI_Comm_size(MPI_COMM_WORLD, &control->world_size_), "MPI_Comm_size");
+  status = MpiStatus(MPI_Comm_size(MPI_COMM_WORLD, &control->world_size_),
+                     "MPI_Comm_size");
   if (!status.ok()) {
     return status;
   }
@@ -474,27 +504,31 @@ Result<std::unique_ptr<MpiControl>> MpiControl::Initialize(int* argc, char*** ar
 
 Status MpiControl::CheckControlThread() const {
   if (std::this_thread::get_id() != control_thread_) {
-    return Status(StatusCode::kInternalError, "MPI control operation called from a data-plane thread");
+    return Status(StatusCode::kInternalError,
+                  "MPI control operation called from a data-plane thread");
   }
   return Status::Ok();
 }
 
 Status MpiControl::ValidateShardWorld(std::uint32_t shard_count) const {
   if (shard_count != static_cast<std::uint32_t>(world_size_)) {
-    return Status(StatusCode::kInvalidArgument, "index shard count must equal MPI world size")
+    return Status(StatusCode::kInvalidArgument,
+                  "index shard count must equal MPI world size")
         .AddContext("shards", std::to_string(shard_count))
         .AddContext("world_size", std::to_string(world_size_));
   }
   return Status::Ok();
 }
 
-Result<CanonicalConfig> MpiControl::SynchronizeConfig(const CanonicalConfig& local, int root) const {
+Result<CanonicalConfig>
+MpiControl::SynchronizeConfig(const CanonicalConfig &local, int root) const {
   auto thread_status = CheckControlThread();
   if (!thread_status.ok()) {
     return thread_status;
   }
   if (root < 0 || root >= world_size_) {
-    return Status(StatusCode::kInvalidArgument, "canonical config root rank is invalid");
+    return Status(StatusCode::kInvalidArgument,
+                  "canonical config root rank is invalid");
   }
   auto encoded = local.Encode();
   if (!encoded.ok()) {
@@ -503,27 +537,26 @@ Result<CanonicalConfig> MpiControl::SynchronizeConfig(const CanonicalConfig& loc
 #if HNSW_URMA_HAS_MPI
   const std::uint64_t local_hash = local.Hash();
   std::vector<std::uint64_t> hashes(static_cast<std::size_t>(world_size_));
-  auto status = MpiStatus(MPI_Allgather(&local_hash, 1, MPI_UINT64_T, hashes.data(), 1,
-                                        MPI_UINT64_T, MPI_COMM_WORLD),
-                          "MPI_Allgather(config hash)");
+  auto status =
+      MpiStatus(MPI_Allgather(&local_hash, 1, MPI_UINT64_T, hashes.data(), 1,
+                              MPI_UINT64_T, MPI_COMM_WORLD),
+                "MPI_Allgather(config hash)");
   if (!status.ok()) {
     return status;
   }
   for (int rank = 0; rank < world_size_; ++rank) {
-    if (hashes[static_cast<std::size_t>(rank)] != hashes[static_cast<std::size_t>(root)]) {
+    if (hashes[static_cast<std::size_t>(rank)] !=
+        hashes[static_cast<std::size_t>(root)]) {
       const auto commit = local.values().find("git_commit");
-      return Status(
-                 StatusCode::kProtocolError,
-                 "cluster-wide runtime config or build identity disagree")
+      return Status(StatusCode::kProtocolError,
+                    "cluster-wide runtime config or build identity disagree")
           .AddContext("rank", std::to_string(rank))
-          .AddContext(
-              "local_git_commit",
-              commit == local.values().end() ? "<missing>"
-                                             : commit->second)
+          .AddContext("local_git_commit", commit == local.values().end()
+                                              ? "<missing>"
+                                              : commit->second)
           .AddContext("local_config_hash", std::to_string(local_hash))
-          .AddContext(
-              "root_config_hash",
-              std::to_string(hashes[static_cast<std::size_t>(root)]));
+          .AddContext("root_config_hash",
+                      std::to_string(hashes[static_cast<std::size_t>(root)]));
     }
   }
   std::uint64_t length = encoded.value().size();
@@ -532,14 +565,16 @@ Result<CanonicalConfig> MpiControl::SynchronizeConfig(const CanonicalConfig& loc
   if (!status.ok()) {
     return status;
   }
-  if (length > kMaxConfigBytes || length > static_cast<std::uint64_t>(INT_MAX)) {
-    return Status(StatusCode::kProtocolError, "broadcast canonical config length is invalid");
+  if (length > kMaxConfigBytes ||
+      length > static_cast<std::uint64_t>(INT_MAX)) {
+    return Status(StatusCode::kProtocolError,
+                  "broadcast canonical config length is invalid");
   }
   if (rank_ != root) {
     encoded.value().resize(static_cast<std::size_t>(length));
   }
-  status = MpiStatus(MPI_Bcast(encoded.value().data(), static_cast<int>(length), MPI_BYTE, root,
-                               MPI_COMM_WORLD),
+  status = MpiStatus(MPI_Bcast(encoded.value().data(), static_cast<int>(length),
+                               MPI_BYTE, root, MPI_COMM_WORLD),
                      "MPI_Bcast(config bytes)");
   if (!status.ok()) {
     return status;
@@ -548,14 +583,15 @@ Result<CanonicalConfig> MpiControl::SynchronizeConfig(const CanonicalConfig& loc
   return CanonicalConfig::Decode(encoded.value());
 }
 
-Result<std::vector<PeerDescriptor>> MpiControl::AllGatherPeerDescriptors(
-    const PeerDescriptor& local) const {
+Result<std::vector<PeerDescriptor>>
+MpiControl::AllGatherPeerDescriptors(const PeerDescriptor &local) const {
   auto thread_status = CheckControlThread();
   if (!thread_status.ok()) {
     return thread_status;
   }
   if (local.rank != static_cast<std::uint32_t>(rank_)) {
-    return Status(StatusCode::kInvalidArgument, "local peer descriptor rank is inconsistent");
+    return Status(StatusCode::kInvalidArgument,
+                  "local peer descriptor rank is inconsistent");
   }
   auto encoded = EncodePeerDescriptor(local);
   if (!encoded.ok()) {
@@ -564,9 +600,10 @@ Result<std::vector<PeerDescriptor>> MpiControl::AllGatherPeerDescriptors(
 #if HNSW_URMA_HAS_MPI
   std::uint64_t local_length = encoded.value().size();
   std::vector<std::uint64_t> lengths(static_cast<std::size_t>(world_size_));
-  auto status = MpiStatus(MPI_Allgather(&local_length, 1, MPI_UINT64_T, lengths.data(), 1,
-                                        MPI_UINT64_T, MPI_COMM_WORLD),
-                          "MPI_Allgather(peer descriptor lengths)");
+  auto status =
+      MpiStatus(MPI_Allgather(&local_length, 1, MPI_UINT64_T, lengths.data(), 1,
+                              MPI_UINT64_T, MPI_COMM_WORLD),
+                "MPI_Allgather(peer descriptor lengths)");
   if (!status.ok()) {
     return status;
   }
@@ -575,19 +612,23 @@ Result<std::vector<PeerDescriptor>> MpiControl::AllGatherPeerDescriptors(
   std::size_t total = 0;
   for (int rank = 0; rank < world_size_; ++rank) {
     const auto length = lengths[static_cast<std::size_t>(rank)];
-    if (length > kMaxPeerDescriptorBytes || length > static_cast<std::uint64_t>(INT_MAX) ||
+    if (length > kMaxPeerDescriptorBytes ||
+        length > static_cast<std::uint64_t>(INT_MAX) ||
         total > static_cast<std::size_t>(INT_MAX) - length) {
-      return Status(StatusCode::kProtocolError, "peer descriptor collective exceeds MPI bounds");
+      return Status(StatusCode::kProtocolError,
+                    "peer descriptor collective exceeds MPI bounds");
     }
     counts[static_cast<std::size_t>(rank)] = static_cast<int>(length);
     displacements[static_cast<std::size_t>(rank)] = static_cast<int>(total);
     total += static_cast<std::size_t>(length);
   }
   std::vector<std::byte> gathered(total);
-  status = MpiStatus(
-      MPI_Allgatherv(encoded.value().data(), static_cast<int>(encoded.value().size()), MPI_BYTE,
-                     gathered.data(), counts.data(), displacements.data(), MPI_BYTE, MPI_COMM_WORLD),
-      "MPI_Allgatherv(peer descriptors)");
+  status =
+      MpiStatus(MPI_Allgatherv(encoded.value().data(),
+                               static_cast<int>(encoded.value().size()),
+                               MPI_BYTE, gathered.data(), counts.data(),
+                               displacements.data(), MPI_BYTE, MPI_COMM_WORLD),
+                "MPI_Allgatherv(peer descriptors)");
   if (!status.ok()) {
     return status;
   }
@@ -601,7 +642,8 @@ Result<std::vector<PeerDescriptor>> MpiControl::AllGatherPeerDescriptors(
       return peer.status();
     }
     if (peer.value().rank != static_cast<std::uint32_t>(rank)) {
-      return Status(StatusCode::kProtocolError, "gathered peer descriptor rank is inconsistent");
+      return Status(StatusCode::kProtocolError,
+                    "gathered peer descriptor rank is inconsistent");
     }
     peers.push_back(std::move(peer.value()));
   }
@@ -613,8 +655,9 @@ Result<std::vector<PeerDescriptor>> MpiControl::AllGatherPeerDescriptors(
 #endif
 }
 
-Result<std::vector<std::vector<std::byte>>> MpiControl::AllGatherBytes(
-    std::span<const std::byte> local, std::size_t maximum_per_rank) const {
+Result<std::vector<std::vector<std::byte>>>
+MpiControl::AllGatherBytes(std::span<const std::byte> local,
+                           std::size_t maximum_per_rank) const {
   auto thread_status = CheckControlThread();
   if (!thread_status.ok()) {
     return thread_status;
@@ -627,9 +670,10 @@ Result<std::vector<std::vector<std::byte>>> MpiControl::AllGatherBytes(
 #if HNSW_URMA_HAS_MPI
   std::uint64_t local_length = local.size();
   std::vector<std::uint64_t> lengths(static_cast<std::size_t>(world_size_));
-  auto status = MpiStatus(MPI_Allgather(&local_length, 1, MPI_UINT64_T, lengths.data(), 1,
-                                        MPI_UINT64_T, MPI_COMM_WORLD),
-                          "MPI_Allgather(byte lengths)");
+  auto status =
+      MpiStatus(MPI_Allgather(&local_length, 1, MPI_UINT64_T, lengths.data(), 1,
+                              MPI_UINT64_T, MPI_COMM_WORLD),
+                "MPI_Allgather(byte lengths)");
   if (!status.ok()) {
     return status;
   }
@@ -638,7 +682,8 @@ Result<std::vector<std::vector<std::byte>>> MpiControl::AllGatherBytes(
   std::size_t total = 0;
   for (int rank = 0; rank < world_size_; ++rank) {
     const auto length = lengths[static_cast<std::size_t>(rank)];
-    if (length > maximum_per_rank || length > static_cast<std::uint64_t>(INT_MAX) ||
+    if (length > maximum_per_rank ||
+        length > static_cast<std::uint64_t>(INT_MAX) ||
         total > static_cast<std::size_t>(INT_MAX) - length) {
       return Status(StatusCode::kProtocolError,
                     "all-gather byte collective exceeds MPI bounds");
@@ -648,23 +693,24 @@ Result<std::vector<std::vector<std::byte>>> MpiControl::AllGatherBytes(
     total += static_cast<std::size_t>(length);
   }
   std::vector<std::byte> gathered(total);
-  status = MpiStatus(
-      MPI_Allgatherv(local.data(), static_cast<int>(local.size()), MPI_BYTE,
-                     gathered.data(), counts.data(), displacements.data(), MPI_BYTE,
-                     MPI_COMM_WORLD),
-      "MPI_Allgatherv(bytes)");
+  status =
+      MpiStatus(MPI_Allgatherv(local.data(), static_cast<int>(local.size()),
+                               MPI_BYTE, gathered.data(), counts.data(),
+                               displacements.data(), MPI_BYTE, MPI_COMM_WORLD),
+                "MPI_Allgatherv(bytes)");
   if (!status.ok()) {
     return status;
   }
   std::vector<std::vector<std::byte>> output;
   output.reserve(static_cast<std::size_t>(world_size_));
   for (int rank = 0; rank < world_size_; ++rank) {
-    const auto displacement = static_cast<std::size_t>(
-        displacements[static_cast<std::size_t>(rank)]);
-    const auto count = static_cast<std::size_t>(counts[static_cast<std::size_t>(rank)]);
-    output.emplace_back(gathered.begin() + static_cast<std::ptrdiff_t>(displacement),
-                        gathered.begin() +
-                            static_cast<std::ptrdiff_t>(displacement + count));
+    const auto displacement =
+        static_cast<std::size_t>(displacements[static_cast<std::size_t>(rank)]);
+    const auto count =
+        static_cast<std::size_t>(counts[static_cast<std::size_t>(rank)]);
+    output.emplace_back(
+        gathered.begin() + static_cast<std::ptrdiff_t>(displacement),
+        gathered.begin() + static_cast<std::ptrdiff_t>(displacement + count));
   }
   return output;
 #else
@@ -673,7 +719,8 @@ Result<std::vector<std::vector<std::byte>>> MpiControl::AllGatherBytes(
 #endif
 }
 
-Status MpiControl::ConvergeStatus(const Status& local, std::string_view phase) const {
+Status MpiControl::ConvergeStatus(const Status &local,
+                                  std::string_view phase) const {
   auto thread_status = CheckControlThread();
   if (!thread_status.ok()) {
     return thread_status;
@@ -681,8 +728,8 @@ Status MpiControl::ConvergeStatus(const Status& local, std::string_view phase) c
 #if HNSW_URMA_HAS_MPI
   int candidate = local.ok() ? world_size_ : rank_;
   int first_failure = world_size_;
-  auto status = MpiStatus(MPI_Allreduce(&candidate, &first_failure, 1, MPI_INT, MPI_MIN,
-                                        MPI_COMM_WORLD),
+  auto status = MpiStatus(MPI_Allreduce(&candidate, &first_failure, 1, MPI_INT,
+                                        MPI_MIN, MPI_COMM_WORLD),
                           "MPI_Allreduce(phase status)");
   if (!status.ok()) {
     return status;
@@ -690,20 +737,23 @@ Status MpiControl::ConvergeStatus(const Status& local, std::string_view phase) c
   if (first_failure == world_size_) {
     return Status::Ok();
   }
-  std::string message = rank_ == first_failure ? local.ToString() : std::string();
+  std::string message =
+      rank_ == first_failure ? local.ToString() : std::string();
   std::uint64_t length = message.size();
-  status = MpiStatus(MPI_Bcast(&length, 1, MPI_UINT64_T, first_failure, MPI_COMM_WORLD),
-                     "MPI_Bcast(phase error length)");
+  status = MpiStatus(
+      MPI_Bcast(&length, 1, MPI_UINT64_T, first_failure, MPI_COMM_WORLD),
+      "MPI_Bcast(phase error length)");
   if (!status.ok()) {
     return status;
   }
-  if (length > kMaxConfigBytes || length > static_cast<std::uint64_t>(INT_MAX)) {
+  if (length > kMaxConfigBytes ||
+      length > static_cast<std::uint64_t>(INT_MAX)) {
     return Status(StatusCode::kProtocolError,
                   "collective phase error message exceeds its bound");
   }
   message.resize(static_cast<std::size_t>(length));
-  status = MpiStatus(MPI_Bcast(message.data(), static_cast<int>(length), MPI_BYTE,
-                               first_failure, MPI_COMM_WORLD),
+  status = MpiStatus(MPI_Bcast(message.data(), static_cast<int>(length),
+                               MPI_BYTE, first_failure, MPI_COMM_WORLD),
                      "MPI_Bcast(phase error)");
   if (!status.ok()) {
     return status;
@@ -742,4 +792,4 @@ bool MpiSupportCompiled() {
 #endif
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

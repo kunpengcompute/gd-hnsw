@@ -22,9 +22,8 @@
 
 namespace hnsw_urma {
 
-template <typename T>
-class BoundedQueue {
- public:
+template <typename T> class BoundedQueue {
+public:
   explicit BoundedQueue(std::size_t capacity) : capacity_(capacity) {}
 
   [[nodiscard]] Status TryPush(T value) {
@@ -72,7 +71,7 @@ class BoundedQueue {
     return high_watermark_;
   }
 
- private:
+private:
   std::size_t capacity_{0};
   mutable std::mutex mutex_;
   std::condition_variable_any ready_;
@@ -93,19 +92,19 @@ struct RuntimeCallbacks {
 };
 
 class RuntimeThreadGroup {
- public:
-  RuntimeThreadGroup(const RuntimeThreadGroup&) = delete;
-  RuntimeThreadGroup& operator=(const RuntimeThreadGroup&) = delete;
+public:
+  RuntimeThreadGroup(const RuntimeThreadGroup &) = delete;
+  RuntimeThreadGroup &operator=(const RuntimeThreadGroup &) = delete;
   ~RuntimeThreadGroup();
 
-  [[nodiscard]] static Result<std::unique_ptr<RuntimeThreadGroup>> Start(
-      const EffectiveRuntimeConfig& config, CpuBindMode bind_mode,
-      RuntimeCallbacks callbacks);
+  [[nodiscard]] static Result<std::unique_ptr<RuntimeThreadGroup>>
+  Start(const EffectiveRuntimeConfig &config, CpuBindMode bind_mode,
+        RuntimeCallbacks callbacks);
   void RequestStop();
   void Join();
   [[nodiscard]] Status status() const;
 
- private:
+private:
   RuntimeThreadGroup() = default;
   void Launch(std::string name, std::uint32_t worker_id, std::uint32_t cpu,
               RuntimeLoop loop);
@@ -121,4 +120,4 @@ class RuntimeThreadGroup {
 [[nodiscard]] Status BindCurrentThread(std::uint32_t cpu);
 void FirstTouch(std::span<std::byte> memory) noexcept;
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

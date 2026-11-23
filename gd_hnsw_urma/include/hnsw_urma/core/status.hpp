@@ -23,7 +23,7 @@ enum class StatusCode {
 };
 
 class Status {
- public:
+public:
   Status() = default;
   Status(StatusCode code, std::string message)
       : code_(code), message_(std::move(message)) {}
@@ -31,16 +31,18 @@ class Status {
   [[nodiscard]] static Status Ok() { return {}; }
   [[nodiscard]] bool ok() const noexcept { return code_ == StatusCode::kOk; }
   [[nodiscard]] StatusCode code() const noexcept { return code_; }
-  [[nodiscard]] const std::string& message() const noexcept { return message_; }
-  [[nodiscard]] const std::vector<std::pair<std::string, std::string>>& context() const noexcept {
+  [[nodiscard]] const std::string &message() const noexcept { return message_; }
+  [[nodiscard]] const std::vector<std::pair<std::string, std::string>> &
+  context() const noexcept {
     return context_;
   }
 
-  Status& AddContext(std::string key, std::string value);
-  [[nodiscard]] std::optional<std::string_view> FindContext(std::string_view key) const noexcept;
+  Status &AddContext(std::string key, std::string value);
+  [[nodiscard]] std::optional<std::string_view>
+  FindContext(std::string_view key) const noexcept;
   [[nodiscard]] std::string ToString() const;
 
- private:
+private:
   StatusCode code_{StatusCode::kOk};
   std::string message_;
   std::vector<std::pair<std::string, std::string>> context_;
@@ -48,44 +50,44 @@ class Status {
 
 [[nodiscard]] std::string_view StatusCodeName(StatusCode code) noexcept;
 
-template <typename T>
-class [[nodiscard]] Result {
- public:
-  Result(const T& value) : value_(value) {}
-  Result(T&& value) : value_(std::move(value)) {}
+template <typename T> class [[nodiscard]] Result {
+public:
+  Result(const T &value) : value_(value) {}
+  Result(T &&value) : value_(std::move(value)) {}
   Result(Status status) : status_(std::move(status)) {
     if (status_.ok()) {
-      status_ = Status(StatusCode::kInternalError, "Result constructed without a value");
+      status_ = Status(StatusCode::kInternalError,
+                       "Result constructed without a value");
     }
   }
 
   [[nodiscard]] bool ok() const noexcept { return value_.has_value(); }
-  [[nodiscard]] const Status& status() const noexcept { return status_; }
+  [[nodiscard]] const Status &status() const noexcept { return status_; }
 
-  [[nodiscard]] const T& value() const& {
+  [[nodiscard]] const T &value() const & {
     if (!value_) {
       std::abort();
     }
     return *value_;
   }
 
-  [[nodiscard]] T& value() & {
+  [[nodiscard]] T &value() & {
     if (!value_) {
       std::abort();
     }
     return *value_;
   }
 
-  [[nodiscard]] T&& value() && {
+  [[nodiscard]] T &&value() && {
     if (!value_) {
       std::abort();
     }
     return std::move(*value_);
   }
 
- private:
+private:
   std::optional<T> value_;
   Status status_;
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

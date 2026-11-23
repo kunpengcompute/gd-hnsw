@@ -18,8 +18,9 @@ std::uint32_t Candidate(QueryKey query, std::uint32_t salt,
   return static_cast<std::uint32_t>(StableHash(query, salt) % count);
 }
 
-std::pair<std::uint32_t, std::uint32_t> TwoCandidates(
-    QueryKey query, std::uint32_t salt, std::uint32_t count) noexcept {
+std::pair<std::uint32_t, std::uint32_t>
+TwoCandidates(QueryKey query, std::uint32_t salt,
+              std::uint32_t count) noexcept {
   const auto first = Candidate(query, salt ^ kHashA, count);
   auto second = Candidate(query, salt ^ kHashB, count);
   if (count > 1 && second == first) {
@@ -34,37 +35,45 @@ std::uint64_t SaturatingAdd(std::uint64_t lhs, std::uint64_t rhs) noexcept {
              : lhs + rhs;
 }
 
-}  // namespace
+} // namespace
 
 std::uint64_t LaneLoadScore(LaneLoadSample sample) noexcept {
   std::uint64_t score = sample.submit_backlog;
-  score = SaturatingAdd(score, static_cast<std::uint64_t>(sample.outstanding) * 2U);
-  score = SaturatingAdd(score, static_cast<std::uint64_t>(sample.active_replies) * 2U);
-  score = SaturatingAdd(score, static_cast<std::uint64_t>(sample.credit_pressure) * 4U);
-  score = SaturatingAdd(score, static_cast<std::uint64_t>(sample.timeout_pressure) * 16U);
+  score =
+      SaturatingAdd(score, static_cast<std::uint64_t>(sample.outstanding) * 2U);
+  score = SaturatingAdd(score,
+                        static_cast<std::uint64_t>(sample.active_replies) * 2U);
+  score = SaturatingAdd(
+      score, static_cast<std::uint64_t>(sample.credit_pressure) * 4U);
+  score = SaturatingAdd(
+      score, static_cast<std::uint64_t>(sample.timeout_pressure) * 16U);
   score = SaturatingAdd(score, sample.recent_latency_ns / 1000U);
   return score;
 }
 
-Result<std::uint32_t> SelectLanePowerOfTwo(
-    QueryKey query, std::uint32_t destination_rank,
-    const LaneLoadSnapshots* snapshots, std::uint32_t lane_count) noexcept {
+Result<std::uint32_t> SelectLanePowerOfTwo(QueryKey query,
+                                           std::uint32_t destination_rank,
+                                           const LaneLoadSnapshots *snapshots,
+                                           std::uint32_t lane_count) noexcept {
   if (lane_count == 0) {
     return Status(StatusCode::kInvalidArgument,
                   "lane selection requires lanes");
   }
   const auto fallback = Candidate(query, destination_rank ^ kHashA, lane_count);
-  if (lane_count == 1 || snapshots == nullptr || snapshots->size() < lane_count) {
+  if (lane_count == 1 || snapshots == nullptr ||
+      snapshots->size() < lane_count) {
     return fallback;
   }
-  const auto [first, second] = TwoCandidates(query, destination_rank, lane_count);
+  const auto [first, second] =
+      TwoCandidates(query, destination_rank, lane_count);
   auto first_load = snapshots->Read(first);
   auto second_load = snapshots->Read(second);
   if (!first_load.ok() || !second_load.ok()) {
     return fallback;
   }
   const bool first_available = first_load.value().reply_capacity_remaining != 0;
-  const bool second_available = second_load.value().reply_capacity_remaining != 0;
+  const bool second_available =
+      second_load.value().reply_capacity_remaining != 0;
   if (!first_available && !second_available) {
     return Status(StatusCode::kResourceExhausted,
                   "both lane candidates have no reply capacity");
@@ -81,8 +90,8 @@ Result<std::uint32_t> SelectLanePowerOfTwo(
                                                                   : second;
 }
 
-Result<QueryLaneAffinity> QueryLaneAffinity::Create(
-    std::uint32_t destination_count) {
+Result<QueryLaneAffinity>
+QueryLaneAffinity::Create(std::uint32_t destination_count) {
   if (destination_count == 0) {
     return Status(StatusCode::kInvalidArgument,
                   "query lane affinity requires destinations");
@@ -92,15 +101,16 @@ Result<QueryLaneAffinity> QueryLaneAffinity::Create(
     affinity.lanes_.assign(destination_count,
                            std::numeric_limits<std::uint32_t>::max());
     return affinity;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate query lane affinity");
   }
 }
 
-Result<std::uint32_t> QueryLaneAffinity::SelectOrGet(
-    QueryKey query, std::uint32_t destination_rank,
-    const LaneLoadSnapshots* snapshots, std::uint32_t lane_count) noexcept {
+Result<std::uint32_t>
+QueryLaneAffinity::SelectOrGet(QueryKey query, std::uint32_t destination_rank,
+                               const LaneLoadSnapshots *snapshots,
+                               std::uint32_t lane_count) noexcept {
   if (destination_rank >= lanes_.size()) {
     return Status(StatusCode::kOutOfRange,
                   "affinity destination rank is out of range");
@@ -133,7 +143,7 @@ ConcurrentLaneAffinityTable::Create(std::uint32_t capacity) {
     table->capacity_ = capacity;
     table->entries_ = std::make_unique<Entry[]>(capacity);
     return table;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate concurrent lane affinity");
   }
@@ -141,18 +151,17 @@ ConcurrentLaneAffinityTable::Create(std::uint32_t capacity) {
 
 Result<std::uint32_t> ConcurrentLaneAffinityTable::SelectOrGet(
     QueryKey query, std::uint32_t destination_rank,
-    const LaneLoadSnapshots* snapshots, std::uint32_t lane_count) noexcept {
+    const LaneLoadSnapshots *snapshots, std::uint32_t lane_count) noexcept {
   const auto source_slot =
-      (static_cast<std::uint64_t>(query.source_rank) << 32U) |
-      query.query_slot;
+      (static_cast<std::uint64_t>(query.source_rank) << 32U) | query.query_slot;
   const QueryKey stable_slot_key{query.source_rank, query.query_slot, 0};
   const auto start = StableHash(stable_slot_key, destination_rank) % capacity_;
   const auto retry_limit = static_cast<std::uint64_t>(capacity_) * 8U + 64U;
   for (std::uint64_t attempt = 0; attempt < retry_limit; ++attempt) {
-    Entry* first_free = nullptr;
+    Entry *first_free = nullptr;
     bool writer_present = false;
     for (std::uint32_t probe = 0; probe < capacity_; ++probe) {
-      auto& entry = entries_[(start + probe) % capacity_];
+      auto &entry = entries_[(start + probe) % capacity_];
       const auto state = entry.state.load(std::memory_order_acquire);
       if (state == EntryState::kWriting) {
         writer_present = true;
@@ -169,9 +178,9 @@ Result<std::uint32_t> ConcurrentLaneAffinityTable::SelectOrGet(
                         "lane affinity rejected a stale query generation");
         }
         EntryState expected = EntryState::kReady;
-        if (!entry.state.compare_exchange_strong(
-                expected, EntryState::kWriting, std::memory_order_acq_rel,
-                std::memory_order_acquire)) {
+        if (!entry.state.compare_exchange_strong(expected, EntryState::kWriting,
+                                                 std::memory_order_acq_rel,
+                                                 std::memory_order_acquire)) {
           writer_present = true;
           break;
         }
@@ -229,4 +238,4 @@ Result<std::uint32_t> ConcurrentLaneAffinityTable::SelectOrGet(
                 "concurrent lane affinity table is full");
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

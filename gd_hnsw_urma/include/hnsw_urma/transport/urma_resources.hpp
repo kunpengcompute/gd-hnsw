@@ -69,12 +69,14 @@ struct UrmaResourcePlan {
   std::uint32_t target_jfc_depth{0};
 };
 
-[[nodiscard]] Result<UrmaResourcePlan> PlanUrmaResources(
-    const UrmaCapabilities& capabilities, const UrmaResourceOptions& options);
+[[nodiscard]] Result<UrmaResourcePlan>
+PlanUrmaResources(const UrmaCapabilities &capabilities,
+                  const UrmaResourceOptions &options);
 
 struct UrmaResourceHandle {
   std::uint64_t value{0};
-  friend bool operator==(const UrmaResourceHandle&, const UrmaResourceHandle&) = default;
+  friend bool operator==(const UrmaResourceHandle &,
+                         const UrmaResourceHandle &) = default;
 };
 
 struct UrmaResourceRequest {
@@ -84,21 +86,23 @@ struct UrmaResourceRequest {
   std::uint32_t depth{0};
   UrmaResourceHandle dependency;
   UrmaResourceHandle secondary_dependency;
-  void* address{nullptr};
+  void *address{nullptr};
   std::uint64_t bytes{0};
   std::span<const std::byte> descriptor;
   std::uint64_t token{0};
 };
 
 class UrmaResourceBackend {
- public:
+public:
   virtual ~UrmaResourceBackend() = default;
-  virtual Result<UrmaResourceHandle> Create(const UrmaResourceRequest& request) = 0;
-  virtual void Destroy(UrmaResourceKind kind, UrmaResourceHandle handle) noexcept = 0;
+  virtual Result<UrmaResourceHandle>
+  Create(const UrmaResourceRequest &request) = 0;
+  virtual void Destroy(UrmaResourceKind kind,
+                       UrmaResourceHandle handle) noexcept = 0;
 };
 
 struct UrmaSegmentRegistration {
-  void* address{nullptr};
+  void *address{nullptr};
   std::uint64_t bytes{0};
   std::string_view name;
   std::uint64_t logical_bytes{0};
@@ -119,18 +123,19 @@ struct UrmaLaneResources {
   // still name the shared receive resources, with independent lifetimes.
   bool duplex_jetty{false};
 
-  [[nodiscard]] UrmaResourceHandle TargetEndpoint(OperationClass role) const noexcept {
+  [[nodiscard]] UrmaResourceHandle
+  TargetEndpoint(OperationClass role) const noexcept {
     if (role == OperationClass::kRead) {
       return duplex_jetty ? read_jfs : read_target_jfr;
     }
     if (role == OperationClass::kRequestWrite) {
-      return duplex_jetty
-                 ? (request_jfs.empty() ? UrmaResourceHandle{} : request_jfs.front())
-                 : request_target_jfr;
+      return duplex_jetty ? (request_jfs.empty() ? UrmaResourceHandle{}
+                                                 : request_jfs.front())
+                          : request_target_jfr;
     }
-    return duplex_jetty
-               ? (response_jfs.empty() ? UrmaResourceHandle{} : response_jfs.front())
-               : response_target_jfr;
+    return duplex_jetty ? (response_jfs.empty() ? UrmaResourceHandle{}
+                                                : response_jfs.front())
+                        : response_target_jfr;
   }
 };
 
@@ -148,27 +153,31 @@ enum class UrmaTeardownPhase : std::uint8_t {
 // path authority to a progress lane. The bundle still owns object lifetime so
 // context/JFC dependencies cannot disappear while a lane is running.
 class UrmaResourceBundle {
- public:
+public:
   UrmaResourceBundle() = default;
-  UrmaResourceBundle(const UrmaResourceBundle&) = delete;
-  UrmaResourceBundle& operator=(const UrmaResourceBundle&) = delete;
-  UrmaResourceBundle(UrmaResourceBundle&& other) noexcept;
-  UrmaResourceBundle& operator=(UrmaResourceBundle&& other) noexcept;
+  UrmaResourceBundle(const UrmaResourceBundle &) = delete;
+  UrmaResourceBundle &operator=(const UrmaResourceBundle &) = delete;
+  UrmaResourceBundle(UrmaResourceBundle &&other) noexcept;
+  UrmaResourceBundle &operator=(UrmaResourceBundle &&other) noexcept;
   ~UrmaResourceBundle();
 
-  [[nodiscard]] static Result<UrmaResourceBundle> CreateLocal(
-      UrmaResourceBackend& backend, const UrmaResourcePlan& plan,
-      std::span<const UrmaSegmentRegistration> segments);
+  [[nodiscard]] static Result<UrmaResourceBundle>
+  CreateLocal(UrmaResourceBackend &backend, const UrmaResourcePlan &plan,
+              std::span<const UrmaSegmentRegistration> segments);
 
   [[nodiscard]] Result<UrmaLaneResources> ClaimLane(std::uint32_t lane);
-  [[nodiscard]] Result<UrmaLaneResources> ControlLaneResources(std::uint32_t lane) const;
-  [[nodiscard]] std::span<const UrmaResourceHandle> registered_segments() const noexcept {
+  [[nodiscard]] Result<UrmaLaneResources>
+  ControlLaneResources(std::uint32_t lane) const;
+  [[nodiscard]] std::span<const UrmaResourceHandle>
+  registered_segments() const noexcept {
     return registered_segments_;
   }
-  [[nodiscard]] Result<UrmaResourceHandle> CreatePeerResource(
-      const UrmaResourceRequest& request);
+  [[nodiscard]] Result<UrmaResourceHandle>
+  CreatePeerResource(const UrmaResourceRequest &request);
   [[nodiscard]] bool all_lanes_claimed() const noexcept;
-  [[nodiscard]] UrmaTeardownPhase teardown_phase() const noexcept { return phase_; }
+  [[nodiscard]] UrmaTeardownPhase teardown_phase() const noexcept {
+    return phase_;
+  }
 
   Status StopAdmission();
   Status MarkDrained();
@@ -177,16 +186,16 @@ class UrmaResourceBundle {
   Status MarkSecondBarrier();
   Status ReleaseLocalResources();
 
- private:
+private:
   struct OwnedResource {
     UrmaResourceKind kind{UrmaResourceKind::kContext};
     UrmaResourceHandle handle;
   };
 
-  void DestroyReverse(std::vector<OwnedResource>& resources) noexcept;
+  void DestroyReverse(std::vector<OwnedResource> &resources) noexcept;
   void Reset() noexcept;
 
-  UrmaResourceBackend* backend_{nullptr};
+  UrmaResourceBackend *backend_{nullptr};
   UrmaResourcePlan plan_;
   UrmaResourceHandle context_;
   std::vector<OwnedResource> local_resources_;
@@ -211,10 +220,11 @@ struct ProviderPostResult {
 };
 
 class UrmaWorkRequestPoster {
- public:
+public:
   virtual ~UrmaWorkRequestPoster() = default;
-  virtual ProviderPostResult Post(
-      std::uint64_t jfs_key, std::span<const OpportunisticPostDescriptor> descriptors) = 0;
+  virtual ProviderPostResult
+  Post(std::uint64_t jfs_key,
+       std::span<const OpportunisticPostDescriptor> descriptors) = 0;
 };
 
 struct OpportunisticPostOutcome {
@@ -226,12 +236,12 @@ struct OpportunisticPostOutcome {
 
 // Forms a bounded batch only from descriptors already present at the head and
 // only while they target one JFS. It never waits for a fuller list.
-[[nodiscard]] OpportunisticPostOutcome PostOpportunisticBatch(
-    std::span<const OpportunisticPostDescriptor> ready, std::size_t wr_list_max,
-    UrmaWorkRequestPoster& poster);
+[[nodiscard]] OpportunisticPostOutcome
+PostOpportunisticBatch(std::span<const OpportunisticPostDescriptor> ready,
+                       std::size_t wr_list_max, UrmaWorkRequestPoster &poster);
 
 class DmaVisibilityDomain {
- public:
+public:
   virtual ~DmaVisibilityDomain() = default;
   virtual Status AcquireDeviceWrites() = 0;
 };
@@ -240,9 +250,11 @@ class DmaVisibilityDomain {
 // payload before the notify value; after observing a non-zero notification,
 // acquire device writes before accessing the associated payload. Empty polls
 // deliberately avoid the device-read barrier.
-[[nodiscard]] Result<std::uint64_t> DmaLoadNotifyAcquire(
-    const std::uint64_t* notify, DmaVisibilityDomain& visibility);
+[[nodiscard]] Result<std::uint64_t>
+DmaLoadNotifyAcquire(const std::uint64_t *notify,
+                     DmaVisibilityDomain &visibility);
 
-[[nodiscard]] Status MapUrmaProviderStatus(int provider_status, std::string operation);
+[[nodiscard]] Status MapUrmaProviderStatus(int provider_status,
+                                           std::string operation);
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

@@ -129,12 +129,14 @@ struct RpcOperationPlan {
   std::uint64_t client_owner_bytes{0};
 };
 
-[[nodiscard]] Result<RpcOperationPlan> BuildRpcOperationPlan(
-    std::uint32_t queries, std::uint32_t searches, std::uint32_t rpc_threads,
-    std::uint32_t maximum_batch, std::uint32_t local_rank,
-    std::span<const std::uint32_t> shard_to_rank,
-    std::span<const std::uint32_t> rpc_owner_by_rank,
-    std::uint32_t request_ring_depth, AutoU32 slots = {}, AutoU32 submit_depth = {});
+[[nodiscard]] Result<RpcOperationPlan>
+BuildRpcOperationPlan(std::uint32_t queries, std::uint32_t searches,
+                      std::uint32_t rpc_threads, std::uint32_t maximum_batch,
+                      std::uint32_t local_rank,
+                      std::span<const std::uint32_t> shard_to_rank,
+                      std::span<const std::uint32_t> rpc_owner_by_rank,
+                      std::uint32_t request_ring_depth, AutoU32 slots = {},
+                      AutoU32 submit_depth = {});
 
 struct EffectiveRuntimeConfig {
   std::uint32_t maximum_distance_batch{0};
@@ -176,21 +178,24 @@ struct EffectiveRuntimeConfig {
   std::vector<CpuTopologyEntry> cpu_topology;
 };
 
-[[nodiscard]] Result<RpcMemoryPlan> BuildRpcMemoryPlan(
-    std::uint32_t world_size, std::uint32_t rpc_threads,
-    std::uint32_t mailbox_depth, std::uint32_t request_send_depth,
-    std::uint32_t request_batch_max_bytes,
-    std::uint32_t response_batch_max_bytes) noexcept;
+[[nodiscard]] Result<RpcMemoryPlan>
+BuildRpcMemoryPlan(std::uint32_t world_size, std::uint32_t rpc_threads,
+                   std::uint32_t mailbox_depth,
+                   std::uint32_t request_send_depth,
+                   std::uint32_t request_batch_max_bytes,
+                   std::uint32_t response_batch_max_bytes) noexcept;
 
-[[nodiscard]] Result<BenchmarkCommand> ParseBenchmarkCommand(
-    std::span<const std::string_view> arguments);
-[[nodiscard]] Result<EffectiveRuntimeConfig> ResolveRuntimeConfig(
-    const RuntimeConfig& config, const GlobalIndexMeta& meta,
-    std::uint32_t world_size, std::span<const std::uint32_t> allowed_cpus,
-    std::uint32_t local_rank = 0,
-    std::span<const std::uint32_t> numa_nodes = {});
-[[nodiscard]] Result<CanonicalConfig> BuildCanonicalRuntimeConfig(
-    const RuntimeConfig& requested, const EffectiveRuntimeConfig& effective);
+[[nodiscard]] Result<BenchmarkCommand>
+ParseBenchmarkCommand(std::span<const std::string_view> arguments);
+[[nodiscard]] Result<EffectiveRuntimeConfig>
+ResolveRuntimeConfig(const RuntimeConfig &config, const GlobalIndexMeta &meta,
+                     std::uint32_t world_size,
+                     std::span<const std::uint32_t> allowed_cpus,
+                     std::uint32_t local_rank = 0,
+                     std::span<const std::uint32_t> numa_nodes = {});
+[[nodiscard]] Result<CanonicalConfig>
+BuildCanonicalRuntimeConfig(const RuntimeConfig &requested,
+                            const EffectiveRuntimeConfig &effective);
 [[nodiscard]] std::string BenchmarkHelp();
 [[nodiscard]] std::string BenchmarkVersion();
 [[nodiscard]] std::string_view GitCommit() noexcept;
@@ -200,4 +205,4 @@ struct EffectiveRuntimeConfig {
 [[nodiscard]] std::string_view ToString(Layer0SortMode value) noexcept;
 [[nodiscard]] std::string_view ToString(IntraNodeTransport value) noexcept;
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

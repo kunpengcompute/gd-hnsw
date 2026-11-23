@@ -14,8 +14,8 @@ bool LaneDrainSnapshot::empty() const noexcept {
          quarantine_records == 0;
 }
 
-Result<std::unique_ptr<DataPlaneDrainTracker>> DataPlaneDrainTracker::Create(
-    std::uint32_t communication_owner_count) {
+Result<std::unique_ptr<DataPlaneDrainTracker>>
+DataPlaneDrainTracker::Create(std::uint32_t communication_owner_count) {
   if (communication_owner_count == 0) {
     return Status(StatusCode::kInvalidArgument,
                   "drain tracker requires progress lanes");
@@ -26,7 +26,7 @@ Result<std::unique_ptr<DataPlaneDrainTracker>> DataPlaneDrainTracker::Create(
     tracker->communication_owner_count_ = communication_owner_count;
     tracker->lanes_ = std::make_unique<AtomicLane[]>(communication_owner_count);
     return tracker;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate data-plane drain tracker");
   }
@@ -37,21 +37,17 @@ void DataPlaneDrainTracker::PublishLane(std::uint32_t lane,
   if (lane >= communication_owner_count_) {
     return;
   }
-  auto& target = lanes_[lane];
+  auto &target = lanes_[lane];
   // These samples are published only during shutdown. Sequential consistency
   // keeps the sequence and all field atomics in one total order, which is
   // required for a portable multi-word snapshot (acquire/release alone does
   // not prevent a reader from observing mixed field generations).
   target.sequence.fetch_add(1, std::memory_order_seq_cst);
   const std::uint64_t values[kSnapshotFields]{
-      snapshot.read_active,
-      snapshot.read_backlog,
-      snapshot.rpc_active,
-      snapshot.request_slots_active,
-      snapshot.server_result_active,
-      snapshot.reply_active,
-      snapshot.completion_pending,
-      snapshot.quarantine_records,
+      snapshot.read_active,          snapshot.read_backlog,
+      snapshot.rpc_active,           snapshot.request_slots_active,
+      snapshot.server_result_active, snapshot.reply_active,
+      snapshot.completion_pending,   snapshot.quarantine_records,
   };
   for (std::size_t index = 0; index < kSnapshotFields; ++index) {
     target.fields[index].store(values[index], std::memory_order_seq_cst);
@@ -59,13 +55,13 @@ void DataPlaneDrainTracker::PublishLane(std::uint32_t lane,
   target.sequence.fetch_add(1, std::memory_order_seq_cst);
 }
 
-Result<LaneDrainSnapshot> DataPlaneDrainTracker::ReadLane(
-    std::uint32_t lane) const noexcept {
+Result<LaneDrainSnapshot>
+DataPlaneDrainTracker::ReadLane(std::uint32_t lane) const noexcept {
   if (lane >= communication_owner_count_) {
     return Status(StatusCode::kOutOfRange,
                   "drain snapshot lane is out of range");
   }
-  const auto& source = lanes_[lane];
+  const auto &source = lanes_[lane];
   std::array<std::uint64_t, kSnapshotFields> values{};
   std::uint32_t retries = 0;
   while (true) {
@@ -91,7 +87,8 @@ Result<LaneDrainSnapshot> DataPlaneDrainTracker::ReadLane(
                            values[4], values[5], values[6], values[7]};
 }
 
-void DataPlaneDrainTracker::PublishActiveQueries(std::uint32_t active) noexcept {
+void DataPlaneDrainTracker::PublishActiveQueries(
+    std::uint32_t active) noexcept {
   active_queries_.store(active, std::memory_order_release);
 }
 
@@ -159,15 +156,14 @@ Status DataPlaneDrainTracker::TryMarkDrained() noexcept {
 
 Status DataPlaneDrainTracker::WaitUntilDrained(
     std::chrono::steady_clock::time_point deadline,
-    const std::function<Status()>& health_check) {
+    const std::function<Status()> &health_check) {
   if (!health_check) {
     return Status(StatusCode::kInvalidArgument,
                   "data-plane drain health check is unavailable");
   }
   while (true) {
     auto status = TryMarkDrained();
-    if (status.ok() ||
-        status.code() != StatusCode::kResourceExhausted) {
+    if (status.ok() || status.code() != StatusCode::kResourceExhausted) {
       return status;
     }
     status = health_check();
@@ -175,9 +171,8 @@ Status DataPlaneDrainTracker::WaitUntilDrained(
       return status;
     }
     if (std::chrono::steady_clock::now() >= deadline) {
-      return Status(
-          StatusCode::kTimeout,
-          "local data plane did not drain before deadline");
+      return Status(StatusCode::kTimeout,
+                    "local data plane did not drain before deadline");
     }
     std::this_thread::yield();
   }
@@ -205,14 +200,14 @@ Status DataPlaneDrainTracker::MarkStopped() noexcept {
   return Status::Ok();
 }
 
-Result<LaneFailureRecord> SelectPrimaryFailure(
-    std::span<const LaneFailureRecord> failures) noexcept {
+Result<LaneFailureRecord>
+SelectPrimaryFailure(std::span<const LaneFailureRecord> failures) noexcept {
   if (failures.empty()) {
     return Status(StatusCode::kInvalidArgument,
                   "cannot select from an empty failure set");
   }
   const auto selected = std::min_element(
-      failures.begin(), failures.end(), [](const auto& lhs, const auto& rhs) {
+      failures.begin(), failures.end(), [](const auto &lhs, const auto &rhs) {
         if (lhs.severity != rhs.severity) {
           return lhs.severity > rhs.severity;
         }
@@ -224,4 +219,4 @@ Result<LaneFailureRecord> SelectPrimaryFailure(
   return *selected;
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

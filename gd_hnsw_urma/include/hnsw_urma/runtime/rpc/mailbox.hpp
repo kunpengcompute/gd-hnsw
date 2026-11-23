@@ -15,7 +15,7 @@ namespace hnsw_urma {
 struct RpcSlotId {
   std::uint32_t peer_rank{0};
   std::uint32_t slot_id{0};
-  friend bool operator==(const RpcSlotId&, const RpcSlotId&) = default;
+  friend bool operator==(const RpcSlotId &, const RpcSlotId &) = default;
 };
 
 struct RpcMailboxConfig {
@@ -31,13 +31,19 @@ struct RpcMailboxConfig {
 // inbound responses plus the outbound result ring, and cache-line-isolated
 // request/response notifications. Every address API uses an explicit slot ID.
 class RpcMailboxMemory {
- public:
-  [[nodiscard]] static Result<std::unique_ptr<RpcMailboxMemory>> Create(
-      RpcMailboxConfig config, bool shared = false);
+public:
+  [[nodiscard]] static Result<std::unique_ptr<RpcMailboxMemory>>
+  Create(RpcMailboxConfig config, bool shared = false);
 
-  [[nodiscard]] const RpcMailboxConfig& config() const noexcept { return config_; }
-  [[nodiscard]] std::uint64_t request_stride() const noexcept { return request_stride_; }
-  [[nodiscard]] std::uint64_t response_stride() const noexcept { return response_stride_; }
+  [[nodiscard]] const RpcMailboxConfig &config() const noexcept {
+    return config_;
+  }
+  [[nodiscard]] std::uint64_t request_stride() const noexcept {
+    return request_stride_;
+  }
+  [[nodiscard]] std::uint64_t response_stride() const noexcept {
+    return response_stride_;
+  }
   [[nodiscard]] std::span<std::byte> requests() noexcept {
     return request_storage_.logical_memory();
   }
@@ -80,33 +86,40 @@ class RpcMailboxMemory {
   }
   [[nodiscard]] Status UnlinkSharedMemory();
 
-  [[nodiscard]] segment_offset_t RequestOffset(
-      std::uint32_t source_rank, std::uint32_t slot_id) const noexcept;
-  [[nodiscard]] segment_offset_t ResponseOffset(
-      std::uint32_t producer_rank, std::uint32_t slot_id) const noexcept;
-  [[nodiscard]] segment_offset_t ResultOffset(
-      std::uint32_t destination_rank, std::uint32_t slot_id) const noexcept;
-  [[nodiscard]] segment_offset_t RequestNotifyOffset(
-      std::uint32_t source_rank, std::uint32_t slot_id) const noexcept;
-  [[nodiscard]] segment_offset_t ResponseNotifyOffset(
-      std::uint32_t producer_rank, std::uint32_t slot_id) const noexcept;
+  [[nodiscard]] segment_offset_t
+  RequestOffset(std::uint32_t source_rank,
+                std::uint32_t slot_id) const noexcept;
+  [[nodiscard]] segment_offset_t
+  ResponseOffset(std::uint32_t producer_rank,
+                 std::uint32_t slot_id) const noexcept;
+  [[nodiscard]] segment_offset_t
+  ResultOffset(std::uint32_t destination_rank,
+               std::uint32_t slot_id) const noexcept;
+  [[nodiscard]] segment_offset_t
+  RequestNotifyOffset(std::uint32_t source_rank,
+                      std::uint32_t slot_id) const noexcept;
+  [[nodiscard]] segment_offset_t
+  ResponseNotifyOffset(std::uint32_t producer_rank,
+                       std::uint32_t slot_id) const noexcept;
 
-  [[nodiscard]] std::span<std::byte> RequestSlot(
-      std::uint32_t source_rank, std::uint32_t slot_id) noexcept;
-  [[nodiscard]] std::span<std::byte> ResponseSlot(
-      std::uint32_t producer_rank, std::uint32_t slot_id) noexcept;
-  [[nodiscard]] std::span<std::byte> ResultSlot(
-      std::uint32_t destination_rank, std::uint32_t slot_id) noexcept;
-  [[nodiscard]] std::span<std::byte> RequestStaging(
-      std::uint32_t rpc_thread, std::uint32_t slot_id) noexcept;
-  [[nodiscard]] std::span<std::byte> RequestStagingRegion(
-      std::uint32_t rpc_thread) noexcept;
-  [[nodiscard]] std::uint64_t* NotifyAddress(segment_offset_t offset) noexcept;
-  [[nodiscard]] const std::uint64_t* NotifyAddress(
-      segment_offset_t offset) const noexcept;
-  [[nodiscard]] std::uint64_t logical_bytes() const noexcept { return logical_bytes_; }
+  [[nodiscard]] std::span<std::byte>
+  RequestSlot(std::uint32_t source_rank, std::uint32_t slot_id) noexcept;
+  [[nodiscard]] std::span<std::byte>
+  ResponseSlot(std::uint32_t producer_rank, std::uint32_t slot_id) noexcept;
+  [[nodiscard]] std::span<std::byte> ResultSlot(std::uint32_t destination_rank,
+                                                std::uint32_t slot_id) noexcept;
+  [[nodiscard]] std::span<std::byte>
+  RequestStaging(std::uint32_t rpc_thread, std::uint32_t slot_id) noexcept;
+  [[nodiscard]] std::span<std::byte>
+  RequestStagingRegion(std::uint32_t rpc_thread) noexcept;
+  [[nodiscard]] std::uint64_t *NotifyAddress(segment_offset_t offset) noexcept;
+  [[nodiscard]] const std::uint64_t *
+  NotifyAddress(segment_offset_t offset) const noexcept;
+  [[nodiscard]] std::uint64_t logical_bytes() const noexcept {
+    return logical_bytes_;
+  }
 
- private:
+private:
   RpcMailboxMemory() = default;
 
   RpcMailboxConfig config_{};
@@ -124,4 +137,4 @@ class RpcMailboxMemory {
   PageAlignedBuffer notify_storage_;
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

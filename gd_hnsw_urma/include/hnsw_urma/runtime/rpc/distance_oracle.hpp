@@ -1,14 +1,14 @@
 #pragma once
 
+#include "hnsw_urma/runtime/rpc_runtime.hpp"
+#include "hnsw_urma/runtime/search_event.hpp"
+#include "hnsw_urma/search/io.hpp"
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <memory>
 #include <span>
 #include <vector>
-#include "hnsw_urma/runtime/rpc_runtime.hpp"
-#include "hnsw_urma/runtime/search_event.hpp"
-#include "hnsw_urma/search/io.hpp"
 
 namespace hnsw_urma {
 class SchedulerQueues;
@@ -44,39 +44,52 @@ struct RpcDistanceProfile {
 
 // Search owns allocation, consumption and final reclamation. RPC borrows stable
 // wire/ID/result storage until normal completion or an exceptional Reclaim.
-class RpcDistanceOracle final : public DistanceOracle, public RpcClientTaskObserver {
- public:
-  [[nodiscard]] static Result<std::unique_ptr<RpcDistanceOracle>> Create(
-      std::uint32_t search_workers, std::uint32_t rpc_threads,
-      std::uint32_t submit_depth_per_cell, std::uint32_t slots_per_search,
-      std::uint32_t max_ids_per_task, std::uint32_t dim, std::uint32_t local_rank,
-      std::span<const std::uint32_t> shard_to_rank,
-      std::span<const std::uint32_t> rpc_owner_by_rank,
-      std::uint32_t ready_lane_base, SchedulerQueues& events,
-      bool use_dot_norm = false);
-  [[nodiscard]] static Result<std::uint64_t> RequiredBytes(
-      std::uint32_t searches, std::uint32_t owners, std::uint32_t slots_per_search,
-      std::uint32_t max_ids, std::uint32_t queries, std::uint32_t shards,
-      std::uint32_t ranks);
+class RpcDistanceOracle final : public DistanceOracle,
+                                public RpcClientTaskObserver {
+public:
+  [[nodiscard]] static Result<std::unique_ptr<RpcDistanceOracle>>
+  Create(std::uint32_t search_workers, std::uint32_t rpc_threads,
+         std::uint32_t submit_depth_per_cell, std::uint32_t slots_per_search,
+         std::uint32_t max_ids_per_task, std::uint32_t dim,
+         std::uint32_t local_rank, std::span<const std::uint32_t> shard_to_rank,
+         std::span<const std::uint32_t> rpc_owner_by_rank,
+         std::uint32_t ready_lane_base, SchedulerQueues &events,
+         bool use_dot_norm = false);
+  [[nodiscard]] static Result<std::uint64_t>
+  RequiredBytes(std::uint32_t searches, std::uint32_t owners,
+                std::uint32_t slots_per_search, std::uint32_t max_ids,
+                std::uint32_t queries, std::uint32_t shards,
+                std::uint32_t ranks);
 
   Status Finish(DistanceTicket ticket) override;
-  [[nodiscard]] bool SupportsPreparedWait() const noexcept override { return true; }
-  Result<PreparedDistanceOperation> PrepareForWait(
-      QueryWaitPreparation preparation, std::span<const float> query_vector,
-      shard_id_t owner_shard, std::span<const node_id_t> ids,
-      std::span<float> output, DistanceRequestOptions options = {}) override;
-  Result<PreparedDistanceOperation> PrepareLeaseForWait(
-      QueryWaitPreparation preparation, const QueryVectorLease& lease,
-      shard_id_t owner_shard, std::span<const node_id_t> ids,
-      std::span<float> output, DistanceRequestOptions options = {}) override;
+  [[nodiscard]] bool SupportsPreparedWait() const noexcept override {
+    return true;
+  }
+  Result<PreparedDistanceOperation>
+  PrepareForWait(QueryWaitPreparation preparation,
+                 std::span<const float> query_vector, shard_id_t owner_shard,
+                 std::span<const node_id_t> ids, std::span<float> output,
+                 DistanceRequestOptions options = {}) override;
+  Result<PreparedDistanceOperation>
+  PrepareLeaseForWait(QueryWaitPreparation preparation,
+                      const QueryVectorLease &lease, shard_id_t owner_shard,
+                      std::span<const node_id_t> ids, std::span<float> output,
+                      DistanceRequestOptions options = {}) override;
   Status PublishPrepared(DistanceTicket ticket) override;
   Status CancelPrepared(DistanceTicket ticket) override;
-  [[nodiscard]] Status HandleReclaim(std::uint32_t search, RpcReclaimHandle handle);
-  [[nodiscard]] Result<std::uint32_t> AuditOwnerControl(
-      std::uint32_t owner, RpcClientOwner& client, std::uint32_t budget = 64,
-      std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now());
-  [[nodiscard]] RpcSubmitMatrix& submissions() noexcept { return *submissions_; }
-  [[nodiscard]] const RpcSubmitMatrix& submissions() const noexcept { return *submissions_; }
+  [[nodiscard]] Status HandleReclaim(std::uint32_t search,
+                                     RpcReclaimHandle handle);
+  [[nodiscard]] Result<std::uint32_t>
+  AuditOwnerControl(std::uint32_t owner, RpcClientOwner &client,
+                    std::uint32_t budget = 64,
+                    std::chrono::steady_clock::time_point now =
+                        std::chrono::steady_clock::now());
+  [[nodiscard]] RpcSubmitMatrix &submissions() noexcept {
+    return *submissions_;
+  }
+  [[nodiscard]] const RpcSubmitMatrix &submissions() const noexcept {
+    return *submissions_;
+  }
   [[nodiscard]] bool drained() const noexcept;
   [[nodiscard]] bool SearchDrained(std::uint32_t search) const noexcept;
   [[nodiscard]] bool QueryWireQuiesced(QueryKey query) const noexcept;
@@ -84,9 +97,17 @@ class RpcDistanceOracle final : public DistanceOracle, public RpcClientTaskObser
   // Owners stopped and drained: start a new benchmark sampling interval.
   [[nodiscard]] Status ResetProfile() noexcept;
 
- private:
-  enum class OperationState : std::uint8_t { kFree, kPrepared, kActive, kTerminal };
-  struct OperationEvent { std::uint32_t slot; ticket_t ticket; };
+private:
+  enum class OperationState : std::uint8_t {
+    kFree,
+    kPrepared,
+    kActive,
+    kTerminal
+  };
+  struct OperationEvent {
+    std::uint32_t slot;
+    ticket_t ticket;
+  };
   struct alignas(64) Operation {
     std::atomic<OperationState> state{OperationState::kFree};
     DistanceTicket ticket{};
@@ -148,29 +169,38 @@ class RpcDistanceOracle final : public DistanceOracle, public RpcClientTaskObser
     std::atomic<std::uint32_t> refs{0};
   };
   RpcDistanceOracle() = default;
-  Result<bool> OnRpcTaskOwned(std::uint32_t owner, RpcClientTask& task) noexcept override;
-  Status OnRpcTaskTerminal(std::uint32_t owner, RpcClientTask& task) noexcept override;
-  StatusCode TaskControlStatus(std::uint32_t owner, const RpcClientTask& task) const noexcept override;
-  Result<Operation*> PrepareOperation(const QueryVectorLease& lease,
-      std::uint64_t wait_epoch, shard_id_t shard, std::span<const node_id_t> ids,
-      std::span<float> output, std::chrono::steady_clock::time_point deadline,
-      DistanceRequestOptions options);
-  Result<ticket_t> NextTicket(SearchPool& pool) noexcept;
-  Result<Operation*> Find(DistanceTicket ticket) noexcept;
-  Status CompleteOperation(Operation& operation, StatusCode status, bool reclaim_required) noexcept;
-  void RemoveOwnerActive(Operation& operation) noexcept;
-  StatusCode ControlStatus(const Operation& operation,
-      std::chrono::steady_clock::time_point now) const noexcept;
-  void ObserveException(Operation& operation) noexcept;
-  void Reset(Operation& operation) noexcept;
+  Result<bool> OnRpcTaskOwned(std::uint32_t owner,
+                              RpcClientTask &task) noexcept override;
+  Status OnRpcTaskTerminal(std::uint32_t owner,
+                           RpcClientTask &task) noexcept override;
+  StatusCode
+  TaskControlStatus(std::uint32_t owner,
+                    const RpcClientTask &task) const noexcept override;
+  Result<Operation *>
+  PrepareOperation(const QueryVectorLease &lease, std::uint64_t wait_epoch,
+                   shard_id_t shard, std::span<const node_id_t> ids,
+                   std::span<float> output,
+                   std::chrono::steady_clock::time_point deadline,
+                   DistanceRequestOptions options);
+  Result<ticket_t> NextTicket(SearchPool &pool) noexcept;
+  Result<Operation *> Find(DistanceTicket ticket) noexcept;
+  Status CompleteOperation(Operation &operation, StatusCode status,
+                           bool reclaim_required) noexcept;
+  void RemoveOwnerActive(Operation &operation) noexcept;
+  StatusCode
+  ControlStatus(const Operation &operation,
+                std::chrono::steady_clock::time_point now) const noexcept;
+  void ObserveException(Operation &operation) noexcept;
+  void Reset(Operation &operation) noexcept;
   Status AcquireQueryWireLease(QueryKey query) noexcept;
   void ReleaseQueryWireLease(QueryKey query) noexcept;
 
   std::uint32_t search_workers_{0}, rpc_threads_{0}, slots_per_search_{0};
-  std::uint32_t operation_count_{0}, max_ids_per_task_{0}, dim_{0}, local_rank_{0};
+  std::uint32_t operation_count_{0}, max_ids_per_task_{0}, dim_{0},
+      local_rank_{0};
   std::uint32_t ready_lane_base_{0}, max_active_queries_{0};
   bool use_dot_norm_{false};
-  SchedulerQueues* events_{nullptr};
+  SchedulerQueues *events_{nullptr};
   std::vector<std::uint32_t> shard_to_rank_, rpc_owner_by_rank_;
   std::unique_ptr<Operation[]> operations_;
   std::unique_ptr<node_id_t[]> id_storage_;
@@ -181,4 +211,4 @@ class RpcDistanceOracle final : public DistanceOracle, public RpcClientTaskObser
   std::unique_ptr<QueryWireLeaseSlot[]> query_wire_leases_;
   std::atomic<ticket_t> next_ticket_{1};
 };
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

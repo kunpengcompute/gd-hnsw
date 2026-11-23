@@ -38,7 +38,8 @@ float NeonDot(std::span<const float> lhs, std::span<const float> rhs) noexcept {
   float32x4_t sum = vdupq_n_f32(0.0F);
   std::size_t index = 0;
   for (; index + 4 <= lhs.size(); index += 4) {
-    sum = vfmaq_f32(sum, vld1q_f32(lhs.data() + index), vld1q_f32(rhs.data() + index));
+    sum = vfmaq_f32(sum, vld1q_f32(lhs.data() + index),
+                    vld1q_f32(rhs.data() + index));
   }
   float value = vaddvq_f32(sum);
   for (; index < lhs.size(); ++index) {
@@ -48,10 +49,10 @@ float NeonDot(std::span<const float> lhs, std::span<const float> rhs) noexcept {
 }
 
 void NeonL2Batch4(std::span<const float> query,
-                  std::span<const float* const> vectors,
+                  std::span<const float *const> vectors,
                   std::span<float> output) noexcept {
   std::array<float32x4_t, 8> sums;
-  for (auto& sum : sums) {
+  for (auto &sum : sums) {
     sum = vdupq_n_f32(0.0F);
   }
   std::size_t index = 0;
@@ -64,8 +65,7 @@ void NeonL2Batch4(std::span<const float> query,
       const auto delta0 = vsubq_f32(query0, vector0);
       const auto delta1 = vsubq_f32(query1, vector1);
       sums[row * 2] = vfmaq_f32(sums[row * 2], delta0, delta0);
-      sums[row * 2 + 1] =
-          vfmaq_f32(sums[row * 2 + 1], delta1, delta1);
+      sums[row * 2 + 1] = vfmaq_f32(sums[row * 2 + 1], delta1, delta1);
     }
   }
   for (std::size_t row = 0; row < 4; ++row) {
@@ -79,10 +79,10 @@ void NeonL2Batch4(std::span<const float> query,
 }
 
 void NeonDotBatch4(std::span<const float> query,
-                   std::span<const float* const> vectors,
+                   std::span<const float *const> vectors,
                    std::span<float> output) noexcept {
   std::array<float32x4_t, 8> sums;
-  for (auto& sum : sums) {
+  for (auto &sum : sums) {
     sum = vdupq_n_f32(0.0F);
   }
   std::size_t index = 0;
@@ -90,17 +90,14 @@ void NeonDotBatch4(std::span<const float> query,
     const auto query0 = vld1q_f32(query.data() + index);
     const auto query1 = vld1q_f32(query.data() + index + 4);
     for (std::size_t row = 0; row < 4; ++row) {
-      sums[row * 2] = vfmaq_f32(
-          sums[row * 2], query0,
-          vld1q_f32(vectors[row] + index));
-      sums[row * 2 + 1] = vfmaq_f32(
-          sums[row * 2 + 1], query1,
-          vld1q_f32(vectors[row] + index + 4));
+      sums[row * 2] =
+          vfmaq_f32(sums[row * 2], query0, vld1q_f32(vectors[row] + index));
+      sums[row * 2 + 1] = vfmaq_f32(sums[row * 2 + 1], query1,
+                                    vld1q_f32(vectors[row] + index + 4));
     }
   }
   for (std::size_t row = 0; row < 4; ++row) {
-    float value =
-        vaddvq_f32(vaddq_f32(sums[row * 2], sums[row * 2 + 1]));
+    float value = vaddvq_f32(vaddq_f32(sums[row * 2], sums[row * 2 + 1]));
     for (std::size_t tail = index; tail < query.size(); ++tail) {
       value += query[tail] * vectors[row][tail];
     }
@@ -110,7 +107,7 @@ void NeonDotBatch4(std::span<const float> query,
 #endif
 
 void ScalarL2Batch4(std::span<const float> query,
-                    std::span<const float* const> vectors,
+                    std::span<const float *const> vectors,
                     std::span<float> output) noexcept {
   std::array<float, 4> sums{};
   for (std::size_t index = 0; index < query.size(); ++index) {
@@ -124,7 +121,7 @@ void ScalarL2Batch4(std::span<const float> query,
 }
 
 void ScalarDotBatch4(std::span<const float> query,
-                     std::span<const float* const> vectors,
+                     std::span<const float *const> vectors,
                      std::span<float> output) noexcept {
   std::array<float, 4> sums{};
   for (std::size_t index = 0; index < query.size(); ++index) {
@@ -136,9 +133,10 @@ void ScalarDotBatch4(std::span<const float> query,
   std::copy(sums.begin(), sums.end(), output.begin());
 }
 
-}  // namespace
+} // namespace
 
-float ScalarL2(std::span<const float> lhs, std::span<const float> rhs) noexcept {
+float ScalarL2(std::span<const float> lhs,
+               std::span<const float> rhs) noexcept {
   if (lhs.size() != rhs.size()) {
     return std::numeric_limits<float>::quiet_NaN();
   }
@@ -150,7 +148,8 @@ float ScalarL2(std::span<const float> lhs, std::span<const float> rhs) noexcept 
   return sum;
 }
 
-float ScalarDot(std::span<const float> lhs, std::span<const float> rhs) noexcept {
+float ScalarDot(std::span<const float> lhs,
+                std::span<const float> rhs) noexcept {
   if (lhs.size() != rhs.size()) {
     return std::numeric_limits<float>::quiet_NaN();
   }
@@ -165,7 +164,8 @@ float L2FromDotNorm(float query_norm, float vector_norm, float dot) noexcept {
   return query_norm + vector_norm - 2.0F * dot;
 }
 
-float ComputeDistance(std::span<const float> lhs, std::span<const float> rhs, Metric metric,
+float ComputeDistance(std::span<const float> lhs, std::span<const float> rhs,
+                      Metric metric,
                       DistanceImplementation implementation) noexcept {
   if (lhs.size() != rhs.size()) {
     return std::numeric_limits<float>::quiet_NaN();
@@ -186,54 +186,55 @@ Status ComputeDistanceBatch(std::span<const float> query,
                             std::span<float> output,
                             DistanceImplementation implementation) noexcept {
   if (query.empty()) {
-    return Status(StatusCode::kInvalidArgument, "distance query dimension must be non-zero");
+    return Status(StatusCode::kInvalidArgument,
+                  "distance query dimension must be non-zero");
   }
   if (vector_count != output.size()) {
-    return Status(StatusCode::kInvalidArgument, "distance output count mismatch");
+    return Status(StatusCode::kInvalidArgument,
+                  "distance output count mismatch");
   }
   if (vector_count > row_major_vectors.size() / query.size() ||
       vector_count * query.size() != row_major_vectors.size()) {
-    return Status(StatusCode::kInvalidArgument, "distance vector matrix size mismatch");
+    return Status(StatusCode::kInvalidArgument,
+                  "distance vector matrix size mismatch");
   }
   std::size_t row = 0;
   for (; row + 4 <= output.size(); row += 4) {
-    std::array<const float*, 4> rows{};
+    std::array<const float *, 4> rows{};
     for (std::size_t batch_row = 0; batch_row < rows.size(); ++batch_row) {
       rows[batch_row] =
           row_major_vectors.data() + (row + batch_row) * query.size();
     }
     auto status = ComputeDistanceBatch4(
-        query, rows, metric, output.subspan(row, rows.size()),
-        implementation);
+        query, rows, metric, output.subspan(row, rows.size()), implementation);
     if (!status.ok()) {
       return status;
     }
   }
   for (; row < output.size(); ++row) {
     const auto begin = row * query.size();
-    output[row] = ComputeDistance(
-        query, row_major_vectors.subspan(begin, query.size()), metric,
-        implementation);
+    output[row] =
+        ComputeDistance(query, row_major_vectors.subspan(begin, query.size()),
+                        metric, implementation);
   }
   return Status::Ok();
 }
 
-Status ComputeDistanceBatch4(
-    std::span<const float> query,
-    std::span<const float* const> vector_rows, Metric metric,
-    std::span<float> output,
-    DistanceImplementation implementation) noexcept {
+Status ComputeDistanceBatch4(std::span<const float> query,
+                             std::span<const float *const> vector_rows,
+                             Metric metric, std::span<float> output,
+                             DistanceImplementation implementation) noexcept {
   if (query.empty() || vector_rows.size() != 4 || output.size() != 4 ||
       std::any_of(vector_rows.begin(), vector_rows.end(),
-                  [](const float* row) { return row == nullptr; })) {
+                  [](const float *row) { return row == nullptr; })) {
     return Status(StatusCode::kInvalidArgument,
                   "distance batch-4 shape is invalid");
   }
   if (metric != Metric::kL2) {
     for (std::size_t row = 0; row < vector_rows.size(); ++row) {
       output[row] = ComputeDistance(
-          query, std::span<const float>(vector_rows[row], query.size()),
-          metric, implementation);
+          query, std::span<const float>(vector_rows[row], query.size()), metric,
+          implementation);
     }
     return Status::Ok();
   }
@@ -247,15 +248,15 @@ Status ComputeDistanceBatch4(
   return Status::Ok();
 }
 
-Status ComputeL2DotNormBatch4(
-    std::span<const float> query, float query_norm,
-    std::span<const float* const> vector_rows,
-    std::span<const float> vector_norms, std::span<float> output,
-    DistanceImplementation implementation) noexcept {
-  if (query.empty() || vector_rows.size() != 4 ||
-      vector_norms.size() != 4 || output.size() != 4 ||
+Status ComputeL2DotNormBatch4(std::span<const float> query, float query_norm,
+                              std::span<const float *const> vector_rows,
+                              std::span<const float> vector_norms,
+                              std::span<float> output,
+                              DistanceImplementation implementation) noexcept {
+  if (query.empty() || vector_rows.size() != 4 || vector_norms.size() != 4 ||
+      output.size() != 4 ||
       std::any_of(vector_rows.begin(), vector_rows.end(),
-                  [](const float* row) { return row == nullptr; })) {
+                  [](const float *row) { return row == nullptr; })) {
     return Status(StatusCode::kInvalidArgument,
                   "dot-norm batch-4 shape is invalid");
   }
@@ -288,4 +289,4 @@ std::string_view ActiveDistanceImplementationName() noexcept {
   return SimdDistanceAvailable() ? "neon" : "scalar";
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

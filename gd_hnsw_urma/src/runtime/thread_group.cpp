@@ -95,9 +95,9 @@ RuntimeThreadGroup::~RuntimeThreadGroup() {
   Join();
 }
 
-Result<std::unique_ptr<RuntimeThreadGroup>> RuntimeThreadGroup::Start(
-    const EffectiveRuntimeConfig& config, CpuBindMode bind_mode,
-    RuntimeCallbacks callbacks) {
+Result<std::unique_ptr<RuntimeThreadGroup>>
+RuntimeThreadGroup::Start(const EffectiveRuntimeConfig &config,
+                          CpuBindMode bind_mode, RuntimeCallbacks callbacks) {
   const bool common_complete =
       callbacks.control && callbacks.search && callbacks.distance &&
       config.search_cpus.size() == config.search_workers &&
@@ -121,28 +121,29 @@ Result<std::unique_ptr<RuntimeThreadGroup>> RuntimeThreadGroup::Start(
     group->Launch("control", 0, config.reserved_cpus.front(),
                   std::move(callbacks.control));
     for (std::uint32_t worker = 0; worker < config.search_workers; ++worker) {
-      group->Launch("search", worker, config.search_cpus[worker], callbacks.search);
+      group->Launch("search", worker, config.search_cpus[worker],
+                    callbacks.search);
     }
     for (std::uint32_t worker = 0; worker < config.distance_workers; ++worker) {
-      group->Launch("distance", worker, config.distance_cpus[worker], callbacks.distance);
+      group->Launch("distance", worker, config.distance_cpus[worker],
+                    callbacks.distance);
     }
-    for (std::uint32_t thread = 0;
-         thread < config.read_progress_threads; ++thread) {
-      group->Launch("read-progress", thread,
-                    config.read_progress_cpus[thread],
+    for (std::uint32_t thread = 0; thread < config.read_progress_threads;
+         ++thread) {
+      group->Launch("read-progress", thread, config.read_progress_cpus[thread],
                     callbacks.read_progress);
     }
-    for (std::uint32_t thread = 0;
-         thread < config.rpc_progress_threads; ++thread) {
-      group->Launch("rpc-progress", thread,
-                    config.rpc_progress_cpus[thread],
+    for (std::uint32_t thread = 0; thread < config.rpc_progress_threads;
+         ++thread) {
+      group->Launch("rpc-progress", thread, config.rpc_progress_cpus[thread],
                     callbacks.rpc_progress);
     }
     return group;
-  } catch (const std::system_error& error) {
-    return Status(StatusCode::kResourceExhausted, "unable to start runtime thread")
+  } catch (const std::system_error &error) {
+    return Status(StatusCode::kResourceExhausted,
+                  "unable to start runtime thread")
         .AddContext("system_error", error.what());
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate runtime thread group");
   }
@@ -150,31 +151,29 @@ Result<std::unique_ptr<RuntimeThreadGroup>> RuntimeThreadGroup::Start(
 
 void RuntimeThreadGroup::Launch(std::string name, std::uint32_t worker_id,
                                 std::uint32_t cpu, RuntimeLoop loop) {
-  threads_.emplace_back(
-      [this, name = std::move(name), worker_id, cpu, loop = std::move(loop)](
-          std::stop_token) mutable {
-        if (bind_mode_ == CpuBindMode::kAuto) {
-          const auto binding = BindCurrentThread(cpu);
-          if (!binding.ok()) {
-            // A failed pin must not take the runtime down. RecordFailure stops
-            // EVERY thread of the group, so one unusable CPU id (e.g. the
-            // container cpuset is narrower than the computed layout) used to
-            // turn into a silent, total data-plane outage: every lane printed
-            // its "started" line and then exited, the runtime still reported
-            // rpc_ready=true and searches waited for distances that no thread
-            // could ever post. Keep the thread unpinned and say why.
-            fprintf(stderr,
-                    "[UB thread group] bind failed role=%s worker=%u cpu=%u: %s;"
-                    " continuing unpinned\n",
-                    name.c_str(), worker_id, cpu,
-                    binding.ToString().c_str());
-          }
-        }
-        auto result = loop(stop_.get_token(), worker_id);
-        if (!result.ok()) {
-          RecordFailure(std::move(result), name, worker_id);
-        }
-      });
+  threads_.emplace_back([this, name = std::move(name), worker_id, cpu,
+                         loop = std::move(loop)](std::stop_token) mutable {
+    if (bind_mode_ == CpuBindMode::kAuto) {
+      const auto binding = BindCurrentThread(cpu);
+      if (!binding.ok()) {
+        // A failed pin must not take the runtime down. RecordFailure stops
+        // EVERY thread of the group, so one unusable CPU id (e.g. the
+        // container cpuset is narrower than the computed layout) used to
+        // turn into a silent, total data-plane outage: every lane printed
+        // its "started" line and then exited, the runtime still reported
+        // rpc_ready=true and searches waited for distances that no thread
+        // could ever post. Keep the thread unpinned and say why.
+        fprintf(stderr,
+                "[UB thread group] bind failed role=%s worker=%u cpu=%u: %s;"
+                " continuing unpinned\n",
+                name.c_str(), worker_id, cpu, binding.ToString().c_str());
+      }
+    }
+    auto result = loop(stop_.get_token(), worker_id);
+    if (!result.ok()) {
+      RecordFailure(std::move(result), name, worker_id);
+    }
+  });
 }
 
 void RuntimeThreadGroup::RecordFailure(Status status, std::string role,
@@ -199,7 +198,7 @@ void RuntimeThreadGroup::RecordFailure(Status status, std::string role,
 void RuntimeThreadGroup::RequestStop() { stop_.request_stop(); }
 
 void RuntimeThreadGroup::Join() {
-  for (auto& thread : threads_) {
+  for (auto &thread : threads_) {
     if (thread.joinable()) {
       thread.join();
     }
@@ -212,4 +211,4 @@ Status RuntimeThreadGroup::status() const {
   return status_;
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

@@ -23,9 +23,8 @@ set -euo pipefail
 BUILD_TYPE="Release"
 RUN_UT=0
 
-# 脚本所在目录(scripts/)
+# 项目根目录(脚本所在目录的上一级)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# CMake 项目根目录(gd_hnsw_urma/，与 scripts/ 同级)
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../gd_hnsw_urma" && pwd)"
 
 # URMA cmake prefix 路径(与原编译命令保持一致)

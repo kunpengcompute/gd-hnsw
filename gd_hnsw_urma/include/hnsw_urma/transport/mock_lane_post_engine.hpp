@@ -11,16 +11,17 @@
 namespace hnsw_urma {
 
 class MockLanePostEngine final : public LanePostEngine {
- public:
-  [[nodiscard]] static Result<MockLanePostEngine> Create(std::uint32_t owner_lane,
-                                                         std::uint32_t max_outstanding);
-  [[nodiscard]] Status RegisterSegment(std::uint32_t peer_rank, SegmentKind kind,
+public:
+  [[nodiscard]] static Result<MockLanePostEngine>
+  Create(std::uint32_t owner_lane, std::uint32_t max_outstanding);
+  [[nodiscard]] Status RegisterSegment(std::uint32_t peer_rank,
+                                       SegmentKind kind,
                                        std::span<std::byte> memory);
 
-  Status PostRead(const ReadOperation& operation) override;
-  Status PostWriteNotify(const WriteNotifyOperation& operation) override;
-  LanePostBatchResult PostWriteNotifies(
-      std::span<const WriteNotifyOperation> operations) override;
+  Status PostRead(const ReadOperation &operation) override;
+  Status PostWriteNotify(const WriteNotifyOperation &operation) override;
+  LanePostBatchResult
+  PostWriteNotifies(std::span<const WriteNotifyOperation> operations) override;
   Result<std::size_t> Poll(std::span<TransportCompletion> completions) override;
 
   [[nodiscard]] Status Progress(std::size_t event_index = 0);
@@ -28,8 +29,12 @@ class MockLanePostEngine final : public LanePostEngine {
   void FailNextPost(Status status) { next_post_failure_ = std::move(status); }
   void InjectCompletion(TransportCompletion completion);
 
-  [[nodiscard]] std::size_t pending_events() const noexcept { return events_.size(); }
-  [[nodiscard]] std::size_t queued_completions() const noexcept { return completions_.size(); }
+  [[nodiscard]] std::size_t pending_events() const noexcept {
+    return events_.size();
+  }
+  [[nodiscard]] std::size_t queued_completions() const noexcept {
+    return completions_.size();
+  }
   [[nodiscard]] std::size_t write_notify_batch_calls() const noexcept {
     return write_notify_batch_calls_;
   }
@@ -40,7 +45,7 @@ class MockLanePostEngine final : public LanePostEngine {
     return inline_write_notify_posts_;
   }
 
- private:
+private:
   struct Segment {
     std::uint32_t peer_rank{0};
     SegmentKind kind{SegmentKind::kLayer0Graph};
@@ -54,9 +59,10 @@ class MockLanePostEngine final : public LanePostEngine {
     std::vector<std::byte> inline_payload;
   };
 
-  [[nodiscard]] Result<std::span<std::byte>> FindSegment(std::uint32_t peer_rank,
-                                                         SegmentKind kind) noexcept;
-  [[nodiscard]] Status ValidateTicket(const OperationTicket& ticket) const noexcept;
+  [[nodiscard]] Result<std::span<std::byte>>
+  FindSegment(std::uint32_t peer_rank, SegmentKind kind) noexcept;
+  [[nodiscard]] Status
+  ValidateTicket(const OperationTicket &ticket) const noexcept;
 
   std::uint32_t owner_lane_{0};
   std::uint32_t max_outstanding_{0};
@@ -69,4 +75,4 @@ class MockLanePostEngine final : public LanePostEngine {
   std::size_t inline_write_notify_posts_{0};
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

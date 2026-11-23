@@ -29,21 +29,21 @@ OperationTerminalOutcome ToOperationOutcome(StatusCode status) noexcept {
 }
 
 template <typename Operation>
-void RecordFirstFailure(Operation& operation, StatusCode status) noexcept {
+void RecordFirstFailure(Operation &operation, StatusCode status) noexcept {
   if (status == StatusCode::kOk) {
     return;
   }
   auto expected = StatusCode::kOk;
   static_cast<void>(operation.aggregate_status.compare_exchange_strong(
-      expected, status, std::memory_order_relaxed,
-      std::memory_order_relaxed));
+      expected, status, std::memory_order_relaxed, std::memory_order_relaxed));
 }
 
-}  // namespace
+} // namespace
 
-Result<PeerSegmentTable> PeerSegmentTable::Create(
-    const GlobalIndexMeta& meta, const ShardMap& shard_map,
-    shard_id_t local_shard, std::span<const PeerDataSegments> peers) {
+Result<PeerSegmentTable>
+PeerSegmentTable::Create(const GlobalIndexMeta &meta, const ShardMap &shard_map,
+                         shard_id_t local_shard,
+                         std::span<const PeerDataSegments> peers) {
   if (local_shard >= shard_map.ranges().size() ||
       meta.num_shards != shard_map.ranges().size()) {
     return Status(StatusCode::kInvalidArgument,
@@ -57,35 +57,29 @@ Result<PeerSegmentTable> PeerSegmentTable::Create(
     table.peers_.assign(shard_map.ranges().size(), PeerDataSegments{});
     std::vector<bool> present(shard_map.ranges().size(), false);
     present[local_shard] = true;
-    for (const auto& peer : peers) {
+    for (const auto &peer : peers) {
       if (peer.shard_id >= table.peers_.size() ||
-          peer.shard_id == local_shard ||
-          peer.peer_rank != peer.shard_id || present[peer.shard_id]) {
+          peer.shard_id == local_shard || peer.peer_rank != peer.shard_id ||
+          present[peer.shard_id]) {
         return Status(
             StatusCode::kInvalidArgument,
             "peer segment descriptors must be unique and rank ordered");
       }
       auto range = shard_map.Range(peer.shard_id);
-      auto graph_slots =
-          range.ok()
-              ? CheckedMultiply<std::uint64_t>(range.value().local_count,
-                                               meta.M0)
-              : Result<std::uint64_t>(range.status());
+      auto graph_slots = range.ok() ? CheckedMultiply<std::uint64_t>(
+                                          range.value().local_count, meta.M0)
+                                    : Result<std::uint64_t>(range.status());
       auto graph_bytes =
-          graph_slots.ok()
-              ? CheckedMultiply<std::uint64_t>(graph_slots.value(),
-                                               sizeof(node_id_t))
-              : Result<std::uint64_t>(graph_slots.status());
-      auto vector_slots =
-          range.ok()
-              ? CheckedMultiply<std::uint64_t>(range.value().local_count,
-                                               meta.dim)
-              : Result<std::uint64_t>(range.status());
-      auto vector_bytes =
-          vector_slots.ok()
-              ? CheckedMultiply<std::uint64_t>(vector_slots.value(),
-                                               sizeof(float))
-              : Result<std::uint64_t>(vector_slots.status());
+          graph_slots.ok() ? CheckedMultiply<std::uint64_t>(graph_slots.value(),
+                                                            sizeof(node_id_t))
+                           : Result<std::uint64_t>(graph_slots.status());
+      auto vector_slots = range.ok() ? CheckedMultiply<std::uint64_t>(
+                                           range.value().local_count, meta.dim)
+                                     : Result<std::uint64_t>(range.status());
+      auto vector_bytes = vector_slots.ok()
+                              ? CheckedMultiply<std::uint64_t>(
+                                    vector_slots.value(), sizeof(float))
+                              : Result<std::uint64_t>(vector_slots.status());
       if (!graph_bytes.ok() || !vector_bytes.ok()) {
         return Status(StatusCode::kOutOfRange,
                       "peer segment byte requirement overflows");
@@ -103,14 +97,14 @@ Result<PeerSegmentTable> PeerSegmentTable::Create(
                     "peer segment table is incomplete");
     }
     return table;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate peer segment table");
   }
 }
 
-Result<RemoteReadLocation> PeerSegmentTable::Graph(
-    node_id_t id) const noexcept {
+Result<RemoteReadLocation>
+PeerSegmentTable::Graph(node_id_t id) const noexcept {
   auto location = shard_map_->Locate(id);
   if (!location.ok()) {
     return location.status();
@@ -118,37 +112,36 @@ Result<RemoteReadLocation> PeerSegmentTable::Graph(
   return Graph(location.value().shard_id, location.value().local_id);
 }
 
-Result<RemoteReadLocation> PeerSegmentTable::Graph(
-    shard_id_t shard, std::uint64_t local_id) const noexcept {
+Result<RemoteReadLocation>
+PeerSegmentTable::Graph(shard_id_t shard,
+                        std::uint64_t local_id) const noexcept {
   if (shard >= peers_.size() || shard == local_shard_) {
     return Status(StatusCode::kInvalidArgument,
                   "local graph node does not require remote READ");
   }
   auto slot = CheckedMultiply<std::uint64_t>(local_id, meta_.M0);
-  auto offset =
-      slot.ok()
-          ? CheckedMultiply<std::uint64_t>(slot.value(), sizeof(node_id_t))
-          : Result<std::uint64_t>(slot.status());
-  auto bytes =
-      CheckedMultiply<std::uint64_t>(meta_.M0, sizeof(node_id_t));
+  auto offset = slot.ok() ? CheckedMultiply<std::uint64_t>(slot.value(),
+                                                           sizeof(node_id_t))
+                          : Result<std::uint64_t>(slot.status());
+  auto bytes = CheckedMultiply<std::uint64_t>(meta_.M0, sizeof(node_id_t));
   if (!offset.ok() || !bytes.ok() ||
       bytes.value() > std::numeric_limits<std::size_t>::max()) {
     return Status(StatusCode::kOutOfRange,
                   "remote graph READ offset overflows");
   }
-  const auto& peer = peers_[shard];
+  const auto &peer = peers_[shard];
   if (offset.value() > peer.graph_bytes ||
       bytes.value() > peer.graph_bytes - offset.value()) {
     return Status(StatusCode::kOutOfRange,
                   "remote graph READ exceeds the peer segment");
   }
-  return RemoteReadLocation{
-      peer.peer_rank, SegmentKind::kLayer0Graph, offset.value(),
-      static_cast<std::size_t>(bytes.value())};
+  return RemoteReadLocation{peer.peer_rank, SegmentKind::kLayer0Graph,
+                            offset.value(),
+                            static_cast<std::size_t>(bytes.value())};
 }
 
-Result<RemoteReadLocation> PeerSegmentTable::Vector(
-    node_id_t id) const noexcept {
+Result<RemoteReadLocation>
+PeerSegmentTable::Vector(node_id_t id) const noexcept {
   auto location = shard_map_->Locate(id);
   if (!location.ok()) {
     return location.status();
@@ -156,47 +149,47 @@ Result<RemoteReadLocation> PeerSegmentTable::Vector(
   return Vector(location.value().shard_id, location.value().local_id);
 }
 
-Result<RemoteReadLocation> PeerSegmentTable::Vector(
-    shard_id_t shard, std::uint64_t local_id) const noexcept {
+Result<RemoteReadLocation>
+PeerSegmentTable::Vector(shard_id_t shard,
+                         std::uint64_t local_id) const noexcept {
   if (shard >= peers_.size() || shard == local_shard_) {
     return Status(StatusCode::kInvalidArgument,
                   "local vector does not require remote READ");
   }
   auto slot = CheckedMultiply<std::uint64_t>(local_id, meta_.dim);
   auto offset =
-      slot.ok()
-          ? CheckedMultiply<std::uint64_t>(slot.value(), sizeof(float))
-          : Result<std::uint64_t>(slot.status());
+      slot.ok() ? CheckedMultiply<std::uint64_t>(slot.value(), sizeof(float))
+                : Result<std::uint64_t>(slot.status());
   auto bytes = CheckedMultiply<std::uint64_t>(meta_.dim, sizeof(float));
   if (!offset.ok() || !bytes.ok() ||
       bytes.value() > std::numeric_limits<std::size_t>::max()) {
     return Status(StatusCode::kOutOfRange,
                   "remote vector READ offset overflows");
   }
-  const auto& peer = peers_[shard];
+  const auto &peer = peers_[shard];
   if (offset.value() > peer.vector_bytes ||
       bytes.value() > peer.vector_bytes - offset.value()) {
     return Status(StatusCode::kOutOfRange,
                   "remote vector READ exceeds the peer segment");
   }
-  return RemoteReadLocation{
-      peer.peer_rank, SegmentKind::kVectors, offset.value(),
-      static_cast<std::size_t>(bytes.value())};
+  return RemoteReadLocation{peer.peer_rank, SegmentKind::kVectors,
+                            offset.value(),
+                            static_cast<std::size_t>(bytes.value())};
 }
 
 Result<UrmaGraphReader> UrmaGraphReader::Create(
-    const GlobalIndexMeta& meta, const ShardMap& shard_map,
-    const UpperGraphReplica& upper, const LocalShard& local_shard,
-    const PeerSegmentTable& peers,
-    std::span<ReadBatchLane* const> lanes,
+    const GlobalIndexMeta &meta, const ShardMap &shard_map,
+    const UpperGraphReplica &upper, const LocalShard &local_shard,
+    const PeerSegmentTable &peers, std::span<ReadBatchLane *const> lanes,
     std::span<const std::uint32_t> read_owner_by_rank,
-    std::span<SearchReadResources* const> resources,
+    std::span<SearchReadResources *const> resources,
     std::size_t max_operations_per_search) {
-  if (local_shard.range().shard_id != peers.local_shard() ||
-      lanes.empty() || max_operations_per_search == 0 ||
+  if (local_shard.range().shard_id != peers.local_shard() || lanes.empty() ||
+      max_operations_per_search == 0 ||
       max_operations_per_search > std::numeric_limits<std::uint32_t>::max() ||
       read_owner_by_rank.empty() || resources.empty() ||
-      max_operations_per_search > std::numeric_limits<std::uint32_t>::max() / resources.size()) {
+      max_operations_per_search >
+          std::numeric_limits<std::uint32_t>::max() / resources.size()) {
     return Status(StatusCode::kInvalidArgument,
                   "remote graph reader configuration is invalid");
   }
@@ -211,15 +204,19 @@ Result<UrmaGraphReader> UrmaGraphReader::Create(
     reader.resources_.assign(resources.begin(), resources.end());
     reader.partitions_.resize(resources.size());
     for (std::size_t search = 0; search < resources.size(); ++search) {
-      if (resources[search] == nullptr || resources[search]->owner_search() != search ||
+      if (resources[search] == nullptr ||
+          resources[search]->owner_search() != search ||
           resources[search]->slot_bytes() < meta.M0 * sizeof(node_id_t))
-        return Status(StatusCode::kInvalidArgument, "Search READ pool shape is invalid");
-      reader.partitions_[search].free_records.reserve(max_operations_per_search);
+        return Status(StatusCode::kInvalidArgument,
+                      "Search READ pool shape is invalid");
+      reader.partitions_[search].free_records.reserve(
+          max_operations_per_search);
     }
     for (std::size_t lane = 0; lane < lanes.size(); ++lane) {
       if (lanes[lane] == nullptr || lanes[lane]->owner_lane() != lane ||
           lanes[lane]->config().search_workers != resources.size())
-        return Status(StatusCode::kInvalidArgument, "READ lane topology is invalid");
+        return Status(StatusCode::kInvalidArgument,
+                      "READ lane topology is invalid");
     }
     reader.read_owner_by_rank_.assign(read_owner_by_rank.begin(),
                                       read_owner_by_rank.end());
@@ -229,29 +226,28 @@ Result<UrmaGraphReader> UrmaGraphReader::Create(
                       "graph READ owner map references a missing lane");
       }
     }
-    reader.prepared_operation_count_ =
-        static_cast<std::uint32_t>(max_operations_per_search * resources.size());
+    reader.prepared_operation_count_ = static_cast<std::uint32_t>(
+        max_operations_per_search * resources.size());
     reader.prepared_operations_ =
-        std::make_unique<PreparedOperation[]>(
-            reader.prepared_operation_count_);
-    for (std::uint32_t slot = 0;
-         slot < reader.prepared_operation_count_; ++slot) {
-      auto& operation = reader.prepared_operations_[slot];
+        std::make_unique<PreparedOperation[]>(reader.prepared_operation_count_);
+    for (std::uint32_t slot = 0; slot < reader.prepared_operation_count_;
+         ++slot) {
+      auto &operation = reader.prepared_operations_[slot];
       const auto search = slot / max_operations_per_search;
       operation.partition = &reader.partitions_[search];
       operation.resources = resources[search];
       operation.slot = slot;
       operation.partition->free_records.push_back(slot);
       operation.nodes.reserve(kMaxGraphNodesPerOperation);
-      operation.lane_count =
-          static_cast<std::uint32_t>(reader.lanes_.size());
+      operation.lane_count = static_cast<std::uint32_t>(reader.lanes_.size());
       operation.lane_batches =
           std::make_unique<LaneBatch[]>(operation.lane_count);
       operation.participating_lanes.reserve(operation.lane_count);
       for (std::uint32_t lane = 0; lane < operation.lane_count; ++lane) {
         operation.lane_batches[lane].lane = reader.lanes_[lane];
         operation.lane_batches[lane].parent = &operation;
-        operation.lane_batches[lane].batch.ranges.reserve(kMaxGraphNodesPerOperation);
+        operation.lane_batches[lane].batch.ranges.reserve(
+            kMaxGraphNodesPerOperation);
         operation.lane_batches[lane].requests.reserve(
             kMaxGraphNodesPerOperation);
         operation.lane_batches[lane].results.reserve(
@@ -259,18 +255,15 @@ Result<UrmaGraphReader> UrmaGraphReader::Create(
       }
     }
     return Result<UrmaGraphReader>(std::move(reader));
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate remote graph reader");
   }
 }
 
-UrmaGraphReader::UrmaGraphReader(UrmaGraphReader&& other) noexcept
-    : meta_(other.meta_),
-      shard_map_(other.shard_map_),
-      upper_(other.upper_),
-      local_shard_(other.local_shard_),
-      peers_(other.peers_),
+UrmaGraphReader::UrmaGraphReader(UrmaGraphReader &&other) noexcept
+    : meta_(other.meta_), shard_map_(other.shard_map_), upper_(other.upper_),
+      local_shard_(other.local_shard_), peers_(other.peers_),
       lanes_(std::move(other.lanes_)),
       read_owner_by_rank_(std::move(other.read_owner_by_rank_)),
       prepared_operations_(std::move(other.prepared_operations_)),
@@ -278,13 +271,14 @@ UrmaGraphReader::UrmaGraphReader(UrmaGraphReader&& other) noexcept
       resources_(std::move(other.resources_)),
       partitions_(std::move(other.partitions_)) {}
 
-Result<std::span<const node_id_t>> UrmaGraphReader::ReadUpperNeighbors(
-    node_id_t id, std::int32_t level) const noexcept {
+Result<std::span<const node_id_t>>
+UrmaGraphReader::ReadUpperNeighbors(node_id_t id,
+                                    std::int32_t level) const noexcept {
   return upper_->Neighbors(id, level);
 }
 
-Result<ReadBatchLane*> UrmaGraphReader::LaneFor(
-    std::uint32_t peer_rank) const noexcept {
+Result<ReadBatchLane *>
+UrmaGraphReader::LaneFor(std::uint32_t peer_rank) const noexcept {
   if (peer_rank >= read_owner_by_rank_.size() ||
       read_owner_by_rank_[peer_rank] >= lanes_.size()) {
     return Status(StatusCode::kProtocolError,
@@ -293,10 +287,10 @@ Result<ReadBatchLane*> UrmaGraphReader::LaneFor(
   return lanes_[read_owner_by_rank_[peer_rank]];
 }
 
-Status UrmaGraphReader::CompleteBatch(
-    void* context, ReadBatch& batch) noexcept {
-  auto& lane_batch = *static_cast<LaneBatch*>(context);
-  auto* parent = lane_batch.parent;
+Status UrmaGraphReader::CompleteBatch(void *context,
+                                      ReadBatch &batch) noexcept {
+  auto &lane_batch = *static_cast<LaneBatch *>(context);
+  auto *parent = lane_batch.parent;
   const auto status = batch.status;
   RecordFirstFailure(*parent, status);
   const auto outcome = ToOperationOutcome(status);
@@ -304,15 +298,14 @@ Status UrmaGraphReader::CompleteBatch(
 }
 
 StatusCode UrmaGraphReader::CheckBatchControl(
-    void* context,
-    std::chrono::steady_clock::time_point) noexcept {
-  return static_cast<LaneBatch*>(context)->binding.CancellationCode();
+    void *context, std::chrono::steady_clock::time_point) noexcept {
+  return static_cast<LaneBatch *>(context)->binding.CancellationCode();
 }
 
 void UrmaGraphReader::ResetPreparedOperation(
-    PreparedOperation& operation) noexcept {
+    PreparedOperation &operation) noexcept {
   for (std::uint32_t lane = 0; lane < operation.lane_count; ++lane) {
-    auto& lane_batch = operation.lane_batches[lane];
+    auto &lane_batch = operation.lane_batches[lane];
     if (lane_batch.binding.prepared()) {
       lane_batch.binding.Reset();
     }
@@ -320,7 +313,8 @@ void UrmaGraphReader::ResetPreparedOperation(
       operation.resources->Return(lane_batch.results);
       lane_batch.results_owned = false;
     }
-    lane_batch.batch.reclaim_required = lane_batch.batch.reclaim_received = false;
+    lane_batch.batch.reclaim_required = lane_batch.batch.reclaim_received =
+        false;
     lane_batch.active = false;
     lane_batch.requests.clear();
     lane_batch.results.clear();
@@ -336,20 +330,20 @@ void UrmaGraphReader::ResetPreparedOperation(
   operation.ticket = {};
   operation.nodes.clear();
   operation.participating_lanes.clear();
-  operation.aggregate_status.store(StatusCode::kOk,
-                                   std::memory_order_relaxed);
+  operation.aggregate_status.store(StatusCode::kOk, std::memory_order_relaxed);
   operation.state.store(PreparedOperationState::kFree,
                         std::memory_order_release);
   operation.resources->ReturnRecord();
   operation.partition->free_records.push_back(operation.slot);
 }
 
-void UrmaGraphReader::ConsumeOperation(PreparedOperation& operation) noexcept {
+void UrmaGraphReader::ConsumeOperation(PreparedOperation &operation) noexcept {
   operation.consumed = true;
   bool retained = false;
   for (std::uint32_t lane = 0; lane < operation.lane_count; ++lane) {
-    auto& entry = operation.lane_batches[lane];
-    if (entry.binding.prepared()) entry.binding.Reset();
+    auto &entry = operation.lane_batches[lane];
+    if (entry.binding.prepared())
+      entry.binding.Reset();
     if (entry.batch.reclaim_required && !entry.batch.reclaim_received) {
       retained = true;
     } else if (entry.results_owned) {
@@ -358,24 +352,26 @@ void UrmaGraphReader::ConsumeOperation(PreparedOperation& operation) noexcept {
     }
   }
   operation.nodes.clear();
-  if (!retained) ResetPreparedOperation(operation);
+  if (!retained)
+    ResetPreparedOperation(operation);
 }
 
-void UrmaGraphReader::ReclaimBatch(void* context, ReadBatch&) noexcept {
-  auto& entry = *static_cast<LaneBatch*>(context);
-  if (entry.parent->consumed) ConsumeOperation(*entry.parent);
+void UrmaGraphReader::ReclaimBatch(void *context, ReadBatch &) noexcept {
+  auto &entry = *static_cast<LaneBatch *>(context);
+  if (entry.parent->consumed)
+    ConsumeOperation(*entry.parent);
 }
 
-Result<PreparedGraphPhase> UrmaGraphReader::PrepareForWait(
-    QueryWaitPreparation preparation,
-    std::span<const NodeToExpand> nodes, NeighborBatch* output) {
+Result<PreparedGraphPhase>
+UrmaGraphReader::PrepareForWait(QueryWaitPreparation preparation,
+                                std::span<const NodeToExpand> nodes,
+                                NeighborBatch *output) {
   if (preparation.controller == nullptr ||
       preparation.ready_publisher == nullptr ||
       preparation.query.generation == 0 || preparation.wait_epoch == 0 ||
       preparation.operation_deadline ==
           std::chrono::steady_clock::time_point{} ||
-      preparation.controller->generation() !=
-          preparation.query.generation ||
+      preparation.controller->generation() != preparation.query.generation ||
       output == nullptr || nodes.empty() ||
       nodes.size() > kMaxGraphNodesPerOperation) {
     return Status(StatusCode::kInvalidArgument,
@@ -384,20 +380,23 @@ Result<PreparedGraphPhase> UrmaGraphReader::PrepareForWait(
 
   const auto owner = preparation.controller->owner_search();
   if (owner >= resources_.size())
-    return Status(StatusCode::kInvalidArgument, "READ Search owner is out of range");
-  auto& partition = partitions_[owner];
+    return Status(StatusCode::kInvalidArgument,
+                  "READ Search owner is out of range");
+  auto &partition = partitions_[owner];
   if (partition.free_records.empty())
-    return Status(StatusCode::kResourceExhausted, "prepared graph Search records are full");
+    return Status(StatusCode::kResourceExhausted,
+                  "prepared graph Search records are full");
   const auto operation_slot = partition.free_records.back();
   partition.free_records.pop_back();
-  auto* operation = &prepared_operations_[operation_slot];
+  auto *operation = &prepared_operations_[operation_slot];
   operation->resources->AcquireRecord();
   operation->consumed = false;
-  operation->state.store(PreparedOperationState::kPreparing, std::memory_order_relaxed);
+  operation->state.store(PreparedOperationState::kPreparing,
+                         std::memory_order_relaxed);
 
   const auto fail = [&](Status status) -> Result<PreparedGraphPhase> {
     for (std::uint32_t lane = 0; lane < operation->lane_count; ++lane) {
-      auto& lane_batch = operation->lane_batches[lane];
+      auto &lane_batch = operation->lane_batches[lane];
       if (lane_batch.batch.state.load(std::memory_order_acquire) ==
           ReadBatchState::kPrepared) {
         static_cast<void>(
@@ -409,23 +408,22 @@ Result<PreparedGraphPhase> UrmaGraphReader::PrepareForWait(
   };
 
   auto generation = partition.next_ticket++;
-  if (generation == 0) generation = partition.next_ticket++;
-  operation->ticket = {
-      static_cast<ticket_t>(operation_slot) + 1U, generation};
+  if (generation == 0)
+    generation = partition.next_ticket++;
+  operation->ticket = {static_cast<ticket_t>(operation_slot) + 1U, generation};
   operation->nodes.assign(nodes.size(), NodeSource{});
   operation->participating_lanes.clear();
-  operation->aggregate_status.store(StatusCode::kOk,
-                                    std::memory_order_relaxed);
+  operation->aggregate_status.store(StatusCode::kOk, std::memory_order_relaxed);
   for (std::uint32_t lane = 0; lane < operation->lane_count; ++lane) {
-    auto& lane_batch = operation->lane_batches[lane];
+    auto &lane_batch = operation->lane_batches[lane];
     lane_batch.active = false;
     lane_batch.requests.clear();
     lane_batch.results.clear();
   }
 
   for (std::size_t index = 0; index < nodes.size(); ++index) {
-    const auto& node = nodes[index];
-    auto& source = operation->nodes[index];
+    const auto &node = nodes[index];
+    auto &source = operation->nodes[index];
     if (node.level > 0) {
       auto neighbors = ReadUpperNeighbors(node.global_id, node.level);
       if (!neighbors.ok()) {
@@ -439,12 +437,12 @@ Result<PreparedGraphPhase> UrmaGraphReader::PrepareForWait(
       return fail(location.status());
     }
     if (location.value().shard_id == peers_->local_shard()) {
-      source.local_neighbors = local_shard_->TrustedNeighbors(
-          location.value().local_id);
+      source.local_neighbors =
+          local_shard_->TrustedNeighbors(location.value().local_id);
       continue;
     }
-    auto remote = peers_->Graph(location.value().shard_id,
-                                location.value().local_id);
+    auto remote =
+        peers_->Graph(location.value().shard_id, location.value().local_id);
     if (!remote.ok()) {
       return fail(remote.status());
     }
@@ -455,49 +453,50 @@ Result<PreparedGraphPhase> UrmaGraphReader::PrepareForWait(
     const auto lane_index = lane.value()->owner_lane();
     if (lane_index >= operation->lane_count ||
         operation->lane_batches[lane_index].lane != lane.value()) {
-      return fail(Status(
-          StatusCode::kProtocolError,
-          "prepared graph READ owner lane is outside the phase table"));
+      return fail(
+          Status(StatusCode::kProtocolError,
+                 "prepared graph READ owner lane is outside the phase table"));
     }
-    auto& lane_batch = operation->lane_batches[lane_index];
+    auto &lane_batch = operation->lane_batches[lane_index];
     lane_batch.active = true;
     source.lane = lane_index;
-    source.result_index =
-        static_cast<std::uint32_t>(lane_batch.results.size());
+    source.result_index = static_cast<std::uint32_t>(lane_batch.results.size());
     lane_batch.results.push_back({});
-    lane_batch.requests.push_back({
-        remote.value().peer_rank, remote.value().segment,
-        remote.value().offset, {}});
+    lane_batch.requests.push_back({remote.value().peer_rank,
+                                   remote.value().segment,
+                                   remote.value().offset,
+                                   {}});
   }
 
   for (std::uint32_t lane = 0; lane < operation->lane_count; ++lane) {
-    auto& lane_batch = operation->lane_batches[lane];
+    auto &lane_batch = operation->lane_batches[lane];
     if (!lane_batch.active) {
       continue;
     }
     auto acquired = operation->resources->Acquire(
         lane_batch.results, meta_->M0 * sizeof(node_id_t));
-    if (!acquired.ok()) return fail(acquired);
+    if (!acquired.ok())
+      return fail(acquired);
     lane_batch.results_owned = true;
     for (std::size_t index = 0; index < lane_batch.requests.size(); ++index) {
-      const auto& view = lane_batch.results[index];
+      const auto &view = lane_batch.results[index];
       lane_batch.requests[index].destination = {
-          const_cast<std::byte*>(view.data), view.bytes};
+          const_cast<std::byte *>(view.data), view.bytes};
     }
-    std::sort(
-        lane_batch.requests.begin(), lane_batch.requests.end(),
-        [](const ReadRequest& left, const ReadRequest& right) {
-          if (left.peer_rank != right.peer_rank) {
-            return left.peer_rank < right.peer_rank;
-          }
-          return static_cast<std::uint8_t>(left.remote_segment) <
-                 static_cast<std::uint8_t>(right.remote_segment);
-        });
+    std::sort(lane_batch.requests.begin(), lane_batch.requests.end(),
+              [](const ReadRequest &left, const ReadRequest &right) {
+                if (left.peer_rank != right.peer_rank) {
+                  return left.peer_rank < right.peer_rank;
+                }
+                return static_cast<std::uint8_t>(left.remote_segment) <
+                       static_cast<std::uint8_t>(right.remote_segment);
+              });
     auto query_ticket = partition.next_ticket++;
-    if (query_ticket == 0) query_ticket = partition.next_ticket++;
+    if (query_ticket == 0)
+      query_ticket = partition.next_ticket++;
     auto bound = lane_batch.binding.Prepare(
-        preparation.query, *preparation.controller,
-        lane_batch.query_operation, *preparation.ready_publisher,
+        preparation.query, *preparation.controller, lane_batch.query_operation,
+        *preparation.ready_publisher,
         {operation_slot, lane, preparation.query.generation,
          preparation.wait_epoch, query_ticket});
     if (!bound.ok()) {
@@ -521,9 +520,8 @@ Result<PreparedGraphPhase> UrmaGraphReader::PrepareForWait(
 
   operation->state.store(PreparedOperationState::kPrepared,
                          std::memory_order_release);
-  return PreparedGraphPhase{
-      operation->ticket, operation->participating_lanes,
-      !operation->participating_lanes.empty()};
+  return PreparedGraphPhase{operation->ticket, operation->participating_lanes,
+                            !operation->participating_lanes.empty()};
 }
 
 Status UrmaGraphReader::PublishPrepared(GraphTicket ticket) {
@@ -531,15 +529,14 @@ Status UrmaGraphReader::PublishPrepared(GraphTicket ticket) {
     return Status(StatusCode::kProtocolError,
                   "prepared graph ticket is invalid");
   }
-  auto& operation = prepared_operations_[ticket.value - 1U];
+  auto &operation = prepared_operations_[ticket.value - 1U];
   if (operation.ticket != ticket ||
       operation.state.load(std::memory_order_acquire) !=
           PreparedOperationState::kPrepared) {
-    return Status(StatusCode::kProtocolError,
-                  "prepared graph ticket is stale");
+    return Status(StatusCode::kProtocolError, "prepared graph ticket is stale");
   }
   for (std::uint32_t lane = 0; lane < operation.lane_count; ++lane) {
-    auto& lane_batch = operation.lane_batches[lane];
+    auto &lane_batch = operation.lane_batches[lane];
     if (!lane_batch.active) {
       continue;
     }
@@ -551,7 +548,7 @@ Status UrmaGraphReader::PublishPrepared(GraphTicket ticket) {
   operation.state.store(PreparedOperationState::kPublished,
                         std::memory_order_release);
   for (std::uint32_t lane = 0; lane < operation.lane_count; ++lane) {
-    auto& lane_batch = operation.lane_batches[lane];
+    auto &lane_batch = operation.lane_batches[lane];
     if (lane_batch.active) {
       lane_batch.lane->PublishBatch(lane_batch.batch);
     }
@@ -564,7 +561,7 @@ Status UrmaGraphReader::CancelPrepared(GraphTicket ticket) {
     return Status(StatusCode::kProtocolError,
                   "prepared graph cancellation ticket is invalid");
   }
-  auto& operation = prepared_operations_[ticket.value - 1U];
+  auto &operation = prepared_operations_[ticket.value - 1U];
   if (operation.ticket != ticket ||
       operation.state.load(std::memory_order_acquire) !=
           PreparedOperationState::kPrepared) {
@@ -573,12 +570,11 @@ Status UrmaGraphReader::CancelPrepared(GraphTicket ticket) {
   }
   Status result;
   for (std::uint32_t lane = 0; lane < operation.lane_count; ++lane) {
-    auto& lane_batch = operation.lane_batches[lane];
+    auto &lane_batch = operation.lane_batches[lane];
     if (!lane_batch.active) {
       continue;
     }
-    auto cancelled =
-        lane_batch.lane->CancelPreparedBatch(lane_batch.batch);
+    auto cancelled = lane_batch.lane->CancelPreparedBatch(lane_batch.batch);
     if (result.ok() && !cancelled.ok()) {
       result = cancelled;
     }
@@ -587,41 +583,39 @@ Status UrmaGraphReader::CancelPrepared(GraphTicket ticket) {
   return result;
 }
 
-Status UrmaGraphReader::FinishConsume(
-    GraphTicket ticket, GraphNeighborConsumer& consumer) {
+Status UrmaGraphReader::FinishConsume(GraphTicket ticket,
+                                      GraphNeighborConsumer &consumer) {
   if (ticket.value == 0 || ticket.value > prepared_operation_count_) {
     return Status(StatusCode::kProtocolError,
                   "graph consume ticket is invalid");
   }
-  auto& operation = prepared_operations_[ticket.value - 1U];
+  auto &operation = prepared_operations_[ticket.value - 1U];
   if (operation.ticket != ticket ||
       operation.state.load(std::memory_order_acquire) !=
           PreparedOperationState::kPublished) {
-    return Status(StatusCode::kProtocolError,
-                  "graph consume ticket is stale");
+    return Status(StatusCode::kProtocolError, "graph consume ticket is stale");
   }
 
-  const auto aggregate = operation.aggregate_status.load(
-      std::memory_order_acquire);
-  Status result =
-      aggregate == StatusCode::kOk
-          ? Status::Ok()
-          : Status(aggregate, "prepared graph READ batch failed");
+  const auto aggregate =
+      operation.aggregate_status.load(std::memory_order_acquire);
+  Status result = aggregate == StatusCode::kOk
+                      ? Status::Ok()
+                      : Status(aggregate, "prepared graph READ batch failed");
   if (result.ok()) {
     for (std::size_t index = 0; index < operation.nodes.size(); ++index) {
-      const auto& source = operation.nodes[index];
+      const auto &source = operation.nodes[index];
       std::span<const node_id_t> neighbors = source.local_neighbors;
       if (source.lane != kNoLane) {
-        const auto& view = operation.lane_batches[source.lane]
-                               .results[source.result_index];
+        const auto &view =
+            operation.lane_batches[source.lane].results[source.result_index];
 #ifndef NDEBUG
         assert(view.bytes ==
                static_cast<std::size_t>(meta_->M0) * sizeof(node_id_t));
 #endif
         neighbors = std::span<const node_id_t>(
-            reinterpret_cast<const node_id_t*>(view.data), meta_->M0);
-        const auto invalid = std::find(neighbors.begin(), neighbors.end(),
-                                       INVALID_NODE_ID);
+            reinterpret_cast<const node_id_t *>(view.data), meta_->M0);
+        const auto invalid =
+            std::find(neighbors.begin(), neighbors.end(), INVALID_NODE_ID);
         neighbors = neighbors.first(static_cast<std::size_t>(
             std::distance(neighbors.begin(), invalid)));
       }
@@ -637,24 +631,26 @@ Status UrmaGraphReader::FinishConsume(
 }
 
 Result<PullVectorDistanceOracle> PullVectorDistanceOracle::Create(
-    const GlobalIndexMeta& meta, const ShardMap& shard_map,
-    const LocalShard& local_shard, const PeerSegmentTable& peers,
-    std::span<ReadBatchLane* const> lanes,
+    const GlobalIndexMeta &meta, const ShardMap &shard_map,
+    const LocalShard &local_shard, const PeerSegmentTable &peers,
+    std::span<ReadBatchLane *const> lanes,
     std::span<const std::uint32_t> read_owner_by_rank,
-    std::span<SearchReadResources* const> resources,
-    DistanceImplementation implementation, std::size_t max_operations_per_search,
-    std::size_t max_batch, bool use_dot_norm) {
-  if (local_shard.range().shard_id != peers.local_shard() ||
-      lanes.empty() || max_operations_per_search == 0 ||
+    std::span<SearchReadResources *const> resources,
+    DistanceImplementation implementation,
+    std::size_t max_operations_per_search, std::size_t max_batch,
+    bool use_dot_norm) {
+  if (local_shard.range().shard_id != peers.local_shard() || lanes.empty() ||
+      max_operations_per_search == 0 ||
       max_operations_per_search > std::numeric_limits<std::uint32_t>::max() ||
       read_owner_by_rank.empty() || resources.empty() ||
-      max_operations_per_search > std::numeric_limits<std::uint32_t>::max() / resources.size()) {
+      max_operations_per_search >
+          std::numeric_limits<std::uint32_t>::max() / resources.size()) {
     return Status(StatusCode::kInvalidArgument,
                   "pull distance oracle configuration is invalid");
   }
   if (max_batch == 0) {
-    auto resolved = CheckedMultiply<std::size_t>(
-        meta.M0, kMaxGraphNodesPerOperation);
+    auto resolved =
+        CheckedMultiply<std::size_t>(meta.M0, kMaxGraphNodesPerOperation);
     if (!resolved.ok()) {
       return resolved.status();
     }
@@ -670,15 +666,19 @@ Result<PullVectorDistanceOracle> PullVectorDistanceOracle::Create(
     oracle.resources_.assign(resources.begin(), resources.end());
     oracle.partitions_.resize(resources.size());
     for (std::size_t search = 0; search < resources.size(); ++search) {
-      if (resources[search] == nullptr || resources[search]->owner_search() != search ||
+      if (resources[search] == nullptr ||
+          resources[search]->owner_search() != search ||
           resources[search]->slot_bytes() < meta.dim * sizeof(float))
-        return Status(StatusCode::kInvalidArgument, "Search READ pool shape is invalid");
-      oracle.partitions_[search].free_records.reserve(max_operations_per_search);
+        return Status(StatusCode::kInvalidArgument,
+                      "Search READ pool shape is invalid");
+      oracle.partitions_[search].free_records.reserve(
+          max_operations_per_search);
     }
     for (std::size_t lane = 0; lane < lanes.size(); ++lane) {
       if (lanes[lane] == nullptr || lanes[lane]->owner_lane() != lane ||
           lanes[lane]->config().search_workers != resources.size())
-        return Status(StatusCode::kInvalidArgument, "READ lane topology is invalid");
+        return Status(StatusCode::kInvalidArgument,
+                      "READ lane topology is invalid");
     }
     oracle.read_owner_by_rank_.assign(read_owner_by_rank.begin(),
                                       read_owner_by_rank.end());
@@ -688,19 +688,17 @@ Result<PullVectorDistanceOracle> PullVectorDistanceOracle::Create(
                       "vector READ owner map references a missing lane");
       }
     }
-    oracle.metric_ = meta.metric == 0 ? Metric::kL2
-                                      : Metric::kInnerProduct;
+    oracle.metric_ = meta.metric == 0 ? Metric::kL2 : Metric::kInnerProduct;
     oracle.implementation_ = implementation;
     oracle.use_dot_norm_ = use_dot_norm && oracle.metric_ == Metric::kL2;
     oracle.max_batch_ = max_batch;
-    oracle.prepared_operation_count_ =
-        static_cast<std::uint32_t>(max_operations_per_search * resources.size());
+    oracle.prepared_operation_count_ = static_cast<std::uint32_t>(
+        max_operations_per_search * resources.size());
     oracle.prepared_operations_ =
-        std::make_unique<PreparedOperation[]>(
-            oracle.prepared_operation_count_);
-    for (std::uint32_t slot = 0;
-         slot < oracle.prepared_operation_count_; ++slot) {
-      auto& operation = oracle.prepared_operations_[slot];
+        std::make_unique<PreparedOperation[]>(oracle.prepared_operation_count_);
+    for (std::uint32_t slot = 0; slot < oracle.prepared_operation_count_;
+         ++slot) {
+      auto &operation = oracle.prepared_operations_[slot];
       const auto search = slot / max_operations_per_search;
       operation.partition = &oracle.partitions_[search];
       operation.resources = resources[search];
@@ -711,31 +709,27 @@ Result<PullVectorDistanceOracle> PullVectorDistanceOracle::Create(
       oracle.prepared_operations_[slot].results.reserve(max_batch);
     }
     return Result<PullVectorDistanceOracle>(std::move(oracle));
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate pull distance oracle");
   }
 }
 
 PullVectorDistanceOracle::PullVectorDistanceOracle(
-    PullVectorDistanceOracle&& other) noexcept
-    : meta_(other.meta_),
-      shard_map_(other.shard_map_),
-      local_shard_(other.local_shard_),
-      peers_(other.peers_),
+    PullVectorDistanceOracle &&other) noexcept
+    : meta_(other.meta_), shard_map_(other.shard_map_),
+      local_shard_(other.local_shard_), peers_(other.peers_),
       lanes_(std::move(other.lanes_)),
       read_owner_by_rank_(std::move(other.read_owner_by_rank_)),
-      metric_(other.metric_),
-      implementation_(other.implementation_),
-      use_dot_norm_(other.use_dot_norm_),
-      max_batch_(other.max_batch_),
+      metric_(other.metric_), implementation_(other.implementation_),
+      use_dot_norm_(other.use_dot_norm_), max_batch_(other.max_batch_),
       prepared_operations_(std::move(other.prepared_operations_)),
       prepared_operation_count_(other.prepared_operation_count_),
       resources_(std::move(other.resources_)),
       partitions_(std::move(other.partitions_)) {}
 
-Result<ReadBatchLane*> PullVectorDistanceOracle::LaneFor(
-    std::uint32_t peer_rank) const noexcept {
+Result<ReadBatchLane *>
+PullVectorDistanceOracle::LaneFor(std::uint32_t peer_rank) const noexcept {
   if (peer_rank >= read_owner_by_rank_.size() ||
       read_owner_by_rank_[peer_rank] >= lanes_.size()) {
     return Status(StatusCode::kProtocolError,
@@ -744,23 +738,21 @@ Result<ReadBatchLane*> PullVectorDistanceOracle::LaneFor(
   return lanes_[read_owner_by_rank_[peer_rank]];
 }
 
-Status PullVectorDistanceOracle::CompleteBatch(
-    void* context, ReadBatch& batch) noexcept {
-  auto& operation = *static_cast<PreparedOperation*>(context);
+Status PullVectorDistanceOracle::CompleteBatch(void *context,
+                                               ReadBatch &batch) noexcept {
+  auto &operation = *static_cast<PreparedOperation *>(context);
   RecordFirstFailure(operation, batch.status);
   const auto outcome = ToOperationOutcome(batch.status);
   return operation.binding.Complete(outcome);
 }
 
 StatusCode PullVectorDistanceOracle::CheckBatchControl(
-    void* context,
-    std::chrono::steady_clock::time_point) noexcept {
-  return static_cast<PreparedOperation*>(context)
-      ->binding.CancellationCode();
+    void *context, std::chrono::steady_clock::time_point) noexcept {
+  return static_cast<PreparedOperation *>(context)->binding.CancellationCode();
 }
 
 void PullVectorDistanceOracle::ResetPreparedOperation(
-    PreparedOperation& operation) noexcept {
+    PreparedOperation &operation) noexcept {
   if (operation.binding.prepared()) {
     operation.binding.Reset();
   }
@@ -782,10 +774,8 @@ void PullVectorDistanceOracle::ResetPreparedOperation(
   operation.batch.terminal_callback = nullptr;
   operation.batch.control_context = nullptr;
   operation.batch.control_check = nullptr;
-  operation.batch.state.store(ReadBatchState::kFree,
-                              std::memory_order_release);
-  operation.aggregate_status.store(StatusCode::kOk,
-                                   std::memory_order_relaxed);
+  operation.batch.state.store(ReadBatchState::kFree, std::memory_order_release);
+  operation.aggregate_status.store(StatusCode::kOk, std::memory_order_relaxed);
   operation.local = false;
   operation.state.store(PreparedOperationState::kFree,
                         std::memory_order_release);
@@ -793,9 +783,11 @@ void PullVectorDistanceOracle::ResetPreparedOperation(
   operation.partition->free_records.push_back(operation.slot);
 }
 
-void PullVectorDistanceOracle::ConsumeOperation(PreparedOperation& operation) noexcept {
+void PullVectorDistanceOracle::ConsumeOperation(
+    PreparedOperation &operation) noexcept {
   operation.consumed = true;
-  if (operation.binding.prepared()) operation.binding.Reset();
+  if (operation.binding.prepared())
+    operation.binding.Reset();
   operation.query = {};
   operation.ids = {};
   operation.output = {};
@@ -803,25 +795,24 @@ void PullVectorDistanceOracle::ConsumeOperation(PreparedOperation& operation) no
     ResetPreparedOperation(operation);
 }
 
-void PullVectorDistanceOracle::ReclaimBatch(void* context, ReadBatch&) noexcept {
-  auto& operation = *static_cast<PreparedOperation*>(context);
-  if (operation.consumed) ConsumeOperation(operation);
+void PullVectorDistanceOracle::ReclaimBatch(void *context,
+                                            ReadBatch &) noexcept {
+  auto &operation = *static_cast<PreparedOperation *>(context);
+  if (operation.consumed)
+    ConsumeOperation(operation);
 }
 
-Result<PreparedDistanceOperation>
-PullVectorDistanceOracle::PrepareForWait(
-    QueryWaitPreparation preparation,
-    std::span<const float> query_vector, shard_id_t owner_shard,
-    std::span<const node_id_t> ids, std::span<float> output,
-    DistanceRequestOptions options) {
+Result<PreparedDistanceOperation> PullVectorDistanceOracle::PrepareForWait(
+    QueryWaitPreparation preparation, std::span<const float> query_vector,
+    shard_id_t owner_shard, std::span<const node_id_t> ids,
+    std::span<float> output, DistanceRequestOptions options) {
   static_cast<void>(options);
   if (preparation.controller == nullptr ||
       preparation.ready_publisher == nullptr ||
       preparation.query.generation == 0 || preparation.wait_epoch == 0 ||
       preparation.operation_deadline ==
           std::chrono::steady_clock::time_point{} ||
-      preparation.controller->generation() !=
-          preparation.query.generation ||
+      preparation.controller->generation() != preparation.query.generation ||
       query_vector.size() != meta_->dim || ids.empty() ||
       ids.size() != output.size() || ids.size() > max_batch_ ||
       owner_shard >= shard_map_->ranges().size()) {
@@ -831,59 +822,58 @@ PullVectorDistanceOracle::PrepareForWait(
 
   const auto owner = preparation.controller->owner_search();
   if (owner >= resources_.size())
-    return Status(StatusCode::kInvalidArgument, "READ Search owner is out of range");
-  auto& partition = partitions_[owner];
+    return Status(StatusCode::kInvalidArgument,
+                  "READ Search owner is out of range");
+  auto &partition = partitions_[owner];
   if (partition.free_records.empty())
-    return Status(StatusCode::kResourceExhausted, "prepared pull-distance Search records are full");
+    return Status(StatusCode::kResourceExhausted,
+                  "prepared pull-distance Search records are full");
   const auto operation_slot = partition.free_records.back();
   partition.free_records.pop_back();
-  auto* operation = &prepared_operations_[operation_slot];
+  auto *operation = &prepared_operations_[operation_slot];
   operation->resources->AcquireRecord();
   operation->consumed = false;
-  operation->state.store(PreparedOperationState::kPreparing, std::memory_order_relaxed);
+  operation->state.store(PreparedOperationState::kPreparing,
+                         std::memory_order_relaxed);
 
-  const auto fail =
-      [&](Status status) -> Result<PreparedDistanceOperation> {
+  const auto fail = [&](Status status) -> Result<PreparedDistanceOperation> {
     if (operation->lane != nullptr &&
         operation->batch.state.load(std::memory_order_acquire) ==
             ReadBatchState::kPrepared) {
-      static_cast<void>(
-          operation->lane->CancelPreparedBatch(operation->batch));
+      static_cast<void>(operation->lane->CancelPreparedBatch(operation->batch));
     }
     ResetPreparedOperation(*operation);
     return status;
   };
 
   auto generation = partition.next_ticket++;
-  if (generation == 0) generation = partition.next_ticket++;
-  operation->ticket = {
-      static_cast<ticket_t>(operation_slot) + 1U, generation};
+  if (generation == 0)
+    generation = partition.next_ticket++;
+  operation->ticket = {static_cast<ticket_t>(operation_slot) + 1U, generation};
   operation->query = query_vector;
   operation->ids = ids;
   operation->output = output;
   operation->requests.clear();
   operation->results.clear();
-  operation->aggregate_status.store(StatusCode::kOk,
-                                    std::memory_order_relaxed);
+  operation->aggregate_status.store(StatusCode::kOk, std::memory_order_relaxed);
   operation->local = owner_shard == peers_->local_shard();
 
   if (operation->local) {
     std::size_t index = 0;
     for (; index + 4 <= ids.size(); index += 4) {
-      std::array<const float*, 4> rows{};
+      std::array<const float *, 4> rows{};
       for (std::size_t row = 0; row < rows.size(); ++row) {
         auto location = shard_map_->Locate(ids[index + row]);
-        if (!location.ok() ||
-            location.value().shard_id != owner_shard) {
+        if (!location.ok() || location.value().shard_id != owner_shard) {
           return fail(Status(StatusCode::kOutOfRange,
                              "prepared local distance ID has wrong owner"));
         }
-        rows[row] = local_shard_->TrustedVector(
-            location.value().local_id).data();
+        rows[row] =
+            local_shard_->TrustedVector(location.value().local_id).data();
       }
-      auto computed = ComputeDistanceBatch4(
-          query_vector, rows, metric_,
-          output.subspan(index, rows.size()), implementation_);
+      auto computed = ComputeDistanceBatch4(query_vector, rows, metric_,
+                                            output.subspan(index, rows.size()),
+                                            implementation_);
       if (!computed.ok()) {
         return fail(computed);
       }
@@ -895,8 +885,7 @@ PullVectorDistanceOracle::PrepareForWait(
                            "prepared local distance ID has wrong owner"));
       }
       output[index] = ComputeDistance(
-          query_vector,
-          local_shard_->TrustedVector(location.value().local_id),
+          query_vector, local_shard_->TrustedVector(location.value().local_id),
           metric_, implementation_);
     }
     operation->state.store(PreparedOperationState::kPrepared,
@@ -911,8 +900,8 @@ PullVectorDistanceOracle::PrepareForWait(
       return fail(Status(StatusCode::kOutOfRange,
                          "prepared remote distance ID has wrong owner"));
     }
-    auto remote = peers_->Vector(location.value().shard_id,
-                                 location.value().local_id);
+    auto remote =
+        peers_->Vector(location.value().shard_id, location.value().local_id);
     if (!remote.ok()) {
       return fail(remote.status());
     }
@@ -924,29 +913,34 @@ PullVectorDistanceOracle::PrepareForWait(
       }
       operation->lane = lane.value();
     } else if (remote.value().peer_rank != peer_rank) {
-      return fail(Status(
-          StatusCode::kProtocolError,
-          "prepared pull-distance owner group spans multiple peers"));
+      return fail(
+          Status(StatusCode::kProtocolError,
+                 "prepared pull-distance owner group spans multiple peers"));
     }
-    operation->requests.push_back({
-        remote.value().peer_rank, remote.value().segment,
-        remote.value().offset, {}});
+    operation->requests.push_back({remote.value().peer_rank,
+                                   remote.value().segment,
+                                   remote.value().offset,
+                                   {}});
     operation->results.push_back({});
   }
 
-  auto acquired = operation->resources->Acquire(operation->results, meta_->dim * sizeof(float));
-  if (!acquired.ok()) return fail(acquired);
+  auto acquired = operation->resources->Acquire(operation->results,
+                                                meta_->dim * sizeof(float));
+  if (!acquired.ok())
+    return fail(acquired);
   operation->results_owned = true;
   for (std::size_t index = 0; index < operation->requests.size(); ++index) {
-    const auto& view = operation->results[index];
-    operation->requests[index].destination = {const_cast<std::byte*>(view.data), view.bytes};
+    const auto &view = operation->results[index];
+    operation->requests[index].destination = {
+        const_cast<std::byte *>(view.data), view.bytes};
   }
   const auto lane = operation->lane->owner_lane();
   auto query_ticket = partition.next_ticket++;
-  if (query_ticket == 0) query_ticket = partition.next_ticket++;
+  if (query_ticket == 0)
+    query_ticket = partition.next_ticket++;
   auto bound = operation->binding.Prepare(
-      preparation.query, *preparation.controller,
-      operation->query_operation, *preparation.ready_publisher,
+      preparation.query, *preparation.controller, operation->query_operation,
+      *preparation.ready_publisher,
       {operation_slot, lane, preparation.query.generation,
        preparation.wait_epoch, query_ticket});
   if (!bound.ok()) {
@@ -970,13 +964,12 @@ PullVectorDistanceOracle::PrepareForWait(
   return PreparedDistanceOperation{operation->ticket, lane};
 }
 
-Status PullVectorDistanceOracle::PublishPrepared(
-    DistanceTicket ticket) {
+Status PullVectorDistanceOracle::PublishPrepared(DistanceTicket ticket) {
   if (ticket.value == 0 || ticket.value > prepared_operation_count_) {
     return Status(StatusCode::kProtocolError,
                   "prepared pull-distance ticket is invalid");
   }
-  auto& operation = prepared_operations_[ticket.value - 1U];
+  auto &operation = prepared_operations_[ticket.value - 1U];
   if (operation.ticket != ticket ||
       operation.state.load(std::memory_order_acquire) !=
           PreparedOperationState::kPrepared) {
@@ -997,13 +990,12 @@ Status PullVectorDistanceOracle::PublishPrepared(
   return Status::Ok();
 }
 
-Status PullVectorDistanceOracle::CancelPrepared(
-    DistanceTicket ticket) {
+Status PullVectorDistanceOracle::CancelPrepared(DistanceTicket ticket) {
   if (ticket.value == 0 || ticket.value > prepared_operation_count_) {
     return Status(StatusCode::kProtocolError,
                   "prepared pull-distance cancellation ticket is invalid");
   }
-  auto& operation = prepared_operations_[ticket.value - 1U];
+  auto &operation = prepared_operations_[ticket.value - 1U];
   if (operation.ticket != ticket ||
       operation.state.load(std::memory_order_acquire) !=
           PreparedOperationState::kPrepared) {
@@ -1023,7 +1015,7 @@ Status PullVectorDistanceOracle::Finish(DistanceTicket ticket) {
     return Status(StatusCode::kProtocolError,
                   "prepared pull-distance finish ticket is invalid");
   }
-  auto& operation = prepared_operations_[ticket.value - 1U];
+  auto &operation = prepared_operations_[ticket.value - 1U];
   if (operation.ticket != ticket ||
       operation.state.load(std::memory_order_acquire) !=
           PreparedOperationState::kPublished) {
@@ -1035,41 +1027,39 @@ Status PullVectorDistanceOracle::Finish(DistanceTicket ticket) {
     return Status::Ok();
   }
 
-  const auto aggregate = operation.aggregate_status.load(
-      std::memory_order_acquire);
-  Status result =
-      aggregate == StatusCode::kOk
-          ? Status::Ok()
-          : Status(aggregate, "prepared vector READ batch failed");
+  const auto aggregate =
+      operation.aggregate_status.load(std::memory_order_acquire);
+  Status result = aggregate == StatusCode::kOk
+                      ? Status::Ok()
+                      : Status(aggregate, "prepared vector READ batch failed");
   if (result.ok()) {
     std::size_t index = 0;
     for (; index + 4 <= operation.results.size(); index += 4) {
-      std::array<const float*, 4> rows{};
+      std::array<const float *, 4> rows{};
       for (std::size_t row = 0; row < rows.size(); ++row) {
-        const auto& view = operation.results[index + row];
+        const auto &view = operation.results[index + row];
 #ifndef NDEBUG
         assert(view.bytes == meta_->dim * sizeof(float));
 #endif
-        rows[row] = reinterpret_cast<const float*>(view.data);
+        rows[row] = reinterpret_cast<const float *>(view.data);
       }
       auto computed = ComputeDistanceBatch4(
           operation.query, rows, metric_,
-          operation.output.subspan(index, rows.size()),
-          implementation_);
+          operation.output.subspan(index, rows.size()), implementation_);
       if (!computed.ok()) {
         result = computed;
         break;
       }
     }
     for (; result.ok() && index < operation.results.size(); ++index) {
-      const auto& view = operation.results[index];
+      const auto &view = operation.results[index];
 #ifndef NDEBUG
       assert(view.bytes == meta_->dim * sizeof(float));
 #endif
       operation.output[index] = ComputeDistance(
           operation.query,
-          std::span<const float>(
-              reinterpret_cast<const float*>(view.data), meta_->dim),
+          std::span<const float>(reinterpret_cast<const float *>(view.data),
+                                 meta_->dim),
           metric_, implementation_);
     }
   }
@@ -1079,25 +1069,22 @@ Status PullVectorDistanceOracle::Finish(DistanceTicket ticket) {
 
 Result<bool> PullVectorDistanceOracle::ComputeLocalTrusted(
     std::span<const float> query_vector, shard_id_t owner_shard,
-    std::span<const std::uint64_t> local_offsets,
-    std::span<float> output) {
+    std::span<const std::uint64_t> local_offsets, std::span<float> output) {
   try {
-    const QueryVectorLease lease{
-        {}, std::make_shared<const std::vector<float>>(
-                query_vector.begin(), query_vector.end()),
-        ScalarDot(query_vector, query_vector)};
-    return ComputeLocalTrustedLease(lease, owner_shard, local_offsets,
-                                    output);
-  } catch (const std::bad_alloc&) {
+    const QueryVectorLease lease{{},
+                                 std::make_shared<const std::vector<float>>(
+                                     query_vector.begin(), query_vector.end()),
+                                 ScalarDot(query_vector, query_vector)};
+    return ComputeLocalTrustedLease(lease, owner_shard, local_offsets, output);
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to snapshot trusted local query");
   }
 }
 
 Result<bool> PullVectorDistanceOracle::ComputeLocalTrustedLease(
-    const QueryVectorLease& lease, shard_id_t owner_shard,
-    std::span<const std::uint64_t> local_offsets,
-    std::span<float> output) {
+    const QueryVectorLease &lease, shard_id_t owner_shard,
+    std::span<const std::uint64_t> local_offsets, std::span<float> output) {
   if (owner_shard != peers_->local_shard()) {
     return false;
   }
@@ -1113,46 +1100,41 @@ Result<bool> PullVectorDistanceOracle::ComputeLocalTrustedLease(
          next < std::min(index + 8, local_offsets.size()); ++next) {
       local_shard_->PrefetchVector(local_offsets[next]);
     }
-    std::array<const float*, 4> rows{};
+    std::array<const float *, 4> rows{};
     for (std::size_t row = 0; row < rows.size(); ++row) {
-      rows[row] = local_shard_->TrustedVector(
-          local_offsets[index + row]).data();
+      rows[row] =
+          local_shard_->TrustedVector(local_offsets[index + row]).data();
     }
     Status computed;
     if (use_dot_norm_) {
       std::array<float, 4> norms{};
       for (std::size_t row = 0; row < norms.size(); ++row) {
-        norms[row] = local_shard_->TrustedVectorNorm(
-            local_offsets[index + row]);
+        norms[row] =
+            local_shard_->TrustedVectorNorm(local_offsets[index + row]);
       }
       computed = ComputeL2DotNormBatch4(
           query_vector, lease.l2_norm, rows, norms,
           output.subspan(index, rows.size()), implementation_);
     } else {
-      computed = ComputeDistanceBatch4(
-          query_vector, rows, metric_,
-          output.subspan(index, rows.size()), implementation_);
+      computed = ComputeDistanceBatch4(query_vector, rows, metric_,
+                                       output.subspan(index, rows.size()),
+                                       implementation_);
     }
     if (!computed.ok()) {
       return computed;
     }
   }
   for (; index < local_offsets.size(); ++index) {
-    const auto vector =
-        local_shard_->TrustedVector(local_offsets[index]);
+    const auto vector = local_shard_->TrustedVector(local_offsets[index]);
     output[index] =
         use_dot_norm_
-            ? std::max(
-                  0.0F,
-                  L2FromDotNorm(
-                      lease.l2_norm,
-                      local_shard_->TrustedVectorNorm(
-                          local_offsets[index]),
-                      ScalarDot(query_vector, vector)))
-            : ComputeDistance(query_vector, vector, metric_,
-                              implementation_);
+            ? std::max(0.0F, L2FromDotNorm(lease.l2_norm,
+                                           local_shard_->TrustedVectorNorm(
+                                               local_offsets[index]),
+                                           ScalarDot(query_vector, vector)))
+            : ComputeDistance(query_vector, vector, metric_, implementation_);
   }
   return true;
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

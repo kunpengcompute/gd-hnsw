@@ -70,11 +70,12 @@ struct QueryOperationHandle {
 };
 
 class QueryOperationState {
- public:
+public:
   [[nodiscard]] Status Prepare(QueryOperationHandle handle) noexcept;
   [[nodiscard]] Status MarkPublished(QueryOperationHandle handle) noexcept;
-  [[nodiscard]] Result<bool> TryMarkTerminal(
-      QueryOperationHandle handle, OperationTerminalOutcome outcome) noexcept;
+  [[nodiscard]] Result<bool>
+  TryMarkTerminal(QueryOperationHandle handle,
+                  OperationTerminalOutcome outcome) noexcept;
   void Reset() noexcept;
 
   [[nodiscard]] QueryOperationHandle handle() const noexcept { return handle_; }
@@ -82,7 +83,7 @@ class QueryOperationState {
     return outcome_;
   }
 
- private:
+private:
   enum class State : std::uint8_t { kFree, kPrepared, kPublished, kTerminal };
   QueryOperationHandle handle_{};
   State state_{State::kFree};
@@ -127,21 +128,21 @@ class QueryRunController;
 // final operation transition is also the unique producer of the selected
 // ready_queue[lane][search_worker] cell.
 class QueryReadyPublisher {
- public:
+public:
   virtual ~QueryReadyPublisher() = default;
-  [[nodiscard]] virtual Status PublishReady(
-      std::uint32_t producer_lane, QueryReadyHandle handle) noexcept = 0;
-  [[nodiscard]] virtual Status DeferReady(
-      std::uint32_t producer_lane, QueryReadyHandle handle,
-      QueryRunController* controller) noexcept {
+  [[nodiscard]] virtual Status
+  PublishReady(std::uint32_t producer_lane,
+               QueryReadyHandle handle) noexcept = 0;
+  [[nodiscard]] virtual Status
+  DeferReady(std::uint32_t producer_lane, QueryReadyHandle handle,
+             QueryRunController *controller) noexcept {
     static_cast<void>(producer_lane);
     static_cast<void>(handle);
     static_cast<void>(controller);
     return Status(StatusCode::kInvalidArgument,
                   "ready publisher does not support deferred publication");
   }
-  virtual void RecordWaitProfile(
-      QueryWaitProfileSample sample) noexcept {
+  virtual void RecordWaitProfile(QueryWaitProfileSample sample) noexcept {
     static_cast<void>(sample);
   }
 };
@@ -156,47 +157,55 @@ static_assert(std::is_trivially_copyable_v<QueryRetryHandle>);
 // Owns the single-runner state. Results must be written before CompleteOne();
 // the final acq_rel decrement publishes them to the next acquire runner.
 class QueryRunController {
- public:
+public:
   explicit QueryRunController(std::uint64_t generation,
                               std::uint32_t max_lanes = 1,
                               bool timing_enabled = false);
 
   // Control may rebind only before publishing a successful admission.
   [[nodiscard]] Status BindOwner(std::uint32_t owner) noexcept;
-  [[nodiscard]] std::uint32_t owner_search() const noexcept { return owner_search_; }
+  [[nodiscard]] std::uint32_t owner_search() const noexcept {
+    return owner_search_;
+  }
   [[nodiscard]] Status Admit() noexcept;
   [[nodiscard]] bool TryAcquire() noexcept;
   [[nodiscard]] Status Requeue() noexcept;
   [[nodiscard]] Result<std::uint64_t> RequeueForRetry() noexcept;
-  [[nodiscard]] Result<std::uint64_t> BeginWait(
-      std::span<const LaneOperationCount> lanes,
-      std::uint64_t generation) noexcept;
+  [[nodiscard]] Result<std::uint64_t>
+  BeginWait(std::span<const LaneOperationCount> lanes,
+            std::uint64_t generation) noexcept;
   [[nodiscard]] Status BeginDeferredReady() noexcept;
   void EndDeferredReady() noexcept;
-  [[nodiscard]] Result<bool> PublishDeferredReady(
-      std::uint64_t generation, std::uint64_t wait_epoch) noexcept;
+  [[nodiscard]] Result<bool>
+  PublishDeferredReady(std::uint64_t generation,
+                       std::uint64_t wait_epoch) noexcept;
   [[nodiscard]] bool ready_publication_deferred() const noexcept {
     return deferred_ready_mode_.load(std::memory_order_acquire);
   }
-  [[nodiscard]] Result<bool> OnOperationTerminal(
-      QueryOperationState& operation, QueryOperationHandle handle,
-      OperationTerminalOutcome outcome) noexcept;
+  [[nodiscard]] Result<bool>
+  OnOperationTerminal(QueryOperationState &operation,
+                      QueryOperationHandle handle,
+                      OperationTerminalOutcome outcome) noexcept;
   [[nodiscard]] Status RequestFailure(std::uint64_t generation,
                                       TerminalOutcome outcome,
                                       StatusCode code) noexcept;
   // Checks freshness; owner routing is an internal invariant asserted in Debug.
-  [[nodiscard]] bool ValidateReadyHandle(QueryReadyHandle handle) const noexcept;
-  [[nodiscard]] bool ValidateRetryHandle(QueryRetryHandle handle) const noexcept;
+  [[nodiscard]] bool
+  ValidateReadyHandle(QueryReadyHandle handle) const noexcept;
+  [[nodiscard]] bool
+  ValidateRetryHandle(QueryRetryHandle handle) const noexcept;
 
   // Poll-compatible bridge for legacy GraphReader/DistanceOracle adapters.
-  // The production distributed runner invokes completion from its Progress owner and
-  // never keeps a Search Worker polling a Waiting query.
+  // The production distributed runner invokes completion from its Progress
+  // owner and never keeps a Search Worker polling a Waiting query.
   [[nodiscard]] Status Park(std::uint32_t operation_count) noexcept;
   [[nodiscard]] Result<bool> CompleteOne(std::uint64_t generation) noexcept;
   [[nodiscard]] Status MarkCompleted() noexcept;
   void MarkFailed() noexcept;
 
-  [[nodiscard]] RunState state() const noexcept { return state_.load(std::memory_order_acquire); }
+  [[nodiscard]] RunState state() const noexcept {
+    return state_.load(std::memory_order_acquire);
+  }
   [[nodiscard]] std::uint32_t pending() const noexcept {
     return remaining_operations_.load(std::memory_order_acquire);
   }
@@ -213,8 +222,7 @@ class QueryRunController {
     return retry_epoch_.load(std::memory_order_acquire);
   }
   [[nodiscard]] std::uint64_t TakeReadyTimestampNanoseconds() noexcept {
-    return ready_timestamp_nanoseconds_.exchange(
-        0, std::memory_order_acq_rel);
+    return ready_timestamp_nanoseconds_.exchange(0, std::memory_order_acq_rel);
   }
   [[nodiscard]] std::uint64_t ready_timestamp_nanoseconds() const noexcept {
     return ready_timestamp_nanoseconds_.load(std::memory_order_acquire);
@@ -231,8 +239,7 @@ class QueryRunController {
   }
   [[nodiscard]] std::uint32_t TakeCriticalReadyLane() noexcept {
     return critical_ready_lane_.exchange(
-        std::numeric_limits<std::uint32_t>::max(),
-        std::memory_order_acq_rel);
+        std::numeric_limits<std::uint32_t>::max(), std::memory_order_acq_rel);
   }
   [[nodiscard]] TerminalOutcome terminal_outcome() const noexcept {
     return static_cast<TerminalOutcome>(
@@ -242,11 +249,13 @@ class QueryRunController {
     return static_cast<StatusCode>(
         (failure_intent_.load(std::memory_order_acquire) >> 8U) & 0xffU);
   }
-  [[nodiscard]] StatusCode CancellationCode(
-      std::uint64_t generation) const noexcept;
-  [[nodiscard]] std::uint64_t generation() const noexcept { return generation_; }
+  [[nodiscard]] StatusCode
+  CancellationCode(std::uint64_t generation) const noexcept;
+  [[nodiscard]] std::uint64_t generation() const noexcept {
+    return generation_;
+  }
 
- private:
+private:
   std::uint32_t owner_search_{0};
   bool execution_started_{false};
   struct alignas(64) LanePending {
@@ -254,9 +263,9 @@ class QueryRunController {
     std::atomic<std::uint64_t> epoch{0};
   };
 
-  [[nodiscard]] Result<bool> CompleteLaneOperation(
-      std::uint32_t lane, std::uint64_t generation,
-      std::uint64_t wait_epoch) noexcept;
+  [[nodiscard]] Result<bool>
+  CompleteLaneOperation(std::uint32_t lane, std::uint64_t generation,
+                        std::uint64_t wait_epoch) noexcept;
 
   std::uint64_t generation_{0};
   std::uint32_t max_lanes_{0};
@@ -284,10 +293,10 @@ class QueryRunController {
 // operation also completes the final participating lane, the binding publishes
 // the sole ready handle without returning to a polling Search/bridge thread.
 class QueryOperationBinding {
- public:
-  [[nodiscard]] Status Prepare(QueryKey query, QueryRunController& controller,
-                               QueryOperationState& operation,
-                               QueryReadyPublisher& ready_publisher,
+public:
+  [[nodiscard]] Status Prepare(QueryKey query, QueryRunController &controller,
+                               QueryOperationState &operation,
+                               QueryReadyPublisher &ready_publisher,
                                QueryOperationHandle handle) noexcept;
   [[nodiscard]] Status MarkPublished() noexcept;
   [[nodiscard]] Status Complete(OperationTerminalOutcome outcome) noexcept;
@@ -296,13 +305,15 @@ class QueryOperationBinding {
 
   [[nodiscard]] QueryOperationHandle handle() const noexcept { return handle_; }
   [[nodiscard]] QueryKey query() const noexcept { return query_; }
-  [[nodiscard]] bool prepared() const noexcept { return controller_ != nullptr; }
+  [[nodiscard]] bool prepared() const noexcept {
+    return controller_ != nullptr;
+  }
 
- private:
+private:
   QueryKey query_{};
-  QueryRunController* controller_{nullptr};
-  QueryOperationState* operation_{nullptr};
-  QueryReadyPublisher* ready_publisher_{nullptr};
+  QueryRunController *controller_{nullptr};
+  QueryOperationState *operation_{nullptr};
+  QueryReadyPublisher *ready_publisher_{nullptr};
   QueryOperationHandle handle_{};
 };
 
@@ -402,4 +413,4 @@ enum class SearchStepResult : std::uint8_t {
   kFailed,
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

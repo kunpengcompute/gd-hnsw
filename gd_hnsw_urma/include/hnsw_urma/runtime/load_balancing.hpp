@@ -26,13 +26,12 @@ struct LaneLoadSample {
   std::uint64_t recent_latency_ns{0};
 };
 
-template <typename Sample>
-class LoadSnapshotArray {
- public:
+template <typename Sample> class LoadSnapshotArray {
+public:
   static_assert(std::is_trivially_copyable_v<Sample>);
 
-  [[nodiscard]] static Result<std::unique_ptr<LoadSnapshotArray>> Create(
-      std::uint32_t count) {
+  [[nodiscard]] static Result<std::unique_ptr<LoadSnapshotArray>>
+  Create(std::uint32_t count) {
     if (count == 0) {
       return Status(StatusCode::kInvalidArgument,
                     "load snapshot count must be non-zero");
@@ -43,7 +42,7 @@ class LoadSnapshotArray {
       snapshots->count_ = count;
       snapshots->entries_ = std::make_unique<Entry[]>(count);
       return snapshots;
-    } catch (const std::bad_alloc&) {
+    } catch (const std::bad_alloc &) {
       return Status(StatusCode::kResourceExhausted,
                     "unable to allocate load snapshots");
     }
@@ -53,7 +52,7 @@ class LoadSnapshotArray {
     if (index >= count_) {
       return;
     }
-    auto& entry = entries_[index];
+    auto &entry = entries_[index];
     entry.sequence.fetch_add(1, std::memory_order_seq_cst);
     std::array<std::uint64_t, kWords> words{};
     std::memcpy(words.data(), &sample, sizeof(Sample));
@@ -70,7 +69,7 @@ class LoadSnapshotArray {
       return Status(StatusCode::kResourceExhausted,
                     "load snapshot is unavailable");
     }
-    const auto& entry = entries_[index];
+    const auto &entry = entries_[index];
     std::array<std::uint64_t, kWords> words{};
     while (true) {
       const auto before = entry.sequence.load(std::memory_order_seq_cst);
@@ -85,7 +84,7 @@ class LoadSnapshotArray {
         Sample sample{};
         // Sample is trivially copyable; the explicit void pointer marks this as
         // an intentional restoration from raw storage for GCC's diagnostics.
-        std::memcpy(static_cast<void*>(&sample), words.data(), sizeof(Sample));
+        std::memcpy(static_cast<void *>(&sample), words.data(), sizeof(Sample));
         return sample;
       }
     }
@@ -93,10 +92,9 @@ class LoadSnapshotArray {
 
   [[nodiscard]] std::uint32_t size() const noexcept { return count_; }
 
- private:
+private:
   static constexpr std::size_t kWords =
-      (sizeof(Sample) + sizeof(std::uint64_t) - 1U) /
-      sizeof(std::uint64_t);
+      (sizeof(Sample) + sizeof(std::uint64_t) - 1U) / sizeof(std::uint64_t);
   struct alignas(64) Entry {
     std::atomic<std::uint64_t> sequence{0};
     std::atomic<bool> valid{false};
@@ -111,20 +109,22 @@ class LoadSnapshotArray {
 using LaneLoadSnapshots = LoadSnapshotArray<LaneLoadSample>;
 
 [[nodiscard]] std::uint64_t LaneLoadScore(LaneLoadSample sample) noexcept;
-[[nodiscard]] Result<std::uint32_t> SelectLanePowerOfTwo(
-    QueryKey query, std::uint32_t destination_rank,
-    const LaneLoadSnapshots* snapshots, std::uint32_t lane_count) noexcept;
+[[nodiscard]] Result<std::uint32_t>
+SelectLanePowerOfTwo(QueryKey query, std::uint32_t destination_rank,
+                     const LaneLoadSnapshots *snapshots,
+                     std::uint32_t lane_count) noexcept;
 
 class QueryLaneAffinity {
- public:
-  [[nodiscard]] static Result<QueryLaneAffinity> Create(
-      std::uint32_t destination_count);
-  [[nodiscard]] Result<std::uint32_t> SelectOrGet(
-      QueryKey query, std::uint32_t destination_rank,
-      const LaneLoadSnapshots* snapshots, std::uint32_t lane_count) noexcept;
+public:
+  [[nodiscard]] static Result<QueryLaneAffinity>
+  Create(std::uint32_t destination_count);
+  [[nodiscard]] Result<std::uint32_t>
+  SelectOrGet(QueryKey query, std::uint32_t destination_rank,
+              const LaneLoadSnapshots *snapshots,
+              std::uint32_t lane_count) noexcept;
   void Clear() noexcept;
 
- private:
+private:
   std::vector<std::uint32_t> lanes_;
 };
 
@@ -132,12 +132,13 @@ class QueryLaneAffinity {
 // for a reused QuerySlot are replaced only by a newer generation; active
 // generation mappings never migrate because of changing snapshots.
 class ConcurrentLaneAffinityTable {
- public:
+public:
   [[nodiscard]] static Result<std::unique_ptr<ConcurrentLaneAffinityTable>>
   Create(std::uint32_t capacity);
-  [[nodiscard]] Result<std::uint32_t> SelectOrGet(
-      QueryKey query, std::uint32_t destination_rank,
-      const LaneLoadSnapshots* snapshots, std::uint32_t lane_count) noexcept;
+  [[nodiscard]] Result<std::uint32_t>
+  SelectOrGet(QueryKey query, std::uint32_t destination_rank,
+              const LaneLoadSnapshots *snapshots,
+              std::uint32_t lane_count) noexcept;
   [[nodiscard]] std::uint64_t hits() const noexcept {
     return hits_.load(std::memory_order_relaxed);
   }
@@ -151,7 +152,7 @@ class ConcurrentLaneAffinityTable {
     return capacity_rejections_.load(std::memory_order_relaxed);
   }
 
- private:
+private:
   enum class EntryState : std::uint8_t { kFree, kWriting, kReady };
   struct alignas(64) Entry {
     std::atomic<EntryState> state{EntryState::kFree};
@@ -170,4 +171,4 @@ class ConcurrentLaneAffinityTable {
   std::atomic<std::uint64_t> capacity_rejections_{0};
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

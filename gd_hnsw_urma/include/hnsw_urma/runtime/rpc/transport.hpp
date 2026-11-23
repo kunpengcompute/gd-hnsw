@@ -76,21 +76,22 @@ struct RpcTransportPeerSnapshot {
 };
 
 class RpcTransportOwner {
- public:
-  [[nodiscard]] static Result<std::unique_ptr<RpcTransportOwner>> Create(
-      RpcTransportConfig config,
-      std::span<const std::uint32_t> owned_peers,
-      LanePostEngine& engine, DmaVisibilityDomain& visibility,
-      RpcMailboxMemory& memory, RpcClientOwner& client,
-      RpcServerRuntime& server);
+public:
+  [[nodiscard]] static Result<std::unique_ptr<RpcTransportOwner>>
+  Create(RpcTransportConfig config, std::span<const std::uint32_t> owned_peers,
+         LanePostEngine &engine, DmaVisibilityDomain &visibility,
+         RpcMailboxMemory &memory, RpcClientOwner &client,
+         RpcServerRuntime &server);
   [[nodiscard]] Status Progress();
   [[nodiscard]] bool drained() const noexcept;
   [[nodiscard]] Status fatal_status() const { return fatal_; }
-  [[nodiscard]] RpcTransportProfile profile() const noexcept { return profile_; }
-  [[nodiscard]] Result<RpcTransportPeerSnapshot> PeerSnapshot(
-      std::uint32_t peer_rank) const;
+  [[nodiscard]] RpcTransportProfile profile() const noexcept {
+    return profile_;
+  }
+  [[nodiscard]] Result<RpcTransportPeerSnapshot>
+  PeerSnapshot(std::uint32_t peer_rank) const;
 
- private:
+private:
   enum class TxKind : std::uint8_t { kRequest, kResponse };
   enum class ClientRequestSlotState : std::uint8_t {
     kFree,
@@ -127,8 +128,8 @@ class RpcTransportOwner {
   [[nodiscard]] Result<std::uint32_t> ReserveTx(TxKind kind);
   void ReleaseTx(std::uint32_t slot) noexcept;
   [[nodiscard]] std::optional<std::uint32_t> AcquireRequestStaging() noexcept;
-  [[nodiscard]] std::optional<std::uint32_t> AcquireRequestSlot(
-      std::uint32_t peer_rank) noexcept;
+  [[nodiscard]] std::optional<std::uint32_t>
+  AcquireRequestSlot(std::uint32_t peer_rank) noexcept;
   [[nodiscard]] Status PollCompletions();
   [[nodiscard]] Status ScanResponses();
   [[nodiscard]] Status PostResponses();
@@ -138,11 +139,11 @@ class RpcTransportOwner {
   RpcTransportConfig config_{};
   std::vector<std::uint32_t> owned_peers_;
   std::vector<PeerState> peers_;
-  LanePostEngine* engine_{nullptr};
-  DmaVisibilityDomain* visibility_{nullptr};
-  RpcMailboxMemory* memory_{nullptr};
-  RpcClientOwner* client_{nullptr};
-  RpcServerRuntime* server_{nullptr};
+  LanePostEngine *engine_{nullptr};
+  DmaVisibilityDomain *visibility_{nullptr};
+  RpcMailboxMemory *memory_{nullptr};
+  RpcClientOwner *client_{nullptr};
+  RpcServerRuntime *server_{nullptr};
   std::vector<TxSlot> tx_slots_;
   std::vector<bool> request_staging_busy_;
   std::vector<TransportCompletion> completion_scratch_;
@@ -156,4 +157,4 @@ class RpcTransportOwner {
   RpcTransportProfile profile_;
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

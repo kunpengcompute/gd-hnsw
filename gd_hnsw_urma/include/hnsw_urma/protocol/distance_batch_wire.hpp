@@ -101,28 +101,38 @@ struct DistanceBatchResponseTaskView {
 };
 
 class DistanceBatchRequestView {
- public:
-  [[nodiscard]] const DistanceBatchHeader& header() const noexcept { return header_; }
-  [[nodiscard]] std::size_t task_count() const noexcept { return descriptors_.size(); }
-  [[nodiscard]] Result<DistanceBatchRequestTaskView> Task(std::size_t index) const noexcept;
+public:
+  [[nodiscard]] const DistanceBatchHeader &header() const noexcept {
+    return header_;
+  }
+  [[nodiscard]] std::size_t task_count() const noexcept {
+    return descriptors_.size();
+  }
+  [[nodiscard]] Result<DistanceBatchRequestTaskView>
+  Task(std::size_t index) const noexcept;
 
- private:
-  friend Result<DistanceBatchRequestView> DecodeDistanceBatchRequest(
-      std::span<const std::byte>) noexcept;
+private:
+  friend Result<DistanceBatchRequestView>
+      DecodeDistanceBatchRequest(std::span<const std::byte>) noexcept;
   DistanceBatchHeader header_{};
   std::span<const DistanceBatchRequestTask> descriptors_;
   std::span<const std::byte> message_;
 };
 
 class DistanceBatchResponseView {
- public:
-  [[nodiscard]] const DistanceBatchHeader& header() const noexcept { return header_; }
-  [[nodiscard]] std::size_t task_count() const noexcept { return descriptors_.size(); }
-  [[nodiscard]] Result<DistanceBatchResponseTaskView> Task(std::size_t index) const noexcept;
+public:
+  [[nodiscard]] const DistanceBatchHeader &header() const noexcept {
+    return header_;
+  }
+  [[nodiscard]] std::size_t task_count() const noexcept {
+    return descriptors_.size();
+  }
+  [[nodiscard]] Result<DistanceBatchResponseTaskView>
+  Task(std::size_t index) const noexcept;
 
- private:
-  friend Result<DistanceBatchResponseView> DecodeDistanceBatchResponse(
-      std::span<const std::byte>) noexcept;
+private:
+  friend Result<DistanceBatchResponseView>
+      DecodeDistanceBatchResponse(std::span<const std::byte>) noexcept;
   DistanceBatchHeader header_{};
   std::span<const DistanceBatchResponseTask> descriptors_;
   std::span<const std::byte> message_;
@@ -133,42 +143,42 @@ class DistanceBatchResponseView {
     std::uint64_t total_query_value_count) noexcept;
 [[nodiscard]] Result<std::size_t> EncodedDistanceBatchRequestBytes(
     std::span<const DistanceBatchRequestTaskInput> tasks) noexcept;
-[[nodiscard]] Result<std::size_t> EncodeDistanceBatchRequest(
-    std::uint64_t batch_sequence,
-    std::span<const DistanceBatchRequestTaskInput> tasks,
-    std::span<std::byte> output) noexcept;
-[[nodiscard]] Result<DistanceBatchHeader> DecodeDistanceBatchRequestEnvelope(
-    std::span<const std::byte> message) noexcept;
-[[nodiscard]] Result<DistanceBatchRequestView> DecodeDistanceBatchRequest(
-    std::span<const std::byte> message) noexcept;
+[[nodiscard]] Result<std::size_t>
+EncodeDistanceBatchRequest(std::uint64_t batch_sequence,
+                           std::span<const DistanceBatchRequestTaskInput> tasks,
+                           std::span<std::byte> output) noexcept;
+[[nodiscard]] Result<DistanceBatchHeader>
+DecodeDistanceBatchRequestEnvelope(std::span<const std::byte> message) noexcept;
+[[nodiscard]] Result<DistanceBatchRequestView>
+DecodeDistanceBatchRequest(std::span<const std::byte> message) noexcept;
 
-[[nodiscard]] Result<std::size_t> DistanceBatchResponseBytesForShape(
-    std::uint32_t task_count, std::uint64_t total_distance_count) noexcept;
+[[nodiscard]] Result<std::size_t>
+DistanceBatchResponseBytesForShape(std::uint32_t task_count,
+                                   std::uint64_t total_distance_count) noexcept;
 [[nodiscard]] Result<std::size_t> EncodedDistanceBatchResponseBytes(
     std::span<const DistanceBatchResponseTaskInput> tasks) noexcept;
 [[nodiscard]] Result<std::size_t> EncodeDistanceBatchResponse(
     std::uint64_t batch_sequence,
     std::span<const DistanceBatchResponseTaskInput> tasks,
     std::span<std::byte> output) noexcept;
-[[nodiscard]] Result<DistanceBatchResponseView> DecodeDistanceBatchResponse(
-    std::span<const std::byte> message) noexcept;
+[[nodiscard]] Result<DistanceBatchResponseView>
+DecodeDistanceBatchResponse(std::span<const std::byte> message) noexcept;
 
 class DistanceBatchResponseWriter {
- public:
-  [[nodiscard]] static Result<DistanceBatchResponseWriter> Create(
-      std::uint64_t batch_sequence, std::uint32_t task_count,
-      std::span<std::byte> output) noexcept;
-  [[nodiscard]] Status Append(ticket_t task_ticket,
-                              std::uint32_t query_slot_id,
+public:
+  [[nodiscard]] static Result<DistanceBatchResponseWriter>
+  Create(std::uint64_t batch_sequence, std::uint32_t task_count,
+         std::span<std::byte> output) noexcept;
+  [[nodiscard]] Status Append(ticket_t task_ticket, std::uint32_t query_slot_id,
                               std::span<const node_id_t> ids,
                               std::span<const float> distances) noexcept;
   [[nodiscard]] Result<std::size_t> Finish() noexcept;
 
- private:
+private:
   std::span<std::byte> output_;
   DistanceBatchHeader header_{};
   std::uint32_t next_task_{0};
   std::size_t payload_cursor_{0};
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

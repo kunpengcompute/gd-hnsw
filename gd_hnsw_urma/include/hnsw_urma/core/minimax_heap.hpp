@@ -15,7 +15,7 @@ struct HeapEntry {
   node_id_t id{INVALID_NODE_ID};
   float distance{0.0F};
 
-  friend bool operator==(const HeapEntry&, const HeapEntry&) = default;
+  friend bool operator==(const HeapEntry &, const HeapEntry &) = default;
 };
 
 // Fixed-capacity HNSW candidate/result pair. The caller's VisitedTable owns
@@ -23,7 +23,7 @@ struct HeapEntry {
 // the bounded result set. Candidate handles use generation checks so evicted
 // entries can be discarded lazily without scanning the result heap.
 class MinimaxHeap {
- public:
+public:
   [[nodiscard]] static Result<MinimaxHeap> Create(std::uint32_t capacity);
 
   [[nodiscard]] Result<bool> Push(node_id_t id, float distance);
@@ -35,13 +35,15 @@ class MinimaxHeap {
   [[nodiscard]] std::vector<HeapEntry> ExtractSorted() const;
   void Clear() noexcept;
 
-  [[nodiscard]] std::size_t result_size() const noexcept { return result_heap_.size(); }
+  [[nodiscard]] std::size_t result_size() const noexcept {
+    return result_heap_.size();
+  }
   [[nodiscard]] std::size_t candidate_size() const noexcept {
     return current_candidate_count_;
   }
   [[nodiscard]] std::uint32_t capacity() const noexcept { return capacity_; }
 
- private:
+private:
   using EntryIndex = std::uint32_t;
 
   struct EntryState {
@@ -61,8 +63,8 @@ class MinimaxHeap {
 
   [[nodiscard]] Result<bool> PushImpl(node_id_t id, float distance,
                                       bool check_duplicate);
-  [[nodiscard]] bool IsCurrentCandidate(
-      const CandidateHandle& candidate) const noexcept;
+  [[nodiscard]] bool
+  IsCurrentCandidate(const CandidateHandle &candidate) const noexcept;
   void CompactCandidates();
 
   std::uint32_t capacity_{0};
@@ -72,4 +74,4 @@ class MinimaxHeap {
   std::vector<CandidateHandle> candidate_heap_;
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

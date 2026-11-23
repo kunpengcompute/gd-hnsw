@@ -40,22 +40,22 @@ struct LaneDrainSnapshot {
 // are sequentially consistent atomics guarded by a sequence counter, so the
 // control plane observes a consistent lane state without a data-plane mutex.
 class DataPlaneDrainTracker {
- public:
-  [[nodiscard]] static Result<std::unique_ptr<DataPlaneDrainTracker>> Create(
-      std::uint32_t communication_owner_count);
+public:
+  [[nodiscard]] static Result<std::unique_ptr<DataPlaneDrainTracker>>
+  Create(std::uint32_t communication_owner_count);
 
   void PublishLane(std::uint32_t lane, LaneDrainSnapshot snapshot) noexcept;
-  [[nodiscard]] Result<LaneDrainSnapshot> ReadLane(
-      std::uint32_t lane) const noexcept;
+  [[nodiscard]] Result<LaneDrainSnapshot>
+  ReadLane(std::uint32_t lane) const noexcept;
   void PublishActiveQueries(std::uint32_t active) noexcept;
 
   [[nodiscard]] Status StopAdmission() noexcept;
   [[nodiscard]] Status MarkLocalQueriesComplete() noexcept;
   [[nodiscard]] Status BeginDrainAfterRankConsensus() noexcept;
   [[nodiscard]] Status TryMarkDrained() noexcept;
-  [[nodiscard]] Status WaitUntilDrained(
-      std::chrono::steady_clock::time_point deadline,
-      const std::function<Status()>& health_check);
+  [[nodiscard]] Status
+  WaitUntilDrained(std::chrono::steady_clock::time_point deadline,
+                   const std::function<Status()> &health_check);
   [[nodiscard]] Status MarkGlobalDrainConsensus() noexcept;
   [[nodiscard]] Status MarkStopped() noexcept;
 
@@ -64,7 +64,7 @@ class DataPlaneDrainTracker {
     return phase_.load(std::memory_order_acquire);
   }
 
- private:
+private:
   static constexpr std::size_t kSnapshotFields = 8;
   struct alignas(64) AtomicLane {
     std::atomic<std::uint64_t> sequence{0};
@@ -90,7 +90,7 @@ struct LaneFailureRecord {
   StatusCode code{StatusCode::kOk};
 };
 
-[[nodiscard]] Result<LaneFailureRecord> SelectPrimaryFailure(
-    std::span<const LaneFailureRecord> failures) noexcept;
+[[nodiscard]] Result<LaneFailureRecord>
+SelectPrimaryFailure(std::span<const LaneFailureRecord> failures) noexcept;
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

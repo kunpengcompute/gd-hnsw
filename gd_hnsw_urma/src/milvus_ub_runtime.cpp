@@ -25,9 +25,9 @@
 
 namespace hnsw_urma {
 
-MilvusUbRuntime& MilvusUbRuntime::Instance() {
+MilvusUbRuntime &MilvusUbRuntime::Instance() {
   // Explicit QueryNode cleanup orders registrations before their backing data.
-  static auto* instance = new MilvusUbRuntime;
+  static auto *instance = new MilvusUbRuntime;
   return *instance;
 }
 
@@ -36,7 +36,7 @@ MilvusUbRuntime::Knobs MilvusUbRuntime::GetKnobs() const {
   return knobs_;
 }
 
-void MilvusUbRuntime::SetKnobs(const Knobs& knobs) {
+void MilvusUbRuntime::SetKnobs(const Knobs &knobs) {
   std::lock_guard<std::mutex> lock(state_mutex_);
   knobs_ = knobs;
   LOG_INFO("UB knobs staged: search_workers={} distance_workers={} "
@@ -60,32 +60,42 @@ void MilvusUbRuntime::ResetLocked() {
   graph_epoch_ = 0;
 }
 
-Status MilvusUbRuntime::BindGlobalGraphIdentity(std::string graph_id, std::uint64_t epoch) {
+Status MilvusUbRuntime::BindGlobalGraphIdentity(std::string graph_id,
+                                                std::uint64_t epoch) {
   std::lock_guard lock(state_mutex_);
   if (!meta_ || local_shards_.empty() || graph_id.empty() || epoch == 0) {
-    return Status(StatusCode::kInvalidArgument, "UB graph identity requires a seeded graph, id and epoch");
+    return Status(StatusCode::kInvalidArgument,
+                  "UB graph identity requires a seeded graph, id and epoch");
   }
   if (!graph_id_.empty() && (graph_id_ != graph_id || graph_epoch_ != epoch)) {
-    return Status(StatusCode::kInvalidArgument, "UB graph identity differs; successful shutdown is required");
+    return Status(StatusCode::kInvalidArgument,
+                  "UB graph identity differs; successful shutdown is required");
   }
   graph_id_ = std::move(graph_id);
   graph_epoch_ = epoch;
   return Status::Ok();
 }
 
-Result<std::optional<MilvusUbRuntime::SeededShardInfo>> MilvusUbRuntime::ReuseGlobalGraphShard(
-    const std::string& graph_id, std::uint64_t epoch, shard_id_t shard) const {
+Result<std::optional<MilvusUbRuntime::SeededShardInfo>>
+MilvusUbRuntime::ReuseGlobalGraphShard(const std::string &graph_id,
+                                       std::uint64_t epoch,
+                                       shard_id_t shard) const {
   std::lock_guard lock(state_mutex_);
-  if (graph_id_.empty()) return std::optional<SeededShardInfo>{};
+  if (graph_id_.empty())
+    return std::optional<SeededShardInfo>{};
   if (graph_id_ != graph_id || graph_epoch_ != epoch) {
-    return Status(StatusCode::kInvalidArgument, "UB segment artifact graph/epoch differs from the seeded graph");
+    return Status(
+        StatusCode::kInvalidArgument,
+        "UB segment artifact graph/epoch differs from the seeded graph");
   }
-  for (const auto& local : local_shards_) {
+  for (const auto &local : local_shards_) {
     if (local->range().shard_id == shard) {
-      return std::optional<SeededShardInfo>{{meta_->dim, local->range().local_count}};
+      return std::optional<SeededShardInfo>{
+          {meta_->dim, local->range().local_count}};
     }
   }
-  return Status(StatusCode::kInvalidArgument, "UB segment target shard is not seeded locally");
+  return Status(StatusCode::kInvalidArgument,
+                "UB segment target shard is not seeded locally");
 }
 
 Status MilvusUbRuntime::LoadShard(std::unique_ptr<LoadedIndex> loaded) {
@@ -138,10 +148,12 @@ Status MilvusUbRuntime::LoadShard(std::unique_ptr<LoadedIndex> loaded) {
   }
 
   if (distributed_runtime_) {
-    return Status(StatusCode::kInvalidArgument, "stop the UB service before adding a shard");
+    return Status(StatusCode::kInvalidArgument,
+                  "stop the UB service before adding a shard");
   }
 
-  std::unique_ptr<LocalShard> shard(new LocalShard(std::move(loaded->local_shard)));
+  std::unique_ptr<LocalShard> shard(
+      new LocalShard(std::move(loaded->local_shard)));
   shard_entries_[sid] = loaded->local_entry_point;
   local_shards_.push_back(std::move(shard));
   loaded_shard_ids_.push_back(sid);
@@ -155,8 +167,9 @@ Status MilvusUbRuntime::SetLocalShard(shard_id_t shard_id) {
       std::find(loaded_shard_ids_.begin(), loaded_shard_ids_.end(), shard_id) !=
       loaded_shard_ids_.end();
   if (!loaded) {
-    return Status(StatusCode::kInvalidArgument,
-                  "MilvusUbRuntime::SetLocalShard: shard is not loaded locally");
+    return Status(
+        StatusCode::kInvalidArgument,
+        "MilvusUbRuntime::SetLocalShard: shard is not loaded locally");
   }
   if (distributed_runtime_) {
     return Status::Ok();
@@ -196,12 +209,12 @@ std::optional<shard_id_t> MilvusUbRuntime::LocalShardId() const {
   return std::nullopt;
 }
 
-void MilvusUbRuntime::SetInjectedUrmaContext(void* urma_context) {
+void MilvusUbRuntime::SetInjectedUrmaContext(void *urma_context) {
   std::lock_guard<std::mutex> lock(state_mutex_);
   injected_urma_context_ = urma_context;
 }
 
-void* MilvusUbRuntime::InjectedUrmaContext() const {
+void *MilvusUbRuntime::InjectedUrmaContext() const {
   std::lock_guard<std::mutex> lock(state_mutex_);
   return injected_urma_context_;
 }
@@ -219,9 +232,10 @@ Status MilvusUbRuntime::RetryEnableForPushdown() {
   return EnableDistributedSearchLocked();
 }
 
-Status MilvusUbRuntime::Search(std::span<const float> query, std::uint32_t nq,
-    std::uint32_t dim, std::uint32_t topk, std::uint32_t ef, Metric metric,
-    std::vector<std::int64_t>& ids, std::vector<float>& distances,
+Status MilvusUbRuntime::Search(
+    std::span<const float> query, std::uint32_t nq, std::uint32_t dim,
+    std::uint32_t topk, std::uint32_t ef, Metric metric,
+    std::vector<std::int64_t> &ids, std::vector<float> &distances,
     std::chrono::steady_clock::time_point request_deadline) {
 #if HNSW_URMA_ENABLE_URMA
   // Shutdown waits for in-flight callers; different searches share this lock.
@@ -229,9 +243,10 @@ Status MilvusUbRuntime::Search(std::span<const float> query, std::uint32_t nq,
   if (request_deadline == std::chrono::steady_clock::time_point::max()) {
     lifetime.lock();
   } else if (!lifetime.try_lock_until(request_deadline)) {
-    return Status(StatusCode::kTimeout, "UB request expired waiting for runtime lifecycle");
+    return Status(StatusCode::kTimeout,
+                  "UB request expired waiting for runtime lifecycle");
   }
-  DistributedState* state;
+  DistributedState *state;
   {
     std::unique_lock lock(state_mutex_, std::defer_lock);
     if (request_deadline == std::chrono::steady_clock::time_point::max()) {
@@ -242,33 +257,44 @@ Status MilvusUbRuntime::Search(std::span<const float> query, std::uint32_t nq,
       while (!lock.try_lock()) {
         const auto now = std::chrono::steady_clock::now();
         if (now >= request_deadline) {
-          return Status(StatusCode::kTimeout, "UB request expired waiting for runtime state");
+          return Status(StatusCode::kTimeout,
+                        "UB request expired waiting for runtime state");
         }
-        std::this_thread::sleep_for(std::min(request_deadline - now,
+        std::this_thread::sleep_for(std::min(
+            request_deadline - now,
             std::chrono::steady_clock::duration(std::chrono::milliseconds(1))));
       }
     }
-    ids.clear(); distances.clear();
-    if (!meta_ || dim != meta_->dim || metric != static_cast<Metric>(meta_->metric)) {
-      return Status(StatusCode::kInvalidArgument, "UB request dimension/metric does not match the loaded index");
+    ids.clear();
+    distances.clear();
+    if (!meta_ || dim != meta_->dim ||
+        metric != static_cast<Metric>(meta_->metric)) {
+      return Status(
+          StatusCode::kInvalidArgument,
+          "UB request dimension/metric does not match the loaded index");
     }
     state = distributed_runtime_.get();
-    if (!state) return Status(StatusCode::kInternalError, "UB distributed service is not ready");
+    if (!state)
+      return Status(StatusCode::kInternalError,
+                    "UB distributed service is not ready");
     auto health = state->threads->status();
-    if (!health.ok()) return health;
+    if (!health.ok())
+      return health;
   }
   auto result = state->executor->Submit(query, nq, topk, ef, request_deadline);
   if (!result.ok()) {
     auto health = state->threads->status();
     return health.ok() ? result.status() : health;
   }
-  const auto& params = result.value().params;
-  LOG_INFO("UB request plan nq={} topk={} ef={} visited_capacity={} expand_batch={}",
-      nq, params.topk, params.ef_search, params.visited_capacity, params.expand_batch);
+  const auto &params = result.value().params;
+  LOG_INFO(
+      "UB request plan nq={} topk={} ef={} visited_capacity={} expand_batch={}",
+      nq, params.topk, params.ef_search, params.visited_capacity,
+      params.expand_batch);
   ids.assign(std::size_t(nq) * topk, -1);
   distances.assign(ids.size(), std::numeric_limits<float>::infinity());
   for (std::uint32_t row = 0; row < nq; ++row) {
-    const auto& neighbors = result.value().rows[row].neighbors;
+    const auto &neighbors = result.value().rows[row].neighbors;
     for (std::size_t i = 0; i < neighbors.size(); ++i) {
       ids[std::size_t(row) * topk + i] = neighbors[i].id;
       distances[std::size_t(row) * topk + i] = neighbors[i].distance;
@@ -276,7 +302,8 @@ Status MilvusUbRuntime::Search(std::span<const float> query, std::uint32_t nq,
   }
   return Status::Ok();
 #else
-  return Status(StatusCode::kInvalidArgument, "Milvus was built without URMA support");
+  return Status(StatusCode::kInvalidArgument,
+                "Milvus was built without URMA support");
 #endif
 }
 
@@ -304,8 +331,9 @@ Status MilvusUbRuntime::EnsureRpcMailbox() {
   // fragment table). Resolve the real plan instead, exactly as
   // EnableDistributedSearchLocked does.
   auto parsed = RequestedRuntimeConfig();
-  if (!parsed.ok()) return parsed.status();
-  const auto& requested = parsed.value();
+  if (!parsed.ok())
+    return parsed.status();
+  const auto &requested = parsed.value();
   // The Milvus build has no MPI placement detection (DetectPlacement is a
   // stub returning an empty list); Go always stages the CPU set through
   // UbSetConfig (cgroup / yaml / numa). Without it the plan cannot be
@@ -325,7 +353,7 @@ Status MilvusUbRuntime::EnsureRpcMailbox() {
   if (!effective.ok()) {
     return effective.status();
   }
-  const auto& plan = effective.value();
+  const auto &plan = effective.value();
   RpcMailboxConfig config;
   config.world_size = world_size;
   config.rpc_threads = plan.rpc_progress_threads;
@@ -342,49 +370,61 @@ Status MilvusUbRuntime::EnsureRpcMailbox() {
   return Status::Ok();
 }
 
-Result<std::uint64_t> MilvusUbRuntime::EstimateRuntimeMemory(
-    const std::filesystem::path& root, shard_id_t local_shard) const {
+Result<std::uint64_t>
+MilvusUbRuntime::EstimateRuntimeMemory(const std::filesystem::path &root,
+                                       shard_id_t local_shard) const {
   auto global = LoadGlobalIndexFile(root);
-  if (!global.ok()) return global.status();
+  if (!global.ok())
+    return global.status();
   std::lock_guard lock(state_mutex_);
   auto requested = RequestedRuntimeConfig();
-  if (!requested.ok()) return requested.status();
+  if (!requested.ok())
+    return requested.status();
   auto resolved = ResolveRuntimeConfig(requested.value(), global.value().meta,
-      global.value().meta.num_shards, knobs_.allowed_cpus, local_shard);
-  if (!resolved.ok()) return resolved.status();
-  const auto& plan = resolved.value();
+                                       global.value().meta.num_shards,
+                                       knobs_.allowed_cpus, local_shard);
+  if (!resolved.ok())
+    return resolved.status();
+  const auto &plan = resolved.value();
   std::uint64_t total = 0;
-  for (const auto bytes : {plan.queues.queue_bytes_total,
-       plan.rpc_memory.registered_rpc_bytes, plan.registered_read_result_bytes,
-       plan.rpc_operations.pool_bytes, plan.rpc_operations.client_owner_bytes}) {
+  for (const auto bytes :
+       {plan.queues.queue_bytes_total, plan.rpc_memory.registered_rpc_bytes,
+        plan.registered_read_result_bytes, plan.rpc_operations.pool_bytes,
+        plan.rpc_operations.client_owner_bytes}) {
     if (bytes > std::numeric_limits<std::uint64_t>::max() - total)
-      return Status(StatusCode::kResourceExhausted, "UB runtime memory plan overflows");
+      return Status(StatusCode::kResourceExhausted,
+                    "UB runtime memory plan overflows");
     total += bytes;
   }
   // Each active query owns a visited hash table; include it before seeding.
   const auto slots = requested.value().max_active_queries;
   if (slots == 0)
-    return Status(StatusCode::kInvalidArgument, "UB active query count must be positive");
-  const auto visited = global.value().meta.ntotal <= kDefaultDenseVisitedBudgetBytes / slots
-      ? global.value().meta.ntotal
-      : std::uint64_t(plan.visited_capacity) * sizeof(std::uint64_t);
-  if (visited > (std::numeric_limits<std::uint64_t>::max() - total) /
-          slots)
-    return Status(StatusCode::kResourceExhausted, "UB visited memory plan overflows");
+    return Status(StatusCode::kInvalidArgument,
+                  "UB active query count must be positive");
+  const auto visited =
+      global.value().meta.ntotal <= kDefaultDenseVisitedBudgetBytes / slots
+          ? global.value().meta.ntotal
+          : std::uint64_t(plan.visited_capacity) * sizeof(std::uint64_t);
+  if (visited > (std::numeric_limits<std::uint64_t>::max() - total) / slots)
+    return Status(StatusCode::kResourceExhausted,
+                  "UB visited memory plan overflows");
   return total + visited * slots;
 }
 
 std::string MilvusUbRuntime::RpcLayout() const {
   std::lock_guard lock(state_mutex_);
-  if (!rpc_memory_) return {};
-  const auto& c = rpc_memory_->config();
+  if (!rpc_memory_)
+    return {};
+  const auto &c = rpc_memory_->config();
   return std::to_string(DISTANCE_BATCH_WIRE_VERSION) + ":" +
-      std::to_string(c.world_size) + ":" + std::to_string(c.rpc_threads) + ":" +
-      std::to_string(c.ring_depth) + ":" + std::to_string(c.request_capacity) + ":" +
-      std::to_string(c.response_capacity) + ":" + std::to_string(c.request_staging_slots_per_thread);
+         std::to_string(c.world_size) + ":" + std::to_string(c.rpc_threads) +
+         ":" + std::to_string(c.ring_depth) + ":" +
+         std::to_string(c.request_capacity) + ":" +
+         std::to_string(c.response_capacity) + ":" +
+         std::to_string(c.request_staging_slots_per_thread);
 }
 
-Status MilvusUbRuntime::GetRpcMailboxRegions(RpcMailboxRegion& out) {
+Status MilvusUbRuntime::GetRpcMailboxRegions(RpcMailboxRegion &out) {
   std::lock_guard<std::mutex> lock(state_mutex_);
   if (!rpc_memory_) {
     return Status(StatusCode::kInternalError,
@@ -412,45 +452,53 @@ Status MilvusUbRuntime::GetRpcMailboxRegions(RpcMailboxRegion& out) {
 Status MilvusUbRuntime::StopDistributedSearch() {
   std::unique_lock lifetime(search_lifetime_mutex_);
   std::lock_guard lock(state_mutex_);
-  #if HNSW_URMA_ENABLE_URMA
+#if HNSW_URMA_ENABLE_URMA
   if (distributed_runtime_) {
-    auto& state = *distributed_runtime_;
+    auto &state = *distributed_runtime_;
     state.executor->StopAdmission();
-    const auto deadline = std::chrono::steady_clock::now() +
+    const auto deadline =
+        std::chrono::steady_clock::now() +
         std::chrono::milliseconds(state.requested.drain_timeout_ms);
-    while (state.threads->status().ok() && std::chrono::steady_clock::now() < deadline &&
-           (!state.executor->queries_drained() || !state.drain->all_lanes_empty())) {
+    while (state.threads->status().ok() &&
+           std::chrono::steady_clock::now() < deadline &&
+           (!state.executor->queries_drained() ||
+            !state.drain->all_lanes_empty())) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     if (!state.executor->queries_drained() || !state.drain->all_lanes_empty()) {
       // Do not invalidate memory still referenced by READ/RPC work. The caller
       // must retain its borrowed UrmaManager links when drain fails.
       auto health = state.threads->status();
-      return health.ok() ? Status(StatusCode::kTimeout, "UB data plane did not drain") : health;
+      return health.ok()
+                 ? Status(StatusCode::kTimeout, "UB data plane did not drain")
+                 : health;
     }
     state.threads->RequestStop();
     state.threads->Join();
     LOG_INFO("UB shutdown queries_drained={} lanes_drained={} status={}",
-        state.executor->queries_drained(), state.drain->all_lanes_empty(), state.threads->status().ToString());
+             state.executor->queries_drained(), state.drain->all_lanes_empty(),
+             state.threads->status().ToString());
     distributed_runtime_.reset();
   }
-  #endif
+#endif
   return Status::Ok();
 }
 
 Status MilvusUbRuntime::Shutdown() {
   auto stopped = StopDistributedSearch();
-  if (!stopped.ok()) return stopped;
+  if (!stopped.ok())
+    return stopped;
   std::lock_guard lock(state_mutex_);
   peer_handles_.clear();
   ResetLocked();
   return Status::Ok();
 }
 
-Status MilvusUbRuntime::ImportPeerHandles(shard_id_t shard_id, std::uint32_t role,
-                                          std::span<const std::byte> rjetty_descriptor,
-                                          std::uint32_t jetty_token,
-                                          void* target_segment) {
+Status
+MilvusUbRuntime::ImportPeerHandles(shard_id_t shard_id, std::uint32_t role,
+                                   std::span<const std::byte> rjetty_descriptor,
+                                   std::uint32_t jetty_token,
+                                   void *target_segment) {
   if (target_segment == nullptr || rjetty_descriptor.empty()) {
     return Status(StatusCode::kInvalidArgument,
                   "MilvusUbRuntime::ImportPeerHandles: null native handles");
@@ -461,18 +509,20 @@ Status MilvusUbRuntime::ImportPeerHandles(shard_id_t shard_id, std::uint32_t rol
   }
   std::lock_guard<std::mutex> lock(state_mutex_);
   PeerHandle handle;
-  handle.rjetty_descriptor.assign(rjetty_descriptor.begin(), rjetty_descriptor.end());
+  handle.rjetty_descriptor.assign(rjetty_descriptor.begin(),
+                                  rjetty_descriptor.end());
   handle.jetty_token = jetty_token;
   handle.segment = target_segment;
   peer_handles_[{shard_id, role}] = std::move(handle);
-  LOG_INFO("UB ImportPeerHandles: shard={} role={} token={} descriptor_bytes={} segment={} total_handles={}",
+  LOG_INFO("UB ImportPeerHandles: shard={} role={} token={} "
+           "descriptor_bytes={} segment={} total_handles={}",
            static_cast<unsigned>(shard_id), role, jetty_token,
-           rjetty_descriptor.size(), target_segment,
-           peer_handles_.size());
+           rjetty_descriptor.size(), target_segment, peer_handles_.size());
   return Status::Ok();
 }
 
-void MilvusUbRuntime::RemovePeerHandles(shard_id_t shard_id, std::uint32_t role) {
+void MilvusUbRuntime::RemovePeerHandles(shard_id_t shard_id,
+                                        std::uint32_t role) {
   std::lock_guard<std::mutex> lock(state_mutex_);
   peer_handles_.erase({shard_id, role});
 }
@@ -480,17 +530,18 @@ void MilvusUbRuntime::RemovePeerHandles(shard_id_t shard_id, std::uint32_t role)
 std::size_t MilvusUbRuntime::PeerShardCount() const {
   std::lock_guard<std::mutex> lock(state_mutex_);
   std::set<shard_id_t> shards;
-  for (const auto& entry : peer_handles_) {
+  for (const auto &entry : peer_handles_) {
     shards.insert(entry.first.first);
   }
   return shards.size();
 }
 
-std::vector<MilvusUbRuntime::ShardMemory> MilvusUbRuntime::ShardMemoryRegions() const {
+std::vector<MilvusUbRuntime::ShardMemory>
+MilvusUbRuntime::ShardMemoryRegions() const {
   std::lock_guard<std::mutex> lock(state_mutex_);
   std::vector<ShardMemory> regions;
   regions.reserve(local_shards_.size());
-  for (const auto& shard : local_shards_) {
+  for (const auto &shard : local_shards_) {
     ShardMemory region;
     region.shard_id = shard->range().shard_id;
     auto graph = shard->graph_registration_memory();
@@ -504,8 +555,8 @@ std::vector<MilvusUbRuntime::ShardMemory> MilvusUbRuntime::ShardMemoryRegions() 
   return regions;
 }
 
-Status MilvusUbRuntime::GetEntryPoint(node_id_t& out_entry_vertex_id,
-                                      std::int32_t& out_entry_level) const {
+Status MilvusUbRuntime::GetEntryPoint(node_id_t &out_entry_vertex_id,
+                                      std::int32_t &out_entry_level) const {
   std::lock_guard<std::mutex> lock(state_mutex_);
   if (!meta_) {
     return Status(StatusCode::kInternalError,
@@ -516,7 +567,7 @@ Status MilvusUbRuntime::GetEntryPoint(node_id_t& out_entry_vertex_id,
   return Status::Ok();
 }
 
-Status MilvusUbRuntime::GetEntryShard(shard_id_t& out_entry_shard_id) const {
+Status MilvusUbRuntime::GetEntryShard(shard_id_t &out_entry_shard_id) const {
   std::lock_guard<std::mutex> lock(state_mutex_);
   if (!meta_ || !shard_map_) {
     return Status(StatusCode::kInternalError,
@@ -567,10 +618,11 @@ Status MilvusUbRuntime::ValidateShardLayout(shard_id_t shard_id,
                       " not inside the local shard map");
   }
   if (located.value().shard_id != entry_shard_id) {
-    return Status(StatusCode::kInvalidArgument,
-                  "MilvusUbRuntime::ValidateShardLayout: entry vertex belongs to shard " +
-                      std::to_string(located.value().shard_id) + " but record claims " +
-                      std::to_string(entry_shard_id));
+    return Status(
+        StatusCode::kInvalidArgument,
+        "MilvusUbRuntime::ValidateShardLayout: entry vertex belongs to shard " +
+            std::to_string(located.value().shard_id) + " but record claims " +
+            std::to_string(entry_shard_id));
   }
   return Status::Ok();
 }
@@ -594,7 +646,8 @@ std::size_t MilvusUbRuntime::ExpectedShardCount() const {
   return shard_map_ ? shard_map_->ranges().size() : 0;
 }
 
-MilvusUbRuntime::ShardLoadSnapshot MilvusUbRuntime::GetShardLoadSnapshot() const {
+MilvusUbRuntime::ShardLoadSnapshot
+MilvusUbRuntime::GetShardLoadSnapshot() const {
   std::lock_guard<std::mutex> lock(state_mutex_);
   ShardLoadSnapshot snap;
   // Mirrors LocalShardId(): the single owned shard, if exactly one is loaded.
@@ -606,11 +659,14 @@ MilvusUbRuntime::ShardLoadSnapshot MilvusUbRuntime::GetShardLoadSnapshot() const
   return snap;
 }
 
-// Unsupported metrics remain invalid at the request boundary; never reinterpret as L2.
-Metric MilvusUbRuntime_MetricFromName(const char* name) {
+// Unsupported metrics remain invalid at the request boundary; never reinterpret
+// as L2.
+Metric MilvusUbRuntime_MetricFromName(const char *name) {
   const std::string_view metric = name ? name : "";
-  if (metric == "L2" || metric == "l2") return Metric::kL2;
-  if (metric == "IP" || metric == "ip" || metric == "INNER_PRODUCT") return Metric::kInnerProduct;
+  if (metric == "L2" || metric == "l2")
+    return Metric::kL2;
+  if (metric == "IP" || metric == "ip" || metric == "INNER_PRODUCT")
+    return Metric::kInnerProduct;
   return static_cast<Metric>(0xff);
 }
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

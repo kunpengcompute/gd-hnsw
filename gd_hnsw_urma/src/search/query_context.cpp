@@ -8,7 +8,8 @@ namespace hnsw_urma {
 
 namespace {
 
-bool SameOperation(QueryOperationHandle lhs, QueryOperationHandle rhs) noexcept {
+bool SameOperation(QueryOperationHandle lhs,
+                   QueryOperationHandle rhs) noexcept {
   return lhs.operation_slot == rhs.operation_slot &&
          lhs.owner_lane == rhs.owner_lane &&
          lhs.query_generation == rhs.query_generation &&
@@ -22,7 +23,7 @@ std::uint64_t SteadyNowNanoseconds() noexcept {
           .count());
 }
 
-}  // namespace
+} // namespace
 
 Status QueryOperationState::Prepare(QueryOperationHandle handle) noexcept {
   if (state_ != State::kFree || handle.query_generation == 0 ||
@@ -35,7 +36,8 @@ Status QueryOperationState::Prepare(QueryOperationHandle handle) noexcept {
   return Status::Ok();
 }
 
-Status QueryOperationState::MarkPublished(QueryOperationHandle handle) noexcept {
+Status
+QueryOperationState::MarkPublished(QueryOperationHandle handle) noexcept {
   if (state_ != State::kPrepared || !SameOperation(handle_, handle)) {
     return Status(StatusCode::kProtocolError,
                   "query operation publish metadata mismatch");
@@ -71,14 +73,14 @@ void QueryOperationState::Reset() noexcept {
 QueryRunController::QueryRunController(std::uint64_t generation,
                                        std::uint32_t max_lanes,
                                        bool timing_enabled)
-    : generation_(generation),
-      max_lanes_(max_lanes),
+    : generation_(generation), max_lanes_(max_lanes),
       timing_enabled_(timing_enabled),
       lane_pending_(std::make_unique<LanePending[]>(max_lanes)) {}
 
 Status QueryRunController::BindOwner(std::uint32_t owner) noexcept {
   if (execution_started_) {
-    return Status(StatusCode::kProtocolError, "query owner is fixed after admission");
+    return Status(StatusCode::kProtocolError,
+                  "query owner is fixed after admission");
   }
   owner_search_ = owner;
   return Status::Ok();
@@ -89,7 +91,8 @@ Status QueryRunController::Admit() noexcept {
   if (!state_.compare_exchange_strong(expected, RunState::kQueued,
                                       std::memory_order_release,
                                       std::memory_order_relaxed)) {
-    return Status(StatusCode::kProtocolError, "query can only be admitted from Idle");
+    return Status(StatusCode::kProtocolError,
+                  "query can only be admitted from Idle");
   }
   return Status::Ok();
 }
@@ -99,7 +102,8 @@ bool QueryRunController::TryAcquire() noexcept {
   const bool acquired = state_.compare_exchange_strong(
       expected, RunState::kRunning, std::memory_order_acquire,
       std::memory_order_relaxed);
-  if (acquired) execution_started_ = true;
+  if (acquired)
+    execution_started_ = true;
   return acquired;
 }
 
@@ -108,7 +112,8 @@ Status QueryRunController::Requeue() noexcept {
   if (!state_.compare_exchange_strong(expected, RunState::kQueued,
                                       std::memory_order_release,
                                       std::memory_order_relaxed)) {
-    return Status(StatusCode::kProtocolError, "query can only requeue from Running");
+    return Status(StatusCode::kProtocolError,
+                  "query can only requeue from Running");
   }
   return Status::Ok();
 }
@@ -122,21 +127,20 @@ Result<std::uint64_t> QueryRunController::RequeueForRetry() noexcept {
   return epoch;
 }
 
-Result<std::uint64_t> QueryRunController::BeginWait(
-    std::span<const LaneOperationCount> lanes,
-    std::uint64_t generation) noexcept {
+Result<std::uint64_t>
+QueryRunController::BeginWait(std::span<const LaneOperationCount> lanes,
+                              std::uint64_t generation) noexcept {
   if (generation != generation_ || lanes.empty()) {
     return Status(StatusCode::kInvalidArgument,
                   "wait generation or participating lanes are invalid");
   }
   const auto epoch = wait_epoch_.load(std::memory_order_relaxed) + 1U;
   if (epoch == 0) {
-    return Status(StatusCode::kResourceExhausted,
-                  "query wait epoch exhausted");
+    return Status(StatusCode::kResourceExhausted, "query wait epoch exhausted");
   }
   std::uint32_t operation_total = 0;
   for (std::size_t index = 0; index < lanes.size(); ++index) {
-    const auto& entry = lanes[index];
+    const auto &entry = lanes[index];
     for (std::size_t previous = 0; previous < index; ++previous) {
       if (lanes[previous].lane == entry.lane) {
         return Status(StatusCode::kProtocolError,
@@ -144,18 +148,18 @@ Result<std::uint64_t> QueryRunController::BeginWait(
       }
     }
     if (entry.lane >= max_lanes_ || entry.operations == 0 ||
-        lane_pending_[entry.lane].operations.load(std::memory_order_relaxed) != 0) {
+        lane_pending_[entry.lane].operations.load(std::memory_order_relaxed) !=
+            0) {
       return Status(StatusCode::kProtocolError,
                     "wait lane is invalid, duplicated, or still active");
     }
     if (entry.operations >
         std::numeric_limits<std::uint32_t>::max() - operation_total) {
-      return Status(StatusCode::kOutOfRange,
-                    "wait operation count overflows");
+      return Status(StatusCode::kOutOfRange, "wait operation count overflows");
     }
     operation_total += entry.operations;
   }
-  for (const auto& entry : lanes) {
+  for (const auto &entry : lanes) {
     lane_pending_[entry.lane].operations.store(entry.operations,
                                                std::memory_order_relaxed);
     lane_pending_[entry.lane].epoch.store(epoch, std::memory_order_relaxed);
@@ -164,20 +168,17 @@ Result<std::uint64_t> QueryRunController::BeginWait(
   remaining_lanes_.store(static_cast<std::uint32_t>(lanes.size()),
                          std::memory_order_relaxed);
   ready_timestamp_nanoseconds_.store(0, std::memory_order_relaxed);
-  operation_ready_timestamp_nanoseconds_.store(
-      0, std::memory_order_relaxed);
-  first_operation_timestamp_nanoseconds_.store(
-      0, std::memory_order_relaxed);
-  critical_ready_lane_.store(
-      std::numeric_limits<std::uint32_t>::max(),
-      std::memory_order_relaxed);
+  operation_ready_timestamp_nanoseconds_.store(0, std::memory_order_relaxed);
+  first_operation_timestamp_nanoseconds_.store(0, std::memory_order_relaxed);
+  critical_ready_lane_.store(std::numeric_limits<std::uint32_t>::max(),
+                             std::memory_order_relaxed);
   operations_converged_.store(false, std::memory_order_relaxed);
   wait_epoch_.store(epoch, std::memory_order_relaxed);
   RunState expected = RunState::kRunning;
   if (!state_.compare_exchange_strong(expected, RunState::kWaiting,
                                       std::memory_order_release,
                                       std::memory_order_relaxed)) {
-    for (const auto& entry : lanes) {
+    for (const auto &entry : lanes) {
       lane_pending_[entry.lane].operations.store(0, std::memory_order_relaxed);
     }
     remaining_operations_.store(0, std::memory_order_relaxed);
@@ -208,8 +209,9 @@ void QueryRunController::EndDeferredReady() noexcept {
   inline_runner_active_.store(false, std::memory_order_release);
 }
 
-Result<bool> QueryRunController::PublishDeferredReady(
-    std::uint64_t generation, std::uint64_t wait_epoch) noexcept {
+Result<bool>
+QueryRunController::PublishDeferredReady(std::uint64_t generation,
+                                         std::uint64_t wait_epoch) noexcept {
   if (generation != generation_ ||
       wait_epoch != wait_epoch_.load(std::memory_order_acquire) ||
       !deferred_ready_mode_.load(std::memory_order_acquire)) {
@@ -221,13 +223,13 @@ Result<bool> QueryRunController::PublishDeferredReady(
     return false;
   }
   if (timing_enabled_) {
-    ready_timestamp_nanoseconds_.store(
-        SteadyNowNanoseconds(), std::memory_order_relaxed);
+    ready_timestamp_nanoseconds_.store(SteadyNowNanoseconds(),
+                                       std::memory_order_relaxed);
   }
   RunState expected = RunState::kWaiting;
-  if (!state_.compare_exchange_strong(
-          expected, RunState::kQueued, std::memory_order_acq_rel,
-          std::memory_order_acquire)) {
+  if (!state_.compare_exchange_strong(expected, RunState::kQueued,
+                                      std::memory_order_acq_rel,
+                                      std::memory_order_acquire)) {
     ready_timestamp_nanoseconds_.store(0, std::memory_order_relaxed);
     return Status(StatusCode::kProtocolError,
                   "deferred ready observed query outside Waiting");
@@ -237,7 +239,7 @@ Result<bool> QueryRunController::PublishDeferredReady(
 }
 
 Result<bool> QueryRunController::OnOperationTerminal(
-    QueryOperationState& operation, QueryOperationHandle handle,
+    QueryOperationState &operation, QueryOperationHandle handle,
     OperationTerminalOutcome outcome) noexcept {
   auto terminal = operation.TryMarkTerminal(handle, outcome);
   if (!terminal.ok()) {
@@ -250,9 +252,10 @@ Result<bool> QueryRunController::OnOperationTerminal(
                                handle.wait_epoch);
 }
 
-Result<bool> QueryRunController::CompleteLaneOperation(
-    std::uint32_t lane, std::uint64_t generation,
-    std::uint64_t wait_epoch) noexcept {
+Result<bool>
+QueryRunController::CompleteLaneOperation(std::uint32_t lane,
+                                          std::uint64_t generation,
+                                          std::uint64_t wait_epoch) noexcept {
   if (generation != generation_ || lane >= max_lanes_ ||
       wait_epoch != wait_epoch_.load(std::memory_order_acquire) ||
       lane_pending_[lane].epoch.load(std::memory_order_relaxed) != wait_epoch) {
@@ -265,8 +268,7 @@ Result<bool> QueryRunController::CompleteLaneOperation(
     if (lane_pending_[lane].operations.compare_exchange_weak(
             lane_operations, lane_operations - 1U, std::memory_order_relaxed,
             std::memory_order_relaxed)) {
-      const auto completed_at =
-          timing_enabled_ ? SteadyNowNanoseconds() : 0;
+      const auto completed_at = timing_enabled_ ? SteadyNowNanoseconds() : 0;
       if (timing_enabled_) {
         std::uint64_t first = 0;
         (void)first_operation_timestamp_nanoseconds_.compare_exchange_strong(
@@ -291,21 +293,19 @@ Result<bool> QueryRunController::CompleteLaneOperation(
       operations_converged_.store(true, std::memory_order_release);
       const auto ready_at = completed_at;
       critical_ready_lane_.store(lane, std::memory_order_relaxed);
-      operation_ready_timestamp_nanoseconds_.store(
-          ready_at, std::memory_order_relaxed);
+      operation_ready_timestamp_nanoseconds_.store(ready_at,
+                                                   std::memory_order_relaxed);
       if (deferred_ready_mode_.load(std::memory_order_acquire)) {
         return true;
       }
       if (timing_enabled_) {
-        ready_timestamp_nanoseconds_.store(
-            ready_at, std::memory_order_relaxed);
+        ready_timestamp_nanoseconds_.store(ready_at, std::memory_order_relaxed);
       }
       RunState expected = RunState::kWaiting;
       if (!state_.compare_exchange_strong(expected, RunState::kQueued,
                                           std::memory_order_acq_rel,
                                           std::memory_order_acquire)) {
-        ready_timestamp_nanoseconds_.store(
-            0, std::memory_order_relaxed);
+        ready_timestamp_nanoseconds_.store(0, std::memory_order_relaxed);
         return Status(StatusCode::kProtocolError,
                       "last lane observed query outside Waiting");
       }
@@ -327,23 +327,24 @@ Status QueryRunController::RequestFailure(std::uint64_t generation,
   const auto encoded = static_cast<std::uint64_t>(outcome) |
                        (static_cast<std::uint64_t>(code) << 8U);
   std::uint64_t expected = 0;
-  if (failure_intent_.compare_exchange_strong(
-          expected, encoded, std::memory_order_acq_rel,
-          std::memory_order_acquire)) {
+  if (failure_intent_.compare_exchange_strong(expected, encoded,
+                                              std::memory_order_acq_rel,
+                                              std::memory_order_acquire)) {
     cancel_generation_.store(generation, std::memory_order_release);
   }
   return Status::Ok();
 }
 
-StatusCode QueryRunController::CancellationCode(
-    std::uint64_t generation) const noexcept {
+StatusCode
+QueryRunController::CancellationCode(std::uint64_t generation) const noexcept {
   if (cancel_generation_.load(std::memory_order_acquire) != generation) {
     return StatusCode::kOk;
   }
   return failure_code();
 }
 
-bool QueryRunController::ValidateReadyHandle(QueryReadyHandle handle) const noexcept {
+bool QueryRunController::ValidateReadyHandle(
+    QueryReadyHandle handle) const noexcept {
   if (handle.query.generation != generation_ ||
       handle.wait_epoch != wait_epoch_.load(std::memory_order_acquire)) {
     return false;
@@ -352,7 +353,8 @@ bool QueryRunController::ValidateReadyHandle(QueryReadyHandle handle) const noex
   return true;
 }
 
-bool QueryRunController::ValidateRetryHandle(QueryRetryHandle handle) const noexcept {
+bool QueryRunController::ValidateRetryHandle(
+    QueryRetryHandle handle) const noexcept {
   return handle.query.generation == generation_ &&
          handle.retry_epoch == retry_epoch_.load(std::memory_order_acquire);
 }
@@ -363,7 +365,8 @@ Status QueryRunController::Park(std::uint32_t operation_count) noexcept {
   return waited.ok() ? Status::Ok() : waited.status();
 }
 
-Result<bool> QueryRunController::CompleteOne(std::uint64_t generation) noexcept {
+Result<bool>
+QueryRunController::CompleteOne(std::uint64_t generation) noexcept {
   return CompleteLaneOperation(0, generation, wait_epoch());
 }
 
@@ -372,7 +375,8 @@ Status QueryRunController::MarkCompleted() noexcept {
   if (!state_.compare_exchange_strong(expected, RunState::kCompleted,
                                       std::memory_order_release,
                                       std::memory_order_relaxed)) {
-    return Status(StatusCode::kProtocolError, "query can only complete from Running");
+    return Status(StatusCode::kProtocolError,
+                  "query can only complete from Running");
   }
   return Status::Ok();
 }
@@ -381,10 +385,11 @@ void QueryRunController::MarkFailed() noexcept {
   state_.store(RunState::kFailed, std::memory_order_release);
 }
 
-Status QueryOperationBinding::Prepare(
-    QueryKey query, QueryRunController& controller,
-    QueryOperationState& operation, QueryReadyPublisher& ready_publisher,
-    QueryOperationHandle handle) noexcept {
+Status QueryOperationBinding::Prepare(QueryKey query,
+                                      QueryRunController &controller,
+                                      QueryOperationState &operation,
+                                      QueryReadyPublisher &ready_publisher,
+                                      QueryOperationHandle handle) noexcept {
   if (controller_ != nullptr || query.generation == 0 ||
       query.generation != handle.query_generation ||
       controller.generation() != query.generation || handle.wait_epoch == 0 ||
@@ -412,8 +417,8 @@ Status QueryOperationBinding::MarkPublished() noexcept {
   return operation_->MarkPublished(handle_);
 }
 
-Status QueryOperationBinding::Complete(
-    OperationTerminalOutcome outcome) noexcept {
+Status
+QueryOperationBinding::Complete(OperationTerminalOutcome outcome) noexcept {
   if (controller_ == nullptr || operation_ == nullptr ||
       ready_publisher_ == nullptr) {
     return Status(StatusCode::kProtocolError,
@@ -421,9 +426,9 @@ Status QueryOperationBinding::Complete(
   }
   // Copy everything needed after the terminal transition. Once PublishReady()
   // succeeds the owner Search may finish and retire the query immediately.
-  auto* const controller = controller_;
-  auto* const operation = operation_;
-  auto* const publisher = ready_publisher_;
+  auto *const controller = controller_;
+  auto *const operation = operation_;
+  auto *const publisher = ready_publisher_;
   const auto handle = handle_;
   const auto query = query_;
   auto terminal = controller->OnOperationTerminal(*operation, handle, outcome);
@@ -433,15 +438,13 @@ Status QueryOperationBinding::Complete(
   if (!terminal.value()) {
     return Status::Ok();
   }
-  const QueryReadyHandle ready{
-      query, handle.wait_epoch,
-      controller->ready_timestamp_nanoseconds(), 0, controller->owner_search()};
+  const QueryReadyHandle ready{query, handle.wait_epoch,
+                               controller->ready_timestamp_nanoseconds(), 0,
+                               controller->owner_search()};
   if (controller->ready_publication_deferred()) {
-    return publisher->DeferReady(
-        handle.owner_lane, ready, controller);
+    return publisher->DeferReady(handle.owner_lane, ready, controller);
   }
-  return publisher->PublishReady(
-      handle.owner_lane, ready);
+  return publisher->PublishReady(handle.owner_lane, ready);
 }
 
 StatusCode QueryOperationBinding::CancellationCode() const noexcept {
@@ -461,4 +464,4 @@ void QueryOperationBinding::Reset() noexcept {
   handle_ = {};
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

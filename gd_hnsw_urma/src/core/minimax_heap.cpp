@@ -7,14 +7,16 @@
 namespace hnsw_urma {
 namespace {
 
-bool Better(const HeapEntry& lhs, const HeapEntry& rhs) noexcept {
+bool Better(const HeapEntry &lhs, const HeapEntry &rhs) noexcept {
   return lhs.distance < rhs.distance ||
          (lhs.distance == rhs.distance && lhs.id < rhs.id);
 }
 
-bool Worse(const HeapEntry& lhs, const HeapEntry& rhs) noexcept { return Better(rhs, lhs); }
+bool Worse(const HeapEntry &lhs, const HeapEntry &rhs) noexcept {
+  return Better(rhs, lhs);
+}
 
-}  // namespace
+} // namespace
 
 Result<MinimaxHeap> MinimaxHeap::Create(std::uint32_t capacity) {
   try {
@@ -23,8 +25,9 @@ Result<MinimaxHeap> MinimaxHeap::Create(std::uint32_t capacity) {
     heap.result_heap_.reserve(capacity);
     heap.candidate_heap_.reserve(static_cast<std::size_t>(capacity) * 2U + 1U);
     return heap;
-  } catch (const std::bad_alloc&) {
-    return Status(StatusCode::kResourceExhausted, "unable to allocate minimax heap");
+  } catch (const std::bad_alloc &) {
+    return Status(StatusCode::kResourceExhausted,
+                  "unable to allocate minimax heap");
   }
 }
 
@@ -37,9 +40,10 @@ Result<bool> MinimaxHeap::PushUnique(node_id_t id, float distance) {
 }
 
 Result<bool> MinimaxHeap::PushImpl(node_id_t id, float distance,
-                                  bool check_duplicate) {
+                                   bool check_duplicate) {
   if (id == INVALID_NODE_ID || !std::isfinite(distance)) {
-    return Status(StatusCode::kInvalidArgument, "heap entry requires a valid ID and finite distance");
+    return Status(StatusCode::kInvalidArgument,
+                  "heap entry requires a valid ID and finite distance");
   }
   if (capacity_ == 0) {
     return false;
@@ -62,8 +66,8 @@ Result<bool> MinimaxHeap::PushImpl(node_id_t id, float distance,
   const auto result_better = [this](EntryIndex lhs, EntryIndex rhs) {
     return Better(entries_[lhs].value, entries_[rhs].value);
   };
-  const auto candidate_worse = [](const CandidateHandle& lhs,
-                                  const CandidateHandle& rhs) {
+  const auto candidate_worse = [](const CandidateHandle &lhs,
+                                  const CandidateHandle &rhs) {
     return Worse(lhs.value, rhs.value);
   };
 
@@ -77,7 +81,7 @@ Result<bool> MinimaxHeap::PushImpl(node_id_t id, float distance,
     entry_index = result_heap_.back();
     result_heap_.pop_back();
 
-    EntryState& evicted = entries_[entry_index];
+    EntryState &evicted = entries_[entry_index];
     if (!evicted.expanded) {
       --current_candidate_count_;
     }
@@ -86,7 +90,7 @@ Result<bool> MinimaxHeap::PushImpl(node_id_t id, float distance,
     entry_index = static_cast<EntryIndex>(result_heap_.size());
   }
 
-  EntryState& inserted = entries_[entry_index];
+  EntryState &inserted = entries_[entry_index];
   ++inserted.generation;
   if (inserted.generation == 0) {
     ++inserted.generation;
@@ -107,8 +111,8 @@ Result<bool> MinimaxHeap::PushImpl(node_id_t id, float distance,
 }
 
 std::optional<HeapEntry> MinimaxHeap::PopMinCandidate() {
-  const auto candidate_worse = [](const CandidateHandle& lhs,
-                                  const CandidateHandle& rhs) {
+  const auto candidate_worse = [](const CandidateHandle &lhs,
+                                  const CandidateHandle &rhs) {
     return Worse(lhs.value, rhs.value);
   };
   while (!candidate_heap_.empty()) {
@@ -153,21 +157,20 @@ void MinimaxHeap::Clear() noexcept {
 }
 
 bool MinimaxHeap::IsCurrentCandidate(
-    const CandidateHandle& candidate) const noexcept {
-  const EntryState& entry = entries_[candidate.index];
+    const CandidateHandle &candidate) const noexcept {
+  const EntryState &entry = entries_[candidate.index];
   return entry.generation == candidate.generation && entry.in_result &&
          !entry.expanded;
 }
 
 void MinimaxHeap::CompactCandidates() {
-  auto end = std::remove_if(
-      candidate_heap_.begin(), candidate_heap_.end(),
-      [this](const CandidateHandle& candidate) {
-        return !IsCurrentCandidate(candidate);
-      });
+  auto end = std::remove_if(candidate_heap_.begin(), candidate_heap_.end(),
+                            [this](const CandidateHandle &candidate) {
+                              return !IsCurrentCandidate(candidate);
+                            });
   candidate_heap_.erase(end, candidate_heap_.end());
-  const auto candidate_worse = [](const CandidateHandle& lhs,
-                                  const CandidateHandle& rhs) {
+  const auto candidate_worse = [](const CandidateHandle &lhs,
+                                  const CandidateHandle &rhs) {
     return Worse(lhs.value, rhs.value);
   };
   std::make_heap(candidate_heap_.begin(), candidate_heap_.end(),
@@ -175,4 +178,4 @@ void MinimaxHeap::CompactCandidates() {
   current_candidate_count_ = candidate_heap_.size();
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

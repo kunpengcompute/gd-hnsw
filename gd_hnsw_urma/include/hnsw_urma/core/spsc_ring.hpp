@@ -21,18 +21,18 @@ struct SpscRingMetrics {
   std::uint64_t full_count{0};
 };
 
-// Fixed-capacity SPSC ring. Reserve/CancelReservation/PushReserved are producer-
-// only operations; TryPop is consumer-only. The cache-line separated monotonic
-// cursors make every slot reusable only after the consumer publishes its head.
-template <typename T>
-class SpscRing {
- public:
+// Fixed-capacity SPSC ring. Reserve/CancelReservation/PushReserved are
+// producer- only operations; TryPop is consumer-only. The cache-line separated
+// monotonic cursors make every slot reusable only after the consumer publishes
+// its head.
+template <typename T> class SpscRing {
+public:
   SpscRing() = default;
-  SpscRing(const SpscRing&) = delete;
-  SpscRing& operator=(const SpscRing&) = delete;
+  SpscRing(const SpscRing &) = delete;
+  SpscRing &operator=(const SpscRing &) = delete;
 
-  SpscRing(SpscRing&& other) noexcept { MoveFrom(std::move(other)); }
-  SpscRing& operator=(SpscRing&& other) noexcept {
+  SpscRing(SpscRing &&other) noexcept { MoveFrom(std::move(other)); }
+  SpscRing &operator=(SpscRing &&other) noexcept {
     if (this != &other) {
       MoveFrom(std::move(other));
     }
@@ -49,7 +49,7 @@ class SpscRing {
       ring.capacity_ = capacity;
       ring.entries_ = std::make_unique<T[]>(capacity);
       return ring;
-    } catch (const std::bad_alloc&) {
+    } catch (const std::bad_alloc &) {
       return Status(StatusCode::kResourceExhausted,
                     "unable to allocate SPSC ring");
     }
@@ -83,8 +83,7 @@ class SpscRing {
     return Status::Ok();
   }
 
-  template <typename U>
-  [[nodiscard]] Status PushReserved(U&& value) noexcept {
+  template <typename U> [[nodiscard]] Status PushReserved(U &&value) noexcept {
     if (producer_.reserved == 0 || entries_ == nullptr) {
       return Status(StatusCode::kProtocolError,
                     "SPSC push has no producer reservation");
@@ -97,8 +96,7 @@ class SpscRing {
     return Status::Ok();
   }
 
-  template <typename U>
-  [[nodiscard]] Status TryPush(U&& value) noexcept {
+  template <typename U> [[nodiscard]] Status TryPush(U &&value) noexcept {
     auto reserved = Reserve(1);
     if (!reserved.ok()) {
       return reserved;
@@ -138,7 +136,7 @@ class SpscRing {
             producer_.full_count.load(std::memory_order_relaxed)};
   }
 
- private:
+private:
   struct alignas(kCacheLineBytes) ProducerState {
     std::atomic<std::uint64_t> tail{0};
     std::size_t reserved{0};
@@ -154,14 +152,13 @@ class SpscRing {
     const auto head = consumer_.head.load(std::memory_order_acquire);
     const auto depth = published_tail - head;
     auto observed = producer_.high_watermark.load(std::memory_order_relaxed);
-    while (observed < depth &&
-           !producer_.high_watermark.compare_exchange_weak(
-               observed, depth, std::memory_order_relaxed,
-               std::memory_order_relaxed)) {
+    while (observed < depth && !producer_.high_watermark.compare_exchange_weak(
+                                   observed, depth, std::memory_order_relaxed,
+                                   std::memory_order_relaxed)) {
     }
   }
 
-  void MoveFrom(SpscRing&& other) noexcept {
+  void MoveFrom(SpscRing &&other) noexcept {
     entries_ = std::move(other.entries_);
     capacity_ = std::exchange(other.capacity_, 0);
     producer_.tail.store(other.producer_.tail.load(std::memory_order_relaxed),
@@ -187,4 +184,4 @@ class SpscRing {
   ConsumerState consumer_;
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma
