@@ -57,9 +57,9 @@ yum install make cmake gcc g++ fmt-devel
 | libcdma | 1.0.4-4oe2403sp3 | 跟随openEuler 24.03 LTS SP3最新版本发布，通过yum install安装 |
 | ubutils | 1.0.2-6oe2403sp3 | 跟随openEuler 24.03 LTS SP3最新版本发布，通过yum install安装 |
 | ubctl | 1.0.3-4oe2403sp3 | 跟随openEuler 24.03 LTS SP3最新版本发布，通过yum install安装 |
-| UBM | 2.0.0.B023-1 | [support网站获取](https://support.huawei.com) |
-| UBE | 1.1.10.0.b142-openeuler24.03 | [support网站获取](https://support.huawei.com) |
-| BIOS（Basic Input Output System，基本输入输出系统） | 2.16.0.B013 | [support网站获取](https://support.huawei.com) |
+| UBM | 2.0.0.B023-1 | [support网站获取](https://support.huawei.com/enterprise/zh/doc/EDOC1100621906/5e967bc6?idPath=23710424%7C251364417%7C251364851%7C254884027%7C269670789) |
+| UBE | 1.1.10.0.b142-openeuler24.03 | [support网站获取](https://support.huawei.com/enterprise/zh/doc/EDOC1100621906/5e967bc6?idPath=23710424%7C251364417%7C251364851%7C254884027%7C269670789) |
+| BIOS（Basic Input Output System，基本输入输出系统） | 2.16.0.B013 | [support网站获取](https://support.huawei.com/enterprise/zh/doc/EDOC1100621906/5e967bc6?idPath=23710424%7C251364417%7C251364851%7C254884027%7C269670789) |
 
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >UB相关组件的具体配套版本以发布版本的版本配套表为准。
