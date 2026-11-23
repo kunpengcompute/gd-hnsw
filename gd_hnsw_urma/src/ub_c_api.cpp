@@ -71,6 +71,10 @@ int UbConfigure(const UbConfig* cfg) {
     SetUbLastError("UbConfigure: cfg is null");
     return static_cast<int>(hnsw_urma::StatusCode::kInvalidArgument);
   }
+  if (cfg->allowed_cpu_count != 0 && cfg->allowed_cpus == nullptr) {
+    SetUbLastError("UbConfigure: allowed_cpus is null with non-zero allowed_cpu_count");
+    return static_cast<int>(hnsw_urma::StatusCode::kInvalidArgument);
+  }
   if (hnsw_urma::MilvusUbRuntime::Instance().RpcDistanceReady()) {
     SetUbLastError("UbConfigure: runtime already enabled; configure before enable");
     return static_cast<int>(hnsw_urma::StatusCode::kInternalError);
@@ -407,6 +411,10 @@ int UbImportPeerHandles(uint32_t shard_id, uint32_t role,
                         uint32_t descriptor_bytes,
                         uint32_t jetty_token,
                         void* target_segment) {
+  if (rjetty_descriptor == nullptr) {
+    SetUbLastError("UbImportPeerHandles: rjetty_descriptor is null");
+    return static_cast<int>(hnsw_urma::StatusCode::kInvalidArgument);
+  }
   auto bytes = std::span<const std::byte>(
       static_cast<const std::byte*>(rjetty_descriptor), descriptor_bytes);
   auto st = hnsw_urma::MilvusUbRuntime::Instance().ImportPeerHandles(

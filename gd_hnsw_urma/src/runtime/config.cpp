@@ -787,9 +787,17 @@ Result<EffectiveRuntimeConfig> ResolveRuntimeConfig(
   auto registered_result_bytes = CheckedAlignUp<std::uint64_t>(total_result_bytes.value(), page_size.value());
   if (!registered_result_bytes.ok()) return registered_result_bytes.status();
   effective.registered_read_result_bytes = registered_result_bytes.value();
-  urma.request_jfs_depth = Resolve(
-      config.request_jfs_depth,
-      std::max(8U, config.request_ring_depth * std::max(1U, world_size - 1U)));
+  if (config.request_jfs_depth.automatic) {
+    auto automatic_request_jfs = CheckedMultiply<std::uint32_t>(
+        config.request_ring_depth, std::max(1U, world_size - 1U));
+    if (!automatic_request_jfs.ok()) {
+      return Status(StatusCode::kOutOfRange,
+                    "automatic request JFS depth overflows uint32");
+    }
+    urma.request_jfs_depth = std::max(8U, automatic_request_jfs.value());
+  } else {
+    urma.request_jfs_depth = config.request_jfs_depth.value;
+  }
   urma.response_jfs_depth = Resolve(
       config.response_jfs_depth, std::max(8U, automatic_response_jfs));
   urma.request_jfs_per_rpc_lane = config.request_jfs_per_rpc_lane;

@@ -10,9 +10,12 @@
 namespace hnsw_urma {
 
 std::span<const float> FloatDataset::Row(std::uint64_t row) const noexcept {
-  if (row >= rows || dim == 0 || values_ == nullptr) {
+  if (row >= rows || dim == 0 || values_ == nullptr ||
+      row >= values_->size() / dim) {
     return {};
   }
+  // Bound the row by the backing storage before multiplying: rows and dim
+  // remain publicly mutable, so the declared shape alone is not sufficient.
   const auto begin = static_cast<std::size_t>(row) * dim;
   return std::span<const float>(*values_).subspan(begin, dim);
 }

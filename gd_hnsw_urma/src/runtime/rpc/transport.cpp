@@ -5,6 +5,8 @@
 #include <limits>
 #include <new>
 
+#include "hnsw_urma/core/checked_math.hpp"
+
 namespace hnsw_urma {
 namespace {
 
@@ -37,6 +39,17 @@ Result<std::unique_ptr<RpcTransportOwner>> RpcTransportOwner::Create(
     return Status(StatusCode::kInvalidArgument,
                   "RPC transport configuration is invalid");
   }
+  auto result_slots = CheckedMultiply<std::uint64_t>(owned_peers.size(),
+                                                    mailbox.ring_depth);
+  if (!result_slots.ok()) return result_slots.status();
+  auto tx_count = CheckedAdd<std::uint64_t>(
+      mailbox.request_staging_slots_per_thread, result_slots.value());
+  if (!tx_count.ok() || tx_count.value() == 0 ||
+      tx_count.value() > std::numeric_limits<std::uint32_t>::max() ||
+      tx_count.value() > std::numeric_limits<std::size_t>::max()) {
+    return Status(StatusCode::kOutOfRange,
+                  "RPC transport TX slot count exceeds supported bounds");
+  }
   try {
     auto owner = std::unique_ptr<RpcTransportOwner>(new RpcTransportOwner());
     owner->config_ = config;
@@ -58,15 +71,7 @@ Result<std::unique_ptr<RpcTransportOwner>> RpcTransportOwner::Create(
     owner->server_ = &server;
     owner->request_staging_busy_.assign(
         mailbox.request_staging_slots_per_thread, false);
-    const auto result_slots = static_cast<std::uint64_t>(owned_peers.size()) *
-                              mailbox.ring_depth;
-    const auto tx_count = static_cast<std::uint64_t>(
-        mailbox.request_staging_slots_per_thread) + result_slots;
-    if (tx_count == 0 || tx_count > std::numeric_limits<std::size_t>::max()) {
-      return Status(StatusCode::kOutOfRange,
-                    "RPC transport TX slot count overflows");
-    }
-    owner->tx_slots_.resize(static_cast<std::size_t>(tx_count));
+    owner->tx_slots_.resize(static_cast<std::size_t>(tx_count.value()));
     owner->completion_scratch_.resize(config.poll_batch);
     owner->active_peer_scratch_.reserve(owned_peers.size());
     return owner;
@@ -82,16 +87,16 @@ Status RpcTransportOwner::SetFatal(Status status) {
 }
 
 Result<std::uint32_t> RpcTransportOwner::ReserveTx(TxKind kind) {
+  if (next_transport_ticket_ == 0) {
+    return Status(StatusCode::kResourceExhausted,
+                  "RPC transport ticket space is exhausted");
+  }
   for (std::uint32_t slot = 0; slot < tx_slots_.size(); ++slot) {
     if (tx_slots_[slot].active) continue;
     auto& tx = tx_slots_[slot];
     tx.active = true;
     ++tx.generation;
     if (tx.generation == 0) ++tx.generation;
-    if (next_transport_ticket_ == 0) {
-      return Status(StatusCode::kResourceExhausted,
-                    "RPC transport ticket space is exhausted");
-    }
     tx.kind = kind;
     tx.ticket = OperationTicket{
         next_transport_ticket_++, slot, config_.transport_lane, tx.generation};

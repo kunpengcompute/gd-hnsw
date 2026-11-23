@@ -71,6 +71,10 @@ class HnswSearchTask {
 
   [[nodiscard]] QueryState query_state() const noexcept;
   [[nodiscard]] RunState run_state() const noexcept;
+  // A backend may still reference this task after a fatal publication or
+  // rollback failure. Stop the entire runtime before destroying the task or
+  // reusing its slot/scratch when this returns true, even if Step() failed.
+  [[nodiscard]] bool requires_runtime_abort() const noexcept;
   [[nodiscard]] const Status& status() const noexcept;
   [[nodiscard]] const SearchResult& result() const noexcept;
   [[nodiscard]] const QueryRunController& run_controller() const noexcept;
@@ -87,6 +91,8 @@ class HnswSearchTask {
   std::unique_ptr<Impl> impl_;
 };
 
+// Local polling/synchronous helper. Runtime-backed asynchronous tasks must
+// retain scheduler ownership so requires_runtime_abort() can be honored.
 [[nodiscard]] Result<SearchResult> RunToCompletion(
     std::unique_ptr<HnswSearchTask> task, std::uint64_t max_steps = 1000000);
 
