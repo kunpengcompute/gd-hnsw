@@ -10,6 +10,10 @@ on:
     comments: [ '^(?:\/)?compile*' ]
   workflow_dispatch:
 
+permissions:
+  repository: read
+  pr: read
+  
 env:
   pr_id: ${{ atomgit.event.pull_request.number }}
   owner_name: boostkit
