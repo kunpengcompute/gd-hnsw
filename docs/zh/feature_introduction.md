@@ -1,10 +1,10 @@
 # 特性介绍
 
-本文档介绍gd_hnsw（代码命名空间`hnsw_urma`）的系统架构、核心算法原理与关键特性，帮助三方开发者理解其工作机理并正确使用。
+本文档介绍gd_hnsw（代码命名空间`hnsw_urma`）的系统架构、核心算法原理与关键特性，帮助开发者理解其工作机理并正确使用。
 
 ## 概述
 
-gd_hnsw是一套基于URMA（Unified Remote Memory Access，统一远端内存访问）的全局分布式HNSW（Hierarchical Navigable Small World，分层可导航小世界）检索运行时。多个进程共同持有一张覆盖全部数据的HNSW全局图（按分片存储）。任一进程可发起查询：沿图遍历时通过URMA READ直接读取远端进程的图结构与向量，并可将距离计算下推（pushdown）到数据所在进程就近执行。核心以C++20实现，跨节点通信基于UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA，以独立库形式交付，宿主（如Milvus）经C ABI集成。
+gd_hnsw是一套支持全局分布式向量检索的算法库。它采用HNSW（Hierarchical Navigable Small World，分层可导航小世界）图索引，并通过URMA（Unified Remote Memory Access，统一远端内存访问）实现跨节点数据访问。多个进程共同持有一张覆盖全部数据的HNSW全局图（按分片存储）。任一进程可发起查询：沿图遍历时通过URMA READ直接读取远端进程的图结构与向量，并可将距离计算下推（pushdown）到数据所在进程就近执行。核心以C++20实现，跨节点通信基于UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA，以独立库形式交付，宿主（如Milvus）经C ABI集成。
 
 ## 架构介绍
 
