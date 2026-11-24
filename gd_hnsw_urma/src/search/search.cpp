@@ -29,12 +29,14 @@ bool Better(const HeapEntry &lhs, const HeapEntry &rhs) noexcept {
 
 using SearchClock = std::chrono::steady_clock;
 
-Result<SearchClock::time_point> CheckedQueryDeadline(
-    SearchClock::time_point admission, std::chrono::milliseconds timeout) {
+Result<SearchClock::time_point>
+CheckedQueryDeadline(SearchClock::time_point admission,
+                     std::chrono::milliseconds timeout) {
   // Check the conversion as well as the addition: milliseconds::max() may
   // overflow the clock's finer duration before time_point addition begins.
-  const auto max_timeout = std::chrono::duration_cast<std::chrono::milliseconds>(
-      SearchClock::duration::max());
+  const auto max_timeout =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          SearchClock::duration::max());
   if (timeout > max_timeout) {
     return Status(StatusCode::kOutOfRange,
                   "query timeout exceeds the steady clock duration range");
@@ -48,9 +50,9 @@ Result<SearchClock::time_point> CheckedQueryDeadline(
   return admission + duration;
 }
 
-SearchClock::time_point CappedDeadline(
-    SearchClock::time_point now, SearchClock::duration timeout,
-    SearchClock::time_point query_deadline) noexcept {
+SearchClock::time_point
+CappedDeadline(SearchClock::time_point now, SearchClock::duration timeout,
+               SearchClock::time_point query_deadline) noexcept {
   if (now > SearchClock::time_point::max() - timeout) {
     return query_deadline;
   }
@@ -622,10 +624,11 @@ struct HnswSearchTask::Impl {
   }
 
   void SetAttemptDeadline(std::chrono::steady_clock::time_point now) {
-    attempt_deadline = CappedDeadline(
-        now, std::chrono::duration_cast<SearchClock::duration>(
-                 params.operation_timeout),
-        query_deadline);
+    attempt_deadline =
+        CappedDeadline(now,
+                       std::chrono::duration_cast<SearchClock::duration>(
+                           params.operation_timeout),
+                       query_deadline);
   }
 
   [[nodiscard]] std::optional<SearchStepResult>
@@ -643,10 +646,10 @@ struct HnswSearchTask::Impl {
         retry_wait_state = wait_state;
         retry_handle = QueryRetryHandle{
             key, epoch.value(),
-            CappedDeadline(
-                now, std::chrono::duration_cast<SearchClock::duration>(
-                         std::chrono::microseconds(50)),
-                query_deadline)};
+            CappedDeadline(now,
+                           std::chrono::duration_cast<SearchClock::duration>(
+                               std::chrono::microseconds(50)),
+                           query_deadline)};
         return SearchStepResult::kYielded;
       }
       Fail(scheduled.status());
@@ -718,9 +721,9 @@ struct HnswSearchTask::Impl {
           }
           if (waiting.value() != expected_epoch) {
             wait_started_nanoseconds = 0;
-            return RollbackGraphPreparation(Status(
-                StatusCode::kProtocolError,
-                "prepared graph wait epoch changed during preparation"));
+            return RollbackGraphPreparation(
+                Status(StatusCode::kProtocolError,
+                       "prepared graph wait epoch changed during preparation"));
           }
           ++result.profile.suspend_count;
           resume_pending = true;
@@ -731,10 +734,9 @@ struct HnswSearchTask::Impl {
         auto published = graph_reader->PublishPrepared(*graph_ticket);
         if (!published.ok()) {
           wait_started_nanoseconds = 0;
-          auto failure = Status(
-              StatusCode::kInternalError,
-              "prepared graph publication failed after wait "
-              "registration");
+          auto failure = Status(StatusCode::kInternalError,
+                                "prepared graph publication failed after wait "
+                                "registration");
           failure.AddContext("cause", published.ToString());
           // Graph publication failures retain an unpublished, cancellable
           // phase. Never discard the ticket if rollback itself is rejected.
@@ -1120,14 +1122,15 @@ struct HnswSearchTask::Impl {
         }
         if (waiting.value() != expected_epoch) {
           wait_started_nanoseconds = 0;
-          auto failure = Status(
-              StatusCode::kProtocolError,
-              "distance wait epoch changed during preparation");
+          auto failure =
+              Status(StatusCode::kProtocolError,
+                     "distance wait epoch changed during preparation");
           if (defer_ready) {
             controller.EndDeferredReady();
           }
-          for (auto& record : distance_operations) {
-            if (!record.ticket.has_value()) continue;
+          for (auto &record : distance_operations) {
+            if (!record.ticket.has_value())
+              continue;
             auto cancelled = distance_oracle->CancelPrepared(*record.ticket);
             if (cancelled.ok()) {
               record.ticket.reset();

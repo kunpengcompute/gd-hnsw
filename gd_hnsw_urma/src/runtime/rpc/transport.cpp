@@ -39,8 +39,8 @@ Result<std::unique_ptr<RpcTransportOwner>> RpcTransportOwner::Create(
     return Status(StatusCode::kInvalidArgument,
                   "RPC transport configuration is invalid");
   }
-  auto result_slots = CheckedMultiply<std::uint64_t>(owned_peers.size(),
-                                                    mailbox.ring_depth);
+  auto result_slots =
+      CheckedMultiply<std::uint64_t>(owned_peers.size(), mailbox.ring_depth);
   if (!result_slots.ok())
     return result_slots.status();
   auto tx_count = CheckedAdd<std::uint64_t>(
