@@ -1,0 +1,368 @@
+{
+  "source": "https://gitcode.com/zhouwenjun1031/hnsw_urma",
+  "commit": "1b9b4f000730e2d74bce927d04410d6d3101c23e",
+  "milvus_base": "5cd685424317b6018dc870bc0be2d2ca2e655506",
+  "files": [
+    {
+      "path": "include/hnsw_urma/compute/dataset.hpp",
+      "sha256": "0adb0e7d134ae84f71897e15f65adb20eee6f64d0a59731f9530945a4f2f50d0"
+    },
+    {
+      "path": "include/hnsw_urma/compute/distance.hpp",
+      "sha256": "b025697cac63066dac27bf5139cd007cced3752426b049c550f0ba0d6d2d4fd0"
+    },
+    {
+      "path": "include/hnsw_urma/control/mpi_control.hpp",
+      "sha256": "334aea85944f2229ca17ee7ca4490153bc96bcf118dd7fe2ef792724e2627b5f"
+    },
+    {
+      "path": "include/hnsw_urma/core/checked_math.hpp",
+      "sha256": "ef6620d0a4f1e8a39847bba9bc504c58e3eefdae3baba95e74aa29bd3b0ba606"
+    },
+    {
+      "path": "include/hnsw_urma/core/minimax_heap.hpp",
+      "sha256": "e2c7da327e76e5b79f2ebc967b53ef96292a803f85d51729cbaea3dca80adf47"
+    },
+    {
+      "path": "include/hnsw_urma/core/mpmc_ring.hpp",
+      "sha256": "6287467f1232cfec26e991b70f7b8d917702030f8308bd0e8574509df4454db4"
+    },
+    {
+      "path": "include/hnsw_urma/core/page_aligned_buffer.hpp",
+      "sha256": "bad852c7decd1468d078a7a7e3cf330ed63ff34ef7ce0b9b67a4f97a6fa646b8"
+    },
+    {
+      "path": "include/hnsw_urma/core/query_key.hpp",
+      "sha256": "ef2ae84f79cce296c72157f3e6eada1b2bd08786be95bcc42c3746f5bc63da28"
+    },
+    {
+      "path": "include/hnsw_urma/core/shard_map.hpp",
+      "sha256": "1ffb411396b1b357fc6c9e57779b90788ea29705da0be018e251b8c06a974749"
+    },
+    {
+      "path": "include/hnsw_urma/core/spsc_ring.hpp",
+      "sha256": "9c7d9a1cdc9a1540af14fd54c519dc25e31e7e7592b32dd74c9af00ce8d25017"
+    },
+    {
+      "path": "include/hnsw_urma/core/status.hpp",
+      "sha256": "1cf2fdd01361772b957935c3a6130d574431f63b70d3dd07a40f8e08abb473b2"
+    },
+    {
+      "path": "include/hnsw_urma/core/types.hpp",
+      "sha256": "34d8c338fcecf0ab382fe283aa0ba1e18eb97a60f3db87cb8c25c579b01f905b"
+    },
+    {
+      "path": "include/hnsw_urma/core/visited_table.hpp",
+      "sha256": "edc6d56e9cbb46e8ded76710bdb6a2a65ae6143961ada2a9fe7a1f90a60b440c"
+    },
+    {
+      "path": "include/hnsw_urma/index/builder.hpp",
+      "sha256": "7d54192785ac9dfe9fe561668502d9d98925ba93f647804771c82bcd07580f2d"
+    },
+    {
+      "path": "include/hnsw_urma/index/format.hpp",
+      "sha256": "f7cbe21b8bbdeee6b0ae36304b5d4816a2daa8fc2be8213429df41b5fabe401f"
+    },
+    {
+      "path": "include/hnsw_urma/protocol/distance_batch_wire.hpp",
+      "sha256": "9a804bc92ece2e17d62e7da1c49449249e782844b6413f3c537e8a5e9a49f0b3"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/benchmark.hpp",
+      "sha256": "61db09877c47d6ca6d552ff5b1a6562a8e97e5330cbbb746fc5de8e5556a3105"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/config.hpp",
+      "sha256": "e969897b5d9d13492dc97cd8e171b6f3fb93264350b35b4be8823db67287d53a"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/counting_notification.hpp",
+      "sha256": "f984df555bfab5a28bfaf781393d697d330fb61cfddb47a7f200763bea1488e9"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/drain.hpp",
+      "sha256": "b60458ccadb3f4fb05bfebaf47edc89eceedfb3d458816b8e88ebf28fdf7f10f"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/hybrid_distance.hpp",
+      "sha256": "fa241334798bacb224e11c61f4d0fa3ca89eab9d1dbf3f956e8221e462ac7799"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/load_balancing.hpp",
+      "sha256": "3c8448ef61e51d5992e21fdaa17162dc860259ca797797e1923169d76010d3cf"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/rpc/distance_oracle.hpp",
+      "sha256": "84302f1c37df49b139a3167f8e0943367c69bb9d5594e23bade8ad96da7c2172"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/rpc/mailbox.hpp",
+      "sha256": "36145b41693feb4eedbf7fe1ec5a1a8bfc13e1b70b30e351fa910b587ab06b8f"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/rpc/transport.hpp",
+      "sha256": "5f9a6d3c473545c0a7d9255218eead7805b60bb40b0fb8406a5fd60198d8e47b"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/rpc_runtime.hpp",
+      "sha256": "69783685678142a668a6e2fa17d1bd9a8dcb236fa5fdc35b6339cbf7c9312871"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/scheduler.hpp",
+      "sha256": "50fd1bfb0f12fba1e7e82833898fca16fe7228cf9237800ce4323b5b894a364a"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/search_event.hpp",
+      "sha256": "05871e72cbbc83761ced2071972dd6d72f0b0054701667bb843ceb400db497f0"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/thread_group.hpp",
+      "sha256": "2407b59ad10f4fa433c143ba9ee1f9d01f292af15cb663bfe9cbc06454e0c32a"
+    },
+    {
+      "path": "include/hnsw_urma/runtime/topology.hpp",
+      "sha256": "d179546a13ab40c8ac2f697e74ba37db88322876e0acc87f9762247a23ebe896"
+    },
+    {
+      "path": "include/hnsw_urma/search/io.hpp",
+      "sha256": "e1912576d79e105f18c0532415368022e9a6a6541e2999ce3fd4a3569b6afbfb"
+    },
+    {
+      "path": "include/hnsw_urma/search/local_io.hpp",
+      "sha256": "0326e591161d27af1a101d7aa3bfa7c651b293f2d7ba08d21ed0984a6fa7cbfb"
+    },
+    {
+      "path": "include/hnsw_urma/search/mock_io.hpp",
+      "sha256": "91c3718b193fabdf989e95ce9bfd33ee20e1e78ea7d67b3482a670e4e1f37e04"
+    },
+    {
+      "path": "include/hnsw_urma/search/query_context.hpp",
+      "sha256": "8c5e6f95170eef9877d6c4b84c489acd62be4f21b2121402340091bbb4f8d00d"
+    },
+    {
+      "path": "include/hnsw_urma/search/query_slot_pool.hpp",
+      "sha256": "2d5ddd9f4ba41a04c9f4253874b94152f5fd955468c91f96a1b45a034c834b94"
+    },
+    {
+      "path": "include/hnsw_urma/search/read_resources.hpp",
+      "sha256": "eed8860bef57c694d6f100b6051e1f9d13f17bacdbc216ab1ff3eeb1289da9d7"
+    },
+    {
+      "path": "include/hnsw_urma/search/remote_io.hpp",
+      "sha256": "348c02573a947178acadac4e2611cfa287046bba8ace8ea9cd8838467dae8f7f"
+    },
+    {
+      "path": "include/hnsw_urma/search/search.hpp",
+      "sha256": "77ece4f4203aa8f4fee797527b190037249f9c751fdfe87b9f60b5dd8c6ab560"
+    },
+    {
+      "path": "include/hnsw_urma/transport/mock_lane_post_engine.hpp",
+      "sha256": "418337e64fcbe2fd819cbdfd78532d222431224529c6540e1fd24c0fec313a50"
+    },
+    {
+      "path": "include/hnsw_urma/transport/read_batch_lane.hpp",
+      "sha256": "c03af15ed018f5956d3ee919c93ae8cdc9a774b5ac4edd568756f6d3298d197e"
+    },
+    {
+      "path": "include/hnsw_urma/transport/shared_memory_transport.hpp",
+      "sha256": "73d03877a5c54a8d4181588e3d111723d188b448800dc1e47b54f1383a5a8949"
+    },
+    {
+      "path": "include/hnsw_urma/transport/transport.hpp",
+      "sha256": "5a5d5d44253ff0c440ca1416f90279a08b6e127f46791b294fed09fbeb656993"
+    },
+    {
+      "path": "include/hnsw_urma/transport/urma/urma_transport.hpp",
+      "sha256": "3ff9145cb25ebe0c1fbc9eaa5b254e0560a18e9a315f98de303ee936c0680ae4"
+    },
+    {
+      "path": "include/hnsw_urma/transport/urma_resources.hpp",
+      "sha256": "e0ee047ea7ea54d7c1859b6b925fb78e21b60a3c84a69f9bb4e596758b04a7f8"
+    },
+    {
+      "path": "src/compute/dataset.cpp",
+      "sha256": "6b40bf35ee6a29c6ffb0c9987336829c42ed1fd2db1f0958daca69a5126b75ec"
+    },
+    {
+      "path": "src/compute/distance.cpp",
+      "sha256": "59739f5e3031045e28e289efe723e295323784c36d5b73a55ae34600a9997c2e"
+    },
+    {
+      "path": "src/control/mpi_control.cpp",
+      "sha256": "8cdde74a86f7b0dc960baafa68c2b7e516f39f90649b09b4514b85edab164562"
+    },
+    {
+      "path": "src/core/minimax_heap.cpp",
+      "sha256": "4056fe9578e7cfa1bd57de811dafad02081342843a2f16caf8a8f85436b62c1a"
+    },
+    {
+      "path": "src/core/page_aligned_buffer.cpp",
+      "sha256": "0b2b5e839e7d8c3b2e157e887f66cc186463b6a704c71c2ae4df9eafb12aae25"
+    },
+    {
+      "path": "src/core/query_key.cpp",
+      "sha256": "751114b79ce1474bbe1e7ba8b6a8f34cd13cec46c20ba8df2874686e1ba76c43"
+    },
+    {
+      "path": "src/core/shard_map.cpp",
+      "sha256": "026f667c09b7e5e1bccf28790f374efc1893d9e1400b744efa989c9ca8a25307"
+    },
+    {
+      "path": "src/core/status.cpp",
+      "sha256": "6337e840c68a73d16a8e0439769b08ea0676985771670006da3c495b7055e95e"
+    },
+    {
+      "path": "src/core/visited_table.cpp",
+      "sha256": "a5fcf601299d3993df05cd90e02140cb1d8bccf454d49c3eb8cfb03b86c82f9f"
+    },
+    {
+      "path": "src/index/builder.cpp",
+      "sha256": "a8c263a10048aa5ec66afc07c17786f519283719c9e39c5a3a6154d3bbaa1e34"
+    },
+    {
+      "path": "src/index/format.cpp",
+      "sha256": "64ffbe865883abd39835023d75409479607c74113a2ec159a9bea03c18ba2003"
+    },
+    {
+      "path": "src/index/index.cpp",
+      "sha256": "adaf31c9b55f5c6b10d39af27b8ad4534820663e09139506b604e8ec0179b18b"
+    },
+    {
+      "path": "src/protocol/distance_batch_wire.cpp",
+      "sha256": "4a75f3ae4ff6df6d9c881b07c4b7b37c7376eb9bdcdb135a7dbb5d79be0824e0"
+    },
+    {
+      "path": "src/runtime/benchmark.cpp",
+      "sha256": "a6b92c89c960db4b06fe900d1b86e4e640c63c6075013aeea5abb1c5264ca267"
+    },
+    {
+      "path": "src/runtime/config.cpp",
+      "sha256": "a3025a6842a052bedf7dc330a5a6bc190cc86d7c5eba79fcb4205989f8b5c5ed"
+    },
+    {
+      "path": "src/runtime/drain.cpp",
+      "sha256": "ce1033e15152deb4da80f06b6b7326412654772e1c5fe117e44fa2a9a51aaba8"
+    },
+    {
+      "path": "src/runtime/hybrid_distance.cpp",
+      "sha256": "cf9a5b26a3248bcf6a2639521d5f5ecdbabd12d0b1821a4b87123db05fd1e1d5"
+    },
+    {
+      "path": "src/runtime/load_balancing.cpp",
+      "sha256": "31655055cb68b2d9549724eaab1abecc573cf60c0ccb337726833be923509c4e"
+    },
+    {
+      "path": "src/runtime/rpc/distance_oracle.cpp",
+      "sha256": "897a34a436b70bf1d09b8f61bcb6222c75569f09411a385caa43f0350448a523"
+    },
+    {
+      "path": "src/runtime/rpc/mailbox.cpp",
+      "sha256": "98fb597a1e9896066fa49b798185d27df2101be0deb5f049638f9983cde7f871"
+    },
+    {
+      "path": "src/runtime/rpc/transport.cpp",
+      "sha256": "58813787806b9d9be6cb399c0a1c66a484a29eb104d2b6351b931cda8d61b3aa"
+    },
+    {
+      "path": "src/runtime/rpc_runtime.cpp",
+      "sha256": "3a90124c7f055209985860c4a1ff06ddc06b3a45ec67534338729d99303ad968"
+    },
+    {
+      "path": "src/runtime/scheduler.cpp",
+      "sha256": "37366a3fec5d3b52d786e33c512d351993832c2dbaa5853c233597d8f883db01"
+    },
+    {
+      "path": "src/runtime/thread_group.cpp",
+      "sha256": "28e0da838e9b0a36bbd1dd692ba757a8d0cf923e7d29e0375fb9e6b17612bf56"
+    },
+    {
+      "path": "src/runtime/topology.cpp",
+      "sha256": "57f5dffa2b238e0c39c95838d4c0e68013286720b8818543611454fc1ddac7ba"
+    },
+    {
+      "path": "src/search/local_io.cpp",
+      "sha256": "22eefe00766ade91288fb1eff0c80d1b49c2602f3b2355359cc78e224abcb22f"
+    },
+    {
+      "path": "src/search/mock_io.cpp",
+      "sha256": "b7a4a78c5dfc7a249faa84aa50ec18b6d5e6c2d6163e769b05389b7391f578f9"
+    },
+    {
+      "path": "src/search/query_context.cpp",
+      "sha256": "a7a88534ae70d099567c91014ba58b59fd7df3dda61caed9629b9e7cc93d1235"
+    },
+    {
+      "path": "src/search/query_slot_pool.cpp",
+      "sha256": "bffd3cbd936890a170c3be2561d99d1b89e23a7317b8cfa09b6116daf2964f1e"
+    },
+    {
+      "path": "src/search/read_resources.cpp",
+      "sha256": "514c0b56bd1cafe216106322d548d9ab37525ea6f843b8d476c371ddd5fd55bf"
+    },
+    {
+      "path": "src/search/remote_io.cpp",
+      "sha256": "fc72072684679fafd9f2599a4cc2ed2cfae9ea3790c6001dc107f9c4d554ad7c"
+    },
+    {
+      "path": "src/search/search.cpp",
+      "sha256": "d2512a3d8baa9e3d93ee3a1b1e2b5f295ca0e1225af724bdb3c9bc5c1c931f01"
+    },
+    {
+      "path": "src/transport/mock_lane_post_engine.cpp",
+      "sha256": "cd127763e414d588c84afbc82f705bccb1178f319525fafb860aafcb804a1ae7"
+    },
+    {
+      "path": "src/transport/read_batch_lane.cpp",
+      "sha256": "495ca1ec82e7b6fe88bea5c48494550a5e83ca3c840a2d824b966daf66413a75"
+    },
+    {
+      "path": "src/transport/shared_memory_transport.cpp",
+      "sha256": "94ae0a412457fca5f2ac123495da80757e62a183eb76181e65a464a67cb37fb5"
+    },
+    {
+      "path": "src/transport/transport.cpp",
+      "sha256": "ebdcb65ac79e0ccc6daf9f32513b7a5924f13e2d2d60d6fa167b360a9f0fb627"
+    },
+    {
+      "path": "src/transport/urma/urma_transport.cpp",
+      "sha256": "8cb77eef6c2c2e7f55d76d5b3d12ba6b951d5469850e39bfd139afc9ff0e08f7"
+    },
+    {
+      "path": "src/transport/urma_resources.cpp",
+      "sha256": "d3f42361e09d5d619c5d8f19c84feb3338beb86887683e66908e52fdadb6ae55"
+    }
+  ],
+  "removed": [
+    "include/hnsw_urma/debug_trace.hpp",
+    "include/hnsw_urma/index/upgrade.hpp",
+    "include/hnsw_urma/protocol/distance_status.hpp",
+    "include/hnsw_urma/protocol/query_cache.hpp",
+    "include/hnsw_urma/transport/read_dispatcher.hpp",
+    "src/index/upgrade.cpp",
+    "src/mpi_control.cpp",
+    "src/protocol/query_cache.cpp",
+    "src/transport/read_dispatcher.cpp"
+  ],
+  "adaptations": [
+    {
+      "path": "include/hnsw_urma/transport/urma/urma_transport.hpp",
+      "sha256": "4e5a3eeb3c649359c5ee3c49f0212b46cc5ff1c5d6f82085f3f59efff312ed3b",
+      "reason": "Borrow UrmaManager context and imported segments; own all runtime-created endpoints/registrations and never destroy borrowed handles."
+    },
+    {
+      "path": "src/transport/urma/urma_transport.cpp",
+      "sha256": "3f9c02478c1590c3b92867e775615b2735512d15d46076a4e76e8b6b404bdaf7",
+      "reason": "Borrow UrmaManager context and imported segments; own all runtime-created endpoints/registrations and never destroy borrowed handles."
+    },
+    {
+      "path": "src/runtime/rpc/transport.cpp",
+      "sha256": "f0ac659ba976da5192f02dc1e4275c9ab95b82ef80745d8c129cd2467ff2a634",
+      "reason": "Publish InFlight before response DMA can be observed; roll back unaccepted backpressure and retain the send lease on fatal post failure."
+    },
+    {
+      "path": "src/runtime/rpc_runtime.cpp",
+      "sha256": "16bbffecb74b145f54846691d84b632c1fdba543ea6dcc777df37a4a67e0f531",
+      "reason": "Clear result metadata before release-publishing Free to the distance worker; the RPC owner exclusively releases InFlight."
+    }
+  ]
+}
