@@ -9,11 +9,11 @@
 #include <span>
 #include <vector>
 
-#include "hnsw_urma/core/spsc_ring.hpp"
 #include "hnsw_urma/core/mpmc_ring.hpp"
+#include "hnsw_urma/core/spsc_ring.hpp"
 #include "hnsw_urma/core/status.hpp"
-#include "hnsw_urma/runtime/thread_group.hpp"
 #include "hnsw_urma/runtime/search_event.hpp"
+#include "hnsw_urma/runtime/thread_group.hpp"
 #include "hnsw_urma/search/query_context.hpp"
 
 namespace hnsw_urma {
@@ -32,19 +32,19 @@ enum class YieldedQueryDisposition : std::uint8_t {
   kHandedOff,
 };
 
-[[nodiscard]] constexpr YieldedQueryDisposition ClassifyYieldedQueryState(
-    RunState state) noexcept {
+[[nodiscard]] constexpr YieldedQueryDisposition
+ClassifyYieldedQueryState(RunState state) noexcept {
   switch (state) {
-    case RunState::kIdle:
-      return YieldedQueryDisposition::kInvalid;
-    case RunState::kQueued:
-      return YieldedQueryDisposition::kQueued;
-    case RunState::kWaiting:
-      return YieldedQueryDisposition::kHandedOff;
-    case RunState::kRunning:
-    case RunState::kCompleted:
-    case RunState::kFailed:
-      return YieldedQueryDisposition::kInvalid;
+  case RunState::kIdle:
+    return YieldedQueryDisposition::kInvalid;
+  case RunState::kQueued:
+    return YieldedQueryDisposition::kQueued;
+  case RunState::kWaiting:
+    return YieldedQueryDisposition::kHandedOff;
+  case RunState::kRunning:
+  case RunState::kCompleted:
+  case RunState::kFailed:
+    return YieldedQueryDisposition::kInvalid;
   }
   return YieldedQueryDisposition::kInvalid;
 }
@@ -116,32 +116,33 @@ struct LocalRetryQueue {
 };
 
 class SchedulerQueues {
- public:
+public:
   static constexpr std::uint32_t kTimingHistogramBuckets = 64;
   static constexpr std::uint32_t kWaitProfileKinds =
       static_cast<std::uint32_t>(QueryWaitProfileKind::kCount);
 
-  SchedulerQueues(const SchedulerQueues&) = delete;
-  SchedulerQueues& operator=(const SchedulerQueues&) = delete;
+  SchedulerQueues(const SchedulerQueues &) = delete;
+  SchedulerQueues &operator=(const SchedulerQueues &) = delete;
 
-  [[nodiscard]] static Result<std::unique_ptr<SchedulerQueues>> Create(
-      std::uint32_t search_workers, std::uint32_t ready_producer_count,
-      std::uint32_t max_active_queries, std::uint32_t queue_depth,
-      bool profiling_enabled = false,
-      std::uint32_t rpc_slots_per_search = 0);
+  [[nodiscard]] static Result<std::unique_ptr<SchedulerQueues>>
+  Create(std::uint32_t search_workers, std::uint32_t ready_producer_count,
+         std::uint32_t max_active_queries, std::uint32_t queue_depth,
+         bool profiling_enabled = false,
+         std::uint32_t rpc_slots_per_search = 0);
 
-  [[nodiscard]] static Result<std::uint64_t> ProfileStorageBytes(
-      std::uint32_t searches, std::uint32_t producers);
+  [[nodiscard]] static Result<std::uint64_t>
+  ProfileStorageBytes(std::uint32_t searches, std::uint32_t producers);
 
   // Scheduler -> Search.
   [[nodiscard]] Status PublishAdmission(std::uint32_t worker,
                                         QueryKey query) noexcept;
-  // Progress lanes -> owner Search. A full event ring is a fatal lifecycle error.
+  // Progress lanes -> owner Search. A full event ring is a fatal lifecycle
+  // error.
   [[nodiscard]] Status PublishReady(std::uint32_t lane,
                                     std::uint32_t target_worker,
                                     QueryReadyHandle handle) noexcept;
-  [[nodiscard]] Status PublishRpcReclaim(
-      std::uint32_t lane, RpcReclaimHandle handle) noexcept;
+  [[nodiscard]] Status PublishRpcReclaim(std::uint32_t lane,
+                                         RpcReclaimHandle handle) noexcept;
   // Called between drained benchmark rounds, with every owner stopped.
   void ResetMetrics() noexcept;
   [[nodiscard]] std::size_t event_capacity() const noexcept {
@@ -151,11 +152,10 @@ class SchedulerQueues {
     return ready_queues_.size();
   }
   // Only owner Search consumes its MPSC ring, Admission and private retries.
-  [[nodiscard]] std::optional<SearchInput> PopSearchInput(
-      std::uint32_t worker,
-      std::chrono::steady_clock::time_point now) noexcept;
-  void RecordReadyStep(std::uint32_t worker,
-                       QueryRunnableHandle handle,
+  [[nodiscard]] std::optional<SearchInput>
+  PopSearchInput(std::uint32_t worker,
+                 std::chrono::steady_clock::time_point now) noexcept;
+  void RecordReadyStep(std::uint32_t worker, QueryRunnableHandle handle,
                        std::uint64_t step_nanoseconds) noexcept;
   void RecordReadyRun(std::uint32_t worker,
                       std::uint64_t run_nanoseconds) noexcept;
@@ -170,7 +170,7 @@ class SchedulerQueues {
                                    QueryDoneHandle handle) noexcept;
   [[nodiscard]] std::optional<QueryDoneHandle> PopDone() noexcept;
 
-  [[nodiscard]] CountingNotification& scheduler_ready() noexcept {
+  [[nodiscard]] CountingNotification &scheduler_ready() noexcept {
     return scheduler_ready_;
   }
   [[nodiscard]] SchedulerQueueMetrics metrics() const;
@@ -178,7 +178,7 @@ class SchedulerQueues {
     return max_active_queries_;
   }
 
- private:
+private:
   friend class SchedulerReadyPublisher;
 
   struct AtomicMetrics {
@@ -200,16 +200,13 @@ class SchedulerQueues {
   };
 
   SchedulerQueues() = default;
-  void RecordReadyPublished(std::uint32_t lane,
-                            std::uint32_t target_worker,
+  void RecordReadyPublished(std::uint32_t lane, std::uint32_t target_worker,
                             QueryReadyHandle handle,
                             std::uint64_t lane_depth) noexcept;
-  void RecordReadyTiming(std::uint32_t profile_shard,
-                         std::uint32_t metric,
+  void RecordReadyTiming(std::uint32_t profile_shard, std::uint32_t metric,
                          std::uint32_t worker,
                          std::uint64_t nanoseconds) noexcept;
-  void RecordWaitTiming(std::uint32_t metric,
-                        std::uint32_t kind,
+  void RecordWaitTiming(std::uint32_t metric, std::uint32_t kind,
                         std::uint64_t nanoseconds) noexcept;
   std::uint32_t search_workers_{0};
   std::uint32_t ready_producer_count_{0};
@@ -230,10 +227,10 @@ class SchedulerQueues {
 };
 
 struct QueryDeferredReadyEntry {
-    QueryReadyHandle handle;
-    QueryRunController* controller{nullptr};
-    bool transitioned{false};
-  };
+  QueryReadyHandle handle;
+  QueryRunController *controller{nullptr};
+  bool transitioned{false};
+};
 
 struct DeferredReadyWork {
   std::vector<QueryDeferredReadyEntry> entries;
@@ -245,28 +242,27 @@ struct DeferredReadyWork {
 // called concurrently by different Progress Lanes, but a lane must only call
 // its own producer row.
 class SchedulerReadyPublisher final : public QueryReadyPublisher {
- public:
-  [[nodiscard]] static Result<std::unique_ptr<SchedulerReadyPublisher>> Create(
-      SchedulerQueues& queues, std::uint32_t search_workers,
-      std::uint32_t ready_producer_count);
+public:
+  [[nodiscard]] static Result<std::unique_ptr<SchedulerReadyPublisher>>
+  Create(SchedulerQueues &queues, std::uint32_t search_workers,
+         std::uint32_t ready_producer_count);
 
-  [[nodiscard]] Status PublishReady(
-      std::uint32_t producer_lane, QueryReadyHandle handle) noexcept override;
-  [[nodiscard]] Status DeferReady(
-      std::uint32_t producer_lane, QueryReadyHandle handle,
-      QueryRunController* controller) noexcept override;
-  void RecordWaitProfile(
-      QueryWaitProfileSample sample) noexcept override;
+  [[nodiscard]] Status PublishReady(std::uint32_t producer_lane,
+                                    QueryReadyHandle handle) noexcept override;
+  [[nodiscard]] Status
+  DeferReady(std::uint32_t producer_lane, QueryReadyHandle handle,
+             QueryRunController *controller) noexcept override;
+  void RecordWaitProfile(QueryWaitProfileSample sample) noexcept override;
   [[nodiscard]] Result<std::size_t> Flush(std::uint32_t producer_lane,
-                                  std::size_t budget) noexcept;
+                                          std::size_t budget) noexcept;
 
   [[nodiscard]] std::size_t pending(std::uint32_t lane) const noexcept {
     return deferred_ready_[lane].size;
   }
 
- private:
+private:
   SchedulerReadyPublisher() = default;
-  SchedulerQueues* queues_{nullptr};
+  SchedulerQueues *queues_{nullptr};
   std::uint32_t search_workers_{0};
   std::uint32_t ready_producer_count_{0};
   std::vector<DeferredReadyWork> deferred_ready_;
@@ -281,19 +277,19 @@ struct QueryDeadlineEntry {
 // Scheduler/Control is its only owner. Cancel is O(max_active_queries); the
 // configured bound is intentionally small and cancellation is not a hot path.
 class QueryDeadlineHeap {
- public:
+public:
   [[nodiscard]] static Result<QueryDeadlineHeap> Create(std::size_t capacity);
   [[nodiscard]] Status Schedule(QueryDeadlineEntry entry);
   [[nodiscard]] bool Cancel(QueryKey query) noexcept;
-  [[nodiscard]] std::optional<QueryDeadlineEntry> PopExpired(
-      std::chrono::steady_clock::time_point now) noexcept;
+  [[nodiscard]] std::optional<QueryDeadlineEntry>
+  PopExpired(std::chrono::steady_clock::time_point now) noexcept;
   [[nodiscard]] std::optional<std::chrono::steady_clock::time_point>
   next_deadline() const noexcept;
   [[nodiscard]] std::size_t size() const noexcept { return heap_.size(); }
 
- private:
+private:
   std::size_t capacity_{0};
   std::vector<QueryDeadlineEntry> heap_;
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

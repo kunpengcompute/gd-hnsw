@@ -13,8 +13,8 @@
 #include "hnsw_urma/core/checked_math.hpp"
 #include "hnsw_urma/core/query_key.hpp"
 #include "hnsw_urma/core/spsc_ring.hpp"
-#include "hnsw_urma/runtime/scheduler.hpp"
 #include "hnsw_urma/runtime/rpc_runtime.hpp"
+#include "hnsw_urma/runtime/scheduler.hpp"
 #include "hnsw_urma/transport/read_batch_lane.hpp"
 
 namespace hnsw_urma {
@@ -32,7 +32,7 @@ Result<std::uint64_t> Product(std::initializer_list<std::uint64_t> values) {
   return result;
 }
 
-Status Add(std::uint64_t value, std::uint64_t& total) {
+Status Add(std::uint64_t value, std::uint64_t &total) {
   auto next = CheckedAdd(total, value);
   if (!next.ok()) {
     return next.status();
@@ -42,7 +42,7 @@ Status Add(std::uint64_t value, std::uint64_t& total) {
 }
 
 Status AddStorage(std::uint64_t count, std::uint64_t depth,
-                  std::uint64_t element_bytes, std::uint64_t& total) {
+                  std::uint64_t element_bytes, std::uint64_t &total) {
   auto bytes = Product({count, depth, element_bytes});
   if (!bytes.ok()) {
     return bytes.status();
@@ -52,8 +52,8 @@ Status AddStorage(std::uint64_t count, std::uint64_t depth,
 
 Status AssignOwners(std::uint32_t world_size, std::uint32_t local_rank,
                     std::uint32_t thread_count,
-                    std::vector<std::uint32_t>& owner_by_rank,
-                    std::vector<std::vector<std::uint32_t>>& owned_ranks) {
+                    std::vector<std::uint32_t> &owner_by_rank,
+                    std::vector<std::vector<std::uint32_t>> &owned_ranks) {
   if (thread_count == 0) {
     return Status(StatusCode::kInvalidArgument,
                   "communication thread count must be non-zero");
@@ -71,44 +71,41 @@ Status AssignOwners(std::uint32_t world_size, std::uint32_t local_rank,
       owned_ranks[owner].push_back(rank);
       ++remote_index;
     }
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate communication owner map");
   }
   return Status::Ok();
 }
 
-Result<std::vector<std::uint32_t>> ValidateAndSortCpus(
-    std::span<const std::uint32_t> allowed_cpus,
-    CpuRoleCounts counts) {
-  const auto requested =
-      static_cast<std::uint64_t>(counts.search) + counts.distance +
-      counts.read_progress + counts.rpc_progress + counts.reserved;
-  if (allowed_cpus.empty() || counts.search == 0 ||
-      counts.distance == 0 || counts.read_progress == 0 ||
-      counts.rpc_progress == 0 || counts.reserved == 0 ||
-      requested != allowed_cpus.size()) {
+Result<std::vector<std::uint32_t>>
+ValidateAndSortCpus(std::span<const std::uint32_t> allowed_cpus,
+                    CpuRoleCounts counts) {
+  const auto requested = static_cast<std::uint64_t>(counts.search) +
+                         counts.distance + counts.read_progress +
+                         counts.rpc_progress + counts.reserved;
+  if (allowed_cpus.empty() || counts.search == 0 || counts.distance == 0 ||
+      counts.read_progress == 0 || counts.rpc_progress == 0 ||
+      counts.reserved == 0 || requested != allowed_cpus.size()) {
     return Status(StatusCode::kInvalidArgument,
                   "CPU role counts do not cover the allowed CPU set");
   }
   try {
-    std::vector<std::uint32_t> sorted(
-        allowed_cpus.begin(), allowed_cpus.end());
+    std::vector<std::uint32_t> sorted(allowed_cpus.begin(), allowed_cpus.end());
     std::sort(sorted.begin(), sorted.end());
     if (std::adjacent_find(sorted.begin(), sorted.end()) != sorted.end()) {
       return Status(StatusCode::kInvalidArgument,
                     "allowed CPU set contains duplicates");
     }
     return sorted;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate CPU layout input");
   }
 }
 
 #if defined(__linux__)
-Result<std::uint32_t> ReadSysfsU32(
-    const std::filesystem::path& path) {
+Result<std::uint32_t> ReadSysfsU32(const std::filesystem::path &path) {
   std::ifstream input(path);
   std::uint64_t value = 0;
   if (!input || !(input >> value) ||
@@ -120,8 +117,7 @@ Result<std::uint32_t> ReadSysfsU32(
   return static_cast<std::uint32_t>(value);
 }
 
-Result<std::uint32_t> ReadSharedCpuListId(
-    const std::filesystem::path& path) {
+Result<std::uint32_t> ReadSharedCpuListId(const std::filesystem::path &path) {
   std::ifstream input(path);
   std::string value;
   if (!input || !(input >> value)) {
@@ -137,7 +133,7 @@ Result<std::uint32_t> ReadSharedCpuListId(
       throw std::out_of_range("LLC CPU ID");
     }
     return static_cast<std::uint32_t>(parsed);
-  } catch (const std::exception&) {
+  } catch (const std::exception &) {
     return Status(StatusCode::kInternalError,
                   "LLC shared CPU list is malformed")
         .AddContext("path", path.string())
@@ -146,9 +142,8 @@ Result<std::uint32_t> ReadSharedCpuListId(
 }
 
 Result<std::uint32_t> DiscoverLlcId(std::uint32_t cpu) {
-  const auto cache_root = std::filesystem::path(
-      "/sys/devices/system/cpu/cpu" + std::to_string(cpu) +
-      "/cache");
+  const auto cache_root = std::filesystem::path("/sys/devices/system/cpu/cpu" +
+                                                std::to_string(cpu) + "/cache");
   std::error_code error;
   std::vector<std::filesystem::path> indexes;
   for (std::filesystem::directory_iterator iterator(cache_root, error), end;
@@ -164,7 +159,7 @@ Result<std::uint32_t> DiscoverLlcId(std::uint32_t cpu) {
         .AddContext("path", cache_root.string());
   }
   std::sort(indexes.begin(), indexes.end());
-  for (const auto& index : indexes) {
+  for (const auto &index : indexes) {
     auto level = ReadSysfsU32(index / "level");
     if (!level.ok() || level.value() != 3U) {
       continue;
@@ -181,8 +176,8 @@ Result<std::uint32_t> DiscoverLlcId(std::uint32_t cpu) {
 }
 
 Result<std::uint32_t> DiscoverNumaNode(std::uint32_t cpu) {
-  const auto cpu_root = std::filesystem::path(
-      "/sys/devices/system/cpu/cpu" + std::to_string(cpu));
+  const auto cpu_root = std::filesystem::path("/sys/devices/system/cpu/cpu" +
+                                              std::to_string(cpu));
   std::error_code error;
   std::optional<std::uint32_t> node;
   for (std::filesystem::directory_iterator iterator(cpu_root, error), end;
@@ -213,18 +208,17 @@ Result<std::uint32_t> DiscoverNumaNode(std::uint32_t cpu) {
 }
 #endif
 
-}  // namespace
+} // namespace
 
-Result<std::vector<CpuTopologyEntry>> DiscoverCpuTopology(
-    std::span<const std::uint32_t> allowed_cpus) {
+Result<std::vector<CpuTopologyEntry>>
+DiscoverCpuTopology(std::span<const std::uint32_t> allowed_cpus) {
 #if !defined(__linux__)
   (void)allowed_cpus;
   return Status(StatusCode::kInternalError,
                 "CPU LLC topology discovery requires Linux sysfs");
 #else
   if (allowed_cpus.empty()) {
-    return Status(StatusCode::kInvalidArgument,
-                  "allowed CPU set is empty");
+    return Status(StatusCode::kInvalidArgument, "allowed CPU set is empty");
   }
   try {
     std::vector<CpuTopologyEntry> topology;
@@ -235,9 +229,8 @@ Result<std::vector<CpuTopologyEntry>> DiscoverCpuTopology(
         return Status(StatusCode::kInvalidArgument,
                       "allowed CPU set contains duplicates");
       }
-      auto core = ReadSysfsU32(
-          "/sys/devices/system/cpu/cpu" + std::to_string(cpu) +
-          "/topology/core_id");
+      auto core = ReadSysfsU32("/sys/devices/system/cpu/cpu" +
+                               std::to_string(cpu) + "/topology/core_id");
       auto llc = DiscoverLlcId(cpu);
       if (!core.ok() || !llc.ok()) {
         auto status = core.ok() ? llc.status() : core.status();
@@ -247,27 +240,26 @@ Result<std::vector<CpuTopologyEntry>> DiscoverCpuTopology(
       topology.push_back({cpu, core.value(), llc.value()});
     }
     std::sort(topology.begin(), topology.end(),
-              [](const auto& left, const auto& right) {
+              [](const auto &left, const auto &right) {
                 return left.cpu < right.cpu;
               });
     return topology;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate CPU topology");
   }
 #endif
 }
 
-Result<std::vector<std::uint32_t>> DiscoverNumaNodes(
-    std::span<const std::uint32_t> allowed_cpus) {
+Result<std::vector<std::uint32_t>>
+DiscoverNumaNodes(std::span<const std::uint32_t> allowed_cpus) {
 #if !defined(__linux__)
   (void)allowed_cpus;
   return Status(StatusCode::kInternalError,
                 "CPU NUMA discovery requires Linux sysfs");
 #else
   if (allowed_cpus.empty()) {
-    return Status(StatusCode::kInvalidArgument,
-                  "allowed CPU set is empty");
+    return Status(StatusCode::kInvalidArgument, "allowed CPU set is empty");
   }
   try {
     std::set<std::uint32_t> cpus;
@@ -284,16 +276,16 @@ Result<std::vector<std::uint32_t>> DiscoverNumaNodes(
       nodes.insert(node.value());
     }
     return std::vector<std::uint32_t>(nodes.begin(), nodes.end());
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate NUMA topology");
   }
 #endif
 }
 
-Result<CpuRoleLayout> BuildContiguousCpuLayout(
-    std::span<const std::uint32_t> allowed_cpus,
-    CpuRoleCounts counts) {
+Result<CpuRoleLayout>
+BuildContiguousCpuLayout(std::span<const std::uint32_t> allowed_cpus,
+                         CpuRoleCounts counts) {
   auto sorted = ValidateAndSortCpus(allowed_cpus, counts);
   if (!sorted.ok()) {
     return sorted.status();
@@ -302,12 +294,11 @@ Result<CpuRoleLayout> BuildContiguousCpuLayout(
   try {
     std::size_t cursor = 0;
     const auto assign = [&](std::uint32_t count,
-                            std::vector<std::uint32_t>& output) {
+                            std::vector<std::uint32_t> &output) {
       output.insert(
-          output.end(), sorted.value().begin() +
-                            static_cast<std::ptrdiff_t>(cursor),
-          sorted.value().begin() +
-              static_cast<std::ptrdiff_t>(cursor + count));
+          output.end(),
+          sorted.value().begin() + static_cast<std::ptrdiff_t>(cursor),
+          sorted.value().begin() + static_cast<std::ptrdiff_t>(cursor + count));
       cursor += count;
     };
     assign(counts.search, layout.search);
@@ -316,16 +307,16 @@ Result<CpuRoleLayout> BuildContiguousCpuLayout(
     assign(counts.rpc_progress, layout.rpc_progress);
     assign(counts.reserved, layout.reserved);
     return layout;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate contiguous CPU layout");
   }
 }
 
-Result<CpuRoleLayout> BuildLlcIsolatedCpuLayout(
-    std::span<const std::uint32_t> allowed_cpus,
-    std::span<const CpuTopologyEntry> topology,
-    CpuRoleCounts counts) {
+Result<CpuRoleLayout>
+BuildLlcIsolatedCpuLayout(std::span<const std::uint32_t> allowed_cpus,
+                          std::span<const CpuTopologyEntry> topology,
+                          CpuRoleCounts counts) {
   auto sorted = ValidateAndSortCpus(allowed_cpus, counts);
   if (!sorted.ok()) {
     return sorted.status();
@@ -335,11 +326,11 @@ Result<CpuRoleLayout> BuildLlcIsolatedCpuLayout(
                   "CPU topology does not cover the allowed CPU set");
   }
   try {
-    std::set<std::uint32_t> allowed(
-        sorted.value().begin(), sorted.value().end());
+    std::set<std::uint32_t> allowed(sorted.value().begin(),
+                                    sorted.value().end());
     std::set<std::uint32_t> topology_cpus;
     std::map<std::uint32_t, std::vector<std::uint32_t>> domains;
-    for (const auto& entry : topology) {
+    for (const auto &entry : topology) {
       if (!allowed.contains(entry.cpu) ||
           !topology_cpus.insert(entry.cpu).second) {
         return Status(StatusCode::kInvalidArgument,
@@ -347,7 +338,7 @@ Result<CpuRoleLayout> BuildLlcIsolatedCpuLayout(
       }
       domains[entry.llc_id].push_back(entry.cpu);
     }
-    for (auto& [llc, cpus] : domains) {
+    for (auto &[llc, cpus] : domains) {
       (void)llc;
       std::sort(cpus.begin(), cpus.end());
     }
@@ -358,15 +349,14 @@ Result<CpuRoleLayout> BuildLlcIsolatedCpuLayout(
 
     const auto rpc_on_search = std::min(counts.rpc_progress, 1U);
     const auto search_base = static_cast<std::size_t>(counts.search) +
-        counts.read_progress + rpc_on_search + 1U;
+                             counts.read_progress + rpc_on_search + 1U;
     const auto extra_reserve = counts.reserved - 1U;
     std::size_t search_side_size = search_base + extra_reserve;
     std::size_t prefix = 0;
-    for (const auto& [llc, cpus] : domains) {
+    for (const auto &[llc, cpus] : domains) {
       (void)llc;
       prefix += cpus.size();
-      if (prefix >= search_base &&
-          prefix <= search_base + extra_reserve) {
+      if (prefix >= search_base && prefix <= search_base + extra_reserve) {
         search_side_size = prefix;
       }
     }
@@ -378,18 +368,16 @@ Result<CpuRoleLayout> BuildLlcIsolatedCpuLayout(
     std::vector<DomainSlice> slices;
     slices.reserve(domains.size());
     std::size_t search_remaining = search_side_size;
-    for (const auto& [llc, cpus] : domains) {
+    for (const auto &[llc, cpus] : domains) {
       (void)llc;
       DomainSlice slice;
-      const auto search_count =
-          std::min(search_remaining, cpus.size());
-      slice.search_side.insert(
-          slice.search_side.end(), cpus.begin(),
-          cpus.begin() + static_cast<std::ptrdiff_t>(search_count));
+      const auto search_count = std::min(search_remaining, cpus.size());
+      slice.search_side.insert(slice.search_side.end(), cpus.begin(),
+                               cpus.begin() +
+                                   static_cast<std::ptrdiff_t>(search_count));
       slice.distance_side.insert(
           slice.distance_side.end(),
-          cpus.begin() + static_cast<std::ptrdiff_t>(search_count),
-          cpus.end());
+          cpus.begin() + static_cast<std::ptrdiff_t>(search_count), cpus.end());
       search_remaining -= search_count;
       slices.push_back(std::move(slice));
     }
@@ -401,9 +389,8 @@ Result<CpuRoleLayout> BuildLlcIsolatedCpuLayout(
     std::vector<std::uint32_t> search_cpus;
     search_cpus.reserve(search_side_size);
     std::vector<std::vector<std::uint32_t>> distance_domains;
-    for (const auto& slice : slices) {
-      search_cpus.insert(search_cpus.end(),
-                         slice.search_side.begin(),
+    for (const auto &slice : slices) {
+      search_cpus.insert(search_cpus.end(), slice.search_side.begin(),
                          slice.search_side.end());
       if (!slice.distance_side.empty()) {
         distance_domains.push_back(slice.distance_side);
@@ -413,19 +400,18 @@ Result<CpuRoleLayout> BuildLlcIsolatedCpuLayout(
     CpuRoleLayout layout;
     std::size_t cursor = 0;
     const auto assign_search = [&](std::uint32_t count,
-                                   std::vector<std::uint32_t>& output) {
-      output.insert(
-          output.end(), search_cpus.begin() +
-                            static_cast<std::ptrdiff_t>(cursor),
-          search_cpus.begin() +
-              static_cast<std::ptrdiff_t>(cursor + count));
+                                   std::vector<std::uint32_t> &output) {
+      output.insert(output.end(),
+                    search_cpus.begin() + static_cast<std::ptrdiff_t>(cursor),
+                    search_cpus.begin() +
+                        static_cast<std::ptrdiff_t>(cursor + count));
       cursor += count;
     };
     assign_search(counts.search, layout.search);
     assign_search(counts.read_progress, layout.read_progress);
     assign_search(rpc_on_search, layout.rpc_progress);
-    const auto search_reserve = static_cast<std::uint32_t>(
-        search_side_size - search_base + 1U);
+    const auto search_reserve =
+        static_cast<std::uint32_t>(search_side_size - search_base + 1U);
     assign_search(search_reserve, layout.reserved);
 
     const auto rpc_on_distance = counts.rpc_progress - rpc_on_search;
@@ -434,8 +420,7 @@ Result<CpuRoleLayout> BuildLlcIsolatedCpuLayout(
     while (remaining_rpc != 0) {
       bool assigned = false;
       for (std::size_t offset = 0;
-           offset < distance_domains.size() && remaining_rpc != 0;
-           ++offset) {
+           offset < distance_domains.size() && remaining_rpc != 0; ++offset) {
         const auto domain = distance_domains.size() - 1U - offset;
         if (rpc_quota[domain] < distance_domains[domain].size()) {
           ++rpc_quota[domain];
@@ -448,8 +433,7 @@ Result<CpuRoleLayout> BuildLlcIsolatedCpuLayout(
                       "LLC planner cannot place RPC progress threads");
       }
     }
-    std::vector<std::size_t> distance_quota(
-        distance_domains.size(), 0);
+    std::vector<std::size_t> distance_quota(distance_domains.size(), 0);
     std::size_t remaining_distance = counts.distance;
     while (remaining_distance != 0) {
       bool assigned = false;
@@ -469,26 +453,22 @@ Result<CpuRoleLayout> BuildLlcIsolatedCpuLayout(
                       "LLC planner cannot place Distance workers");
       }
     }
-    for (std::size_t domain = 0;
-         domain < distance_domains.size(); ++domain) {
-      const auto& cpus = distance_domains[domain];
+    for (std::size_t domain = 0; domain < distance_domains.size(); ++domain) {
+      const auto &cpus = distance_domains[domain];
       const auto distance_count = distance_quota[domain];
       const auto rpc_count = rpc_quota[domain];
-      layout.distance.insert(
-          layout.distance.end(), cpus.begin(),
-          cpus.begin() +
-              static_cast<std::ptrdiff_t>(distance_count));
+      layout.distance.insert(layout.distance.end(), cpus.begin(),
+                             cpus.begin() +
+                                 static_cast<std::ptrdiff_t>(distance_count));
       layout.rpc_progress.insert(
           layout.rpc_progress.end(),
+          cpus.begin() + static_cast<std::ptrdiff_t>(distance_count),
           cpus.begin() +
-              static_cast<std::ptrdiff_t>(distance_count),
-          cpus.begin() + static_cast<std::ptrdiff_t>(
-                             distance_count + rpc_count));
-      layout.reserved.insert(
-          layout.reserved.end(),
-          cpus.begin() + static_cast<std::ptrdiff_t>(
-                             distance_count + rpc_count),
-          cpus.end());
+              static_cast<std::ptrdiff_t>(distance_count + rpc_count));
+      layout.reserved.insert(layout.reserved.end(),
+                             cpus.begin() + static_cast<std::ptrdiff_t>(
+                                                distance_count + rpc_count),
+                             cpus.end());
     }
     if (layout.search.size() != counts.search ||
         layout.distance.size() != counts.distance ||
@@ -499,16 +479,16 @@ Result<CpuRoleLayout> BuildLlcIsolatedCpuLayout(
                     "LLC planner produced incorrect role counts");
     }
     return layout;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate LLC-aware CPU layout");
   }
 }
 
-Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
-    std::span<const std::uint32_t> allowed_cpus,
-    std::span<const CpuTopologyEntry> topology,
-    CpuRoleCounts counts) {
+Result<CpuRoleLayout>
+BuildLlcSpreadCpuLayout(std::span<const std::uint32_t> allowed_cpus,
+                        std::span<const CpuTopologyEntry> topology,
+                        CpuRoleCounts counts) {
   auto sorted = ValidateAndSortCpus(allowed_cpus, counts);
   if (!sorted.ok()) {
     return sorted.status();
@@ -518,11 +498,11 @@ Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
                   "CPU topology does not cover the allowed CPU set");
   }
   try {
-    std::set<std::uint32_t> allowed(
-        sorted.value().begin(), sorted.value().end());
+    std::set<std::uint32_t> allowed(sorted.value().begin(),
+                                    sorted.value().end());
     std::set<std::uint32_t> topology_cpus;
     std::map<std::uint32_t, std::vector<std::uint32_t>> grouped;
-    for (const auto& entry : topology) {
+    for (const auto &entry : topology) {
       if (!allowed.contains(entry.cpu) ||
           !topology_cpus.insert(entry.cpu).second) {
         return Status(StatusCode::kInvalidArgument,
@@ -537,7 +517,7 @@ Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
 
     std::vector<std::vector<std::uint32_t>> domains;
     domains.reserve(grouped.size());
-    for (auto& [llc, cpus] : grouped) {
+    for (auto &[llc, cpus] : grouped) {
       (void)llc;
       std::sort(cpus.begin(), cpus.end());
       domains.push_back(std::move(cpus));
@@ -559,9 +539,8 @@ Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
           selected = domain;
           continue;
         }
-        const auto left =
-            static_cast<std::uint64_t>(distance_quota[domain]) *
-            domains[selected].size();
+        const auto left = static_cast<std::uint64_t>(distance_quota[domain]) *
+                          domains[selected].size();
         const auto right =
             static_cast<std::uint64_t>(distance_quota[selected]) *
             domains[domain].size();
@@ -580,20 +559,17 @@ Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
       ++distance_quota[selected];
     }
 
-    std::vector<std::vector<std::uint32_t>> distance_by_domain(
-        domains.size());
-    std::vector<std::vector<std::uint32_t>> available_by_domain(
-        domains.size());
+    std::vector<std::vector<std::uint32_t>> distance_by_domain(domains.size());
+    std::vector<std::vector<std::uint32_t>> available_by_domain(domains.size());
     for (std::size_t domain = 0; domain < domains.size(); ++domain) {
       const auto split = domains[domain].size() - distance_quota[domain];
       available_by_domain[domain].insert(
-          available_by_domain[domain].end(),
-          domains[domain].begin(),
+          available_by_domain[domain].end(), domains[domain].begin(),
           domains[domain].begin() + static_cast<std::ptrdiff_t>(split));
-      distance_by_domain[domain].insert(
-          distance_by_domain[domain].end(),
-          domains[domain].begin() + static_cast<std::ptrdiff_t>(split),
-          domains[domain].end());
+      distance_by_domain[domain].insert(distance_by_domain[domain].end(),
+                                        domains[domain].begin() +
+                                            static_cast<std::ptrdiff_t>(split),
+                                        domains[domain].end());
     }
 
     // Spread Search workers with the same normalized LLC-capacity rule used
@@ -601,21 +577,18 @@ Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
     // allocation. Interleave the output vector below so low Search worker ids
     // land on distinct LLCs before an LLC receives a second worker.
     std::vector<std::size_t> search_by_domain(domains.size(), 0);
-    for (std::uint32_t remaining = counts.search; remaining != 0;
-         --remaining) {
+    for (std::uint32_t remaining = counts.search; remaining != 0; --remaining) {
       std::size_t selected = domains.size();
       for (std::size_t domain = 0; domain < domains.size(); ++domain) {
-        if (search_by_domain[domain] >=
-            available_by_domain[domain].size()) {
+        if (search_by_domain[domain] >= available_by_domain[domain].size()) {
           continue;
         }
         if (selected == domains.size()) {
           selected = domain;
           continue;
         }
-        const auto left =
-            static_cast<std::uint64_t>(search_by_domain[domain]) *
-            domains[selected].size();
+        const auto left = static_cast<std::uint64_t>(search_by_domain[domain]) *
+                          domains[selected].size();
         const auto right =
             static_cast<std::uint64_t>(search_by_domain[selected]) *
             domains[domain].size();
@@ -652,8 +625,8 @@ Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
     std::vector<std::size_t> rpc_by_domain(domains.size(), 0);
     std::size_t packed_domain = 0;
     const auto assign_packed = [&](std::uint32_t count,
-                                   std::vector<std::uint32_t>& output,
-                                   std::vector<std::size_t>& per_domain) {
+                                   std::vector<std::uint32_t> &output,
+                                   std::vector<std::size_t> &per_domain) {
       while (count != 0) {
         while (packed_domain < domains.size() &&
                available_cursor[packed_domain] >=
@@ -671,9 +644,8 @@ Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
       }
       return true;
     };
-    if (!assign_packed(
-            counts.read_progress, layout.read_progress,
-            read_by_domain)) {
+    if (!assign_packed(counts.read_progress, layout.read_progress,
+                       read_by_domain)) {
       return Status(StatusCode::kResourceExhausted,
                     "LLC spread planner cannot place Read workers");
     }
@@ -683,8 +655,7 @@ Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
     for (std::uint32_t rpc = 0; rpc < counts.rpc_progress; ++rpc) {
       std::size_t selected = domains.size();
       for (std::size_t domain = 0; domain < domains.size(); ++domain) {
-        if (available_cursor[domain] >=
-            available_by_domain[domain].size()) {
+        if (available_cursor[domain] >= available_by_domain[domain].size()) {
           continue;
         }
         if (selected == domains.size()) {
@@ -694,13 +665,12 @@ Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
         const bool mixed =
             search_by_domain[domain] != 0 || read_by_domain[domain] != 0;
         const bool selected_mixed =
-            search_by_domain[selected] != 0 ||
-            read_by_domain[selected] != 0;
+            search_by_domain[selected] != 0 || read_by_domain[selected] != 0;
         const auto pressure = distance_quota[domain] + rpc_by_domain[domain];
         const auto selected_pressure =
             distance_quota[selected] + rpc_by_domain[selected];
-        const auto left = static_cast<std::uint64_t>(pressure) *
-                          domains[selected].size();
+        const auto left =
+            static_cast<std::uint64_t>(pressure) * domains[selected].size();
         const auto right = static_cast<std::uint64_t>(selected_pressure) *
                            domains[domain].size();
         if (mixed < selected_mixed ||
@@ -727,7 +697,7 @@ Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
       maximum_distance_quota = std::max(maximum_distance_quota, quota);
     }
     for (std::size_t offset = 0; offset < maximum_distance_quota; ++offset) {
-      for (const auto& cpus : distance_by_domain) {
+      for (const auto &cpus : distance_by_domain) {
         if (offset < cpus.size()) {
           layout.distance.push_back(cpus[offset]);
         }
@@ -750,44 +720,41 @@ Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
                     "LLC spread planner produced incorrect role counts");
     }
     return layout;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate LLC spread CPU layout");
   }
 }
 
-Result<CommunicationOwnerMap> BuildCommunicationOwnerMap(
-    std::uint32_t world_size, std::uint32_t local_rank,
-    std::uint32_t read_threads, std::uint32_t rpc_threads) {
+Result<CommunicationOwnerMap>
+BuildCommunicationOwnerMap(std::uint32_t world_size, std::uint32_t local_rank,
+                           std::uint32_t read_threads,
+                           std::uint32_t rpc_threads) {
   if (world_size == 0 || local_rank >= world_size) {
     return Status(StatusCode::kInvalidArgument,
                   "owner map world/local rank is invalid");
   }
   CommunicationOwnerMap result;
   auto read = AssignOwners(world_size, local_rank, read_threads,
-                           result.read_owner_by_rank,
-                           result.read_owned_ranks);
+                           result.read_owner_by_rank, result.read_owned_ranks);
   if (!read.ok()) {
     return read;
   }
   auto rpc = AssignOwners(world_size, local_rank, rpc_threads,
-                          result.rpc_owner_by_rank,
-                          result.rpc_owned_ranks);
+                          result.rpc_owner_by_rank, result.rpc_owned_ranks);
   if (!rpc.ok()) {
     return rpc;
   }
   return result;
 }
 
-Result<RuntimeQueuePlan> BuildRuntimeQueuePlan(
-    std::uint32_t search_workers, std::uint32_t read_threads,
-    std::uint32_t rpc_threads, RuntimeQueueDepths depths,
-    bool profiling_enabled, std::uint32_t world_size) {
-  if (search_workers == 0 || read_threads == 0 ||
-      rpc_threads == 0 || depths.admission == 0 || depths.ready == 0 ||
-      depths.read_submit == 0 || depths.read_reclaim == 0 ||
-      depths.rpc_submit == 0 ||
-      depths.done == 0) {
+Result<RuntimeQueuePlan>
+BuildRuntimeQueuePlan(std::uint32_t search_workers, std::uint32_t read_threads,
+                      std::uint32_t rpc_threads, RuntimeQueueDepths depths,
+                      bool profiling_enabled, std::uint32_t world_size) {
+  if (search_workers == 0 || read_threads == 0 || rpc_threads == 0 ||
+      depths.admission == 0 || depths.ready == 0 || depths.read_submit == 0 ||
+      depths.read_reclaim == 0 || depths.rpc_submit == 0 || depths.done == 0) {
     return Status(StatusCode::kInvalidArgument,
                   "queue plan dimensions must be non-zero");
   }
@@ -798,48 +765,63 @@ Result<RuntimeQueuePlan> BuildRuntimeQueuePlan(
   plan.done_rings = search_workers;
   auto rpc_submit = Product({search_workers, rpc_threads});
   if (!rpc_submit.ok()) {
-    return Status(StatusCode::kOutOfRange,
-                  "runtime queue dimensions overflow");
+    return Status(StatusCode::kOutOfRange, "runtime queue dimensions overflow");
   }
-  plan.read_submit_rings = static_cast<std::uint64_t>(search_workers) * read_threads;
+  plan.read_submit_rings =
+      static_cast<std::uint64_t>(search_workers) * read_threads;
   plan.read_reclaim_rings = plan.read_submit_rings;
-  const auto producer_count = static_cast<std::uint64_t>(read_threads) + rpc_threads;
+  const auto producer_count =
+      static_cast<std::uint64_t>(read_threads) + rpc_threads;
   if (producer_count > UINT32_MAX)
     return Status(StatusCode::kOutOfRange, "producer count overflows");
   plan.deferred_ready_entries = producer_count * depths.admission;
-  plan.retry_entries = static_cast<std::uint64_t>(search_workers) * depths.admission;
+  plan.retry_entries =
+      static_cast<std::uint64_t>(search_workers) * depths.admission;
   plan.rpc_submit_rings = rpc_submit.value();
   plan.ready_rings = plan.mpsc_ring_count = search_workers;
   plan.depths.ready = std::max(2U, depths.ready);
 
-  for (const auto count : {
-           plan.admission_rings, plan.done_rings,
-           plan.rpc_submit_rings, plan.read_submit_rings,
-           plan.read_reclaim_rings}) {
+  for (const auto count :
+       {plan.admission_rings, plan.done_rings, plan.rpc_submit_rings,
+        plan.read_submit_rings, plan.read_reclaim_rings}) {
     auto status = Add(count, plan.spsc_ring_count);
     if (!status.ok()) {
       return status;
     }
   }
   auto mpsc_bytes = MpmcRing<SearchEvent>::StorageBytes(plan.depths.ready);
-  if (!mpsc_bytes.ok()) return mpsc_bytes.status();
-  auto submit_auxiliary = RpcSubmitMatrix::AuxiliaryBytes(search_workers, rpc_threads, world_size);
-  if (!submit_auxiliary.ok()) return submit_auxiliary.status();
-  plan.private_work_bytes = sizeof(SchedulerQueues) + sizeof(SchedulerReadyPublisher);
+  if (!mpsc_bytes.ok())
+    return mpsc_bytes.status();
+  auto submit_auxiliary =
+      RpcSubmitMatrix::AuxiliaryBytes(search_workers, rpc_threads, world_size);
+  if (!submit_auxiliary.ok())
+    return submit_auxiliary.status();
+  plan.private_work_bytes =
+      sizeof(SchedulerQueues) + sizeof(SchedulerReadyPublisher);
   auto added = Add(submit_auxiliary.value(), plan.private_work_bytes);
-  if (!added.ok()) return added;
+  if (!added.ok())
+    return added;
   if (profiling_enabled) {
-    auto profile_bytes = SchedulerQueues::ProfileStorageBytes(search_workers, static_cast<std::uint32_t>(producer_count));
-    if (!profile_bytes.ok()) return profile_bytes.status();
+    auto profile_bytes = SchedulerQueues::ProfileStorageBytes(
+        search_workers, static_cast<std::uint32_t>(producer_count));
+    if (!profile_bytes.ok())
+      return profile_bytes.status();
     auto status = Add(profile_bytes.value(), plan.private_work_bytes);
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
   }
-  for (auto status : {
-      AddStorage(producer_count, 1, sizeof(DeferredReadyWork), plan.private_work_bytes),
-      AddStorage(1, plan.deferred_ready_entries, sizeof(QueryDeferredReadyEntry), plan.private_work_bytes),
-      AddStorage(search_workers, 1, sizeof(LocalRetryQueue) + sizeof(std::size_t), plan.private_work_bytes),
-      AddStorage(1, plan.retry_entries, sizeof(QueryRetryHandle), plan.private_work_bytes)}) {
-    if (!status.ok()) return status;
+  for (auto status :
+       {AddStorage(producer_count, 1, sizeof(DeferredReadyWork),
+                   plan.private_work_bytes),
+        AddStorage(1, plan.deferred_ready_entries,
+                   sizeof(QueryDeferredReadyEntry), plan.private_work_bytes),
+        AddStorage(search_workers, 1,
+                   sizeof(LocalRetryQueue) + sizeof(std::size_t),
+                   plan.private_work_bytes),
+        AddStorage(1, plan.retry_entries, sizeof(QueryRetryHandle),
+                   plan.private_work_bytes)}) {
+    if (!status.ok())
+      return status;
   }
   struct QueueGroup {
     std::uint64_t count;
@@ -848,26 +830,31 @@ Result<RuntimeQueuePlan> BuildRuntimeQueuePlan(
     std::uint64_t object_bytes;
   };
   const QueueGroup groups[]{
-      {plan.admission_rings, depths.admission, sizeof(QueryKey), sizeof(SpscRing<QueryKey>)},
-      {plan.done_rings, depths.done, sizeof(QueryDoneHandle), sizeof(SpscRing<QueryDoneHandle>)},
-      {plan.read_submit_rings, depths.read_submit,
-       sizeof(ReadBatch*), sizeof(SpscRing<ReadBatch*>)},
-      {plan.read_reclaim_rings, depths.read_reclaim,
-       sizeof(ReadBatch*), sizeof(SpscRing<ReadBatch*>)},
-      {plan.rpc_submit_rings, depths.rpc_submit, sizeof(RpcSubmitHandle), sizeof(SpscRing<RpcSubmitHandle>)},
+      {plan.admission_rings, depths.admission, sizeof(QueryKey),
+       sizeof(SpscRing<QueryKey>)},
+      {plan.done_rings, depths.done, sizeof(QueryDoneHandle),
+       sizeof(SpscRing<QueryDoneHandle>)},
+      {plan.read_submit_rings, depths.read_submit, sizeof(ReadBatch *),
+       sizeof(SpscRing<ReadBatch *>)},
+      {plan.read_reclaim_rings, depths.read_reclaim, sizeof(ReadBatch *),
+       sizeof(SpscRing<ReadBatch *>)},
+      {plan.rpc_submit_rings, depths.rpc_submit, sizeof(RpcSubmitHandle),
+       sizeof(SpscRing<RpcSubmitHandle>)},
       {plan.ready_rings, 1, mpsc_bytes.value(), sizeof(MpmcRing<SearchEvent>)},
   };
-  for (const auto& group : groups) {
-    auto metadata = AddStorage(group.count, 1, group.object_bytes, plan.ring_metadata_bytes);
-    if (!metadata.ok()) return metadata;
+  for (const auto &group : groups) {
+    auto metadata = AddStorage(group.count, 1, group.object_bytes,
+                               plan.ring_metadata_bytes);
+    if (!metadata.ok())
+      return metadata;
     auto status = AddStorage(group.count, group.depth, group.element_bytes,
                              plan.ring_storage_bytes);
     if (!status.ok()) {
       return status;
     }
   }
-  for (const auto bytes : {plan.ring_metadata_bytes,
-                           plan.ring_storage_bytes, plan.private_work_bytes}) {
+  for (const auto bytes : {plan.ring_metadata_bytes, plan.ring_storage_bytes,
+                           plan.private_work_bytes}) {
     auto status = Add(bytes, plan.queue_bytes_total);
     if (!status.ok()) {
       return status;
@@ -876,7 +863,7 @@ Result<RuntimeQueuePlan> BuildRuntimeQueuePlan(
   return plan;
 }
 
-std::string FormatCommunicationOwnerMap(const CommunicationOwnerMap& owners) {
+std::string FormatCommunicationOwnerMap(const CommunicationOwnerMap &owners) {
   std::ostringstream output;
   for (std::size_t rank = 0; rank < owners.read_owner_by_rank.size(); ++rank) {
     if (owners.read_owner_by_rank[rank] == kNoCommunicationOwner) {
@@ -889,4 +876,4 @@ std::string FormatCommunicationOwnerMap(const CommunicationOwnerMap& owners) {
   return output.str();
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

@@ -43,17 +43,17 @@ struct CpuRoleLayout {
 DiscoverCpuTopology(std::span<const std::uint32_t> allowed_cpus);
 [[nodiscard]] Result<std::vector<std::uint32_t>>
 DiscoverNumaNodes(std::span<const std::uint32_t> allowed_cpus);
-[[nodiscard]] Result<CpuRoleLayout> BuildContiguousCpuLayout(
-    std::span<const std::uint32_t> allowed_cpus,
-    CpuRoleCounts counts);
-[[nodiscard]] Result<CpuRoleLayout> BuildLlcIsolatedCpuLayout(
-    std::span<const std::uint32_t> allowed_cpus,
-    std::span<const CpuTopologyEntry> topology,
-    CpuRoleCounts counts);
-[[nodiscard]] Result<CpuRoleLayout> BuildLlcSpreadCpuLayout(
-    std::span<const std::uint32_t> allowed_cpus,
-    std::span<const CpuTopologyEntry> topology,
-    CpuRoleCounts counts);
+[[nodiscard]] Result<CpuRoleLayout>
+BuildContiguousCpuLayout(std::span<const std::uint32_t> allowed_cpus,
+                         CpuRoleCounts counts);
+[[nodiscard]] Result<CpuRoleLayout>
+BuildLlcIsolatedCpuLayout(std::span<const std::uint32_t> allowed_cpus,
+                          std::span<const CpuTopologyEntry> topology,
+                          CpuRoleCounts counts);
+[[nodiscard]] Result<CpuRoleLayout>
+BuildLlcSpreadCpuLayout(std::span<const std::uint32_t> allowed_cpus,
+                        std::span<const CpuTopologyEntry> topology,
+                        CpuRoleCounts counts);
 
 struct CommunicationOwnerMap {
   std::vector<std::uint32_t> read_owner_by_rank;
@@ -63,11 +63,12 @@ struct CommunicationOwnerMap {
 };
 
 // Builds a stable, balanced mapping over remote ranks in ascending rank order.
-// The local rank has kNoCommunicationOwner because local work never enters a remote
-// communication pool.
-[[nodiscard]] Result<CommunicationOwnerMap> BuildCommunicationOwnerMap(
-    std::uint32_t world_size, std::uint32_t local_rank,
-    std::uint32_t read_threads, std::uint32_t rpc_threads);
+// The local rank has kNoCommunicationOwner because local work never enters a
+// remote communication pool.
+[[nodiscard]] Result<CommunicationOwnerMap>
+BuildCommunicationOwnerMap(std::uint32_t world_size, std::uint32_t local_rank,
+                           std::uint32_t read_threads,
+                           std::uint32_t rpc_threads);
 
 struct RuntimeQueueDepths {
   std::uint32_t admission{0};
@@ -98,11 +99,13 @@ struct RuntimeQueuePlan {
 
 inline constexpr std::uint64_t kRpcSubmitHandleBytes = 32;
 
-[[nodiscard]] Result<RuntimeQueuePlan> BuildRuntimeQueuePlan(
-    std::uint32_t search_workers, std::uint32_t read_threads,
-    std::uint32_t rpc_threads, RuntimeQueueDepths depths,
-    bool profiling_enabled = false, std::uint32_t world_size = 1);
+[[nodiscard]] Result<RuntimeQueuePlan>
+BuildRuntimeQueuePlan(std::uint32_t search_workers, std::uint32_t read_threads,
+                      std::uint32_t rpc_threads, RuntimeQueueDepths depths,
+                      bool profiling_enabled = false,
+                      std::uint32_t world_size = 1);
 
-[[nodiscard]] std::string FormatCommunicationOwnerMap(const CommunicationOwnerMap& owners);
+[[nodiscard]] std::string
+FormatCommunicationOwnerMap(const CommunicationOwnerMap &owners);
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

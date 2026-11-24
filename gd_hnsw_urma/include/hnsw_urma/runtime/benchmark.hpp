@@ -242,7 +242,8 @@ struct RuntimeProfileSnapshot {
   std::vector<std::uint64_t> rpc_poll_completions_nanoseconds_per_thread;
   std::vector<std::uint64_t> rpc_scan_responses_nanoseconds_per_thread;
   std::vector<std::uint64_t> rpc_post_responses_nanoseconds_per_thread;
-  std::vector<std::uint64_t> rpc_drain_client_submissions_nanoseconds_per_thread;
+  std::vector<std::uint64_t>
+      rpc_drain_client_submissions_nanoseconds_per_thread;
   std::vector<std::uint64_t> rpc_post_requests_nanoseconds_per_thread;
   std::vector<std::uint64_t> distance_request_slot_scans_per_thread;
   std::vector<std::uint64_t> distance_request_slot_hits_per_thread;
@@ -271,25 +272,27 @@ struct DistributedBenchmarkPayload {
   RuntimeProfileSnapshot profile;
 };
 
-[[nodiscard]] BenchmarkSummary SummarizeBenchmark(
-    std::span<const QueryBenchmarkRecord> records, double elapsed_seconds);
+[[nodiscard]] BenchmarkSummary
+SummarizeBenchmark(std::span<const QueryBenchmarkRecord> records,
+                   double elapsed_seconds);
 [[nodiscard]] double RecallAtK(std::span<const HeapEntry> result,
                                std::span<const node_id_t> truth,
                                std::uint32_t topk) noexcept;
-[[nodiscard]] std::string RenderBenchmarkSummary(
-    const BenchmarkSummary& summary, OutputFormat format);
+[[nodiscard]] std::string
+RenderBenchmarkSummary(const BenchmarkSummary &summary, OutputFormat format);
 [[nodiscard]] std::string RenderProfileJson(
-    const BenchmarkSummary& summary, const RuntimeProfileSnapshot& profile,
+    const BenchmarkSummary &summary, const RuntimeProfileSnapshot &profile,
     std::string_view git_commit, std::uint32_t rank, std::uint32_t world_size);
 [[nodiscard]] std::string RenderProfileCsv(
-    const BenchmarkSummary& summary, const RuntimeProfileSnapshot& profile,
+    const BenchmarkSummary &summary, const RuntimeProfileSnapshot &profile,
     std::string_view git_commit, std::uint32_t rank, std::uint32_t world_size);
-[[nodiscard]] Result<std::vector<std::byte>> EncodeDistributedBenchmarkPayload(
-    std::span<const QueryBenchmarkRecord> records, double elapsed_seconds,
-    const RuntimeProfileSnapshot& profile);
+[[nodiscard]] Result<std::vector<std::byte>>
+EncodeDistributedBenchmarkPayload(std::span<const QueryBenchmarkRecord> records,
+                                  double elapsed_seconds,
+                                  const RuntimeProfileSnapshot &profile);
 [[nodiscard]] Result<DistributedBenchmarkPayload>
 DecodeDistributedBenchmarkPayload(std::span<const std::byte> input);
-[[nodiscard]] Status WriteOutput(const std::filesystem::path& path,
+[[nodiscard]] Status WriteOutput(const std::filesystem::path &path,
                                  std::string_view content);
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

@@ -19,15 +19,15 @@ enum class VisitedLayout : std::uint8_t {
 // table. Clear() advances a generation/epoch and only touches the full table
 // when the counter wraps.
 class VisitedTable {
- public:
-  [[nodiscard]] static Result<VisitedTable> Create(std::uint64_t ntotal,
-                                                   std::size_t capacity,
-                                                   std::size_t max_probe = 0,
-                                                   double max_load_factor = 0.70);
-  [[nodiscard]] static Result<VisitedTable> CreateAdaptive(
-      std::uint64_t ntotal, std::size_t sparse_capacity,
-      std::uint32_t active_slots, std::uint64_t dense_total_budget_bytes,
-      std::size_t max_probe = 0, double max_load_factor = 0.70);
+public:
+  [[nodiscard]] static Result<VisitedTable>
+  Create(std::uint64_t ntotal, std::size_t capacity, std::size_t max_probe = 0,
+         double max_load_factor = 0.70);
+  [[nodiscard]] static Result<VisitedTable>
+  CreateAdaptive(std::uint64_t ntotal, std::size_t sparse_capacity,
+                 std::uint32_t active_slots,
+                 std::uint64_t dense_total_budget_bytes,
+                 std::size_t max_probe = 0, double max_load_factor = 0.70);
 
   // Returns true for a new ID and false when it was already present.
   [[nodiscard]] Result<bool> Mark(node_id_t id) noexcept;
@@ -38,16 +38,16 @@ class VisitedTable {
   [[nodiscard]] std::size_t size() const noexcept { return size_; }
   [[nodiscard]] std::size_t capacity() const noexcept;
   [[nodiscard]] std::size_t max_probe() const noexcept { return max_probe_; }
-  [[nodiscard]] std::size_t probe_high_watermark() const noexcept { return probe_high_watermark_; }
+  [[nodiscard]] std::size_t probe_high_watermark() const noexcept {
+    return probe_high_watermark_;
+  }
   [[nodiscard]] std::uint64_t ntotal() const noexcept { return ntotal_; }
   [[nodiscard]] VisitedLayout layout() const noexcept { return layout_; }
 
- private:
+private:
   VisitedTable(std::uint64_t ntotal, VisitedLayout layout,
                std::size_t max_probe, std::size_t max_entries)
-      : ntotal_(ntotal),
-        layout_(layout),
-        max_probe_(max_probe),
+      : ntotal_(ntotal), layout_(layout), max_probe_(max_probe),
         max_entries_(max_entries) {}
 
   [[nodiscard]] std::size_t InitialSlot(node_id_t id) const noexcept;
@@ -65,4 +65,4 @@ class VisitedTable {
   std::uint32_t sparse_epoch_{1};
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

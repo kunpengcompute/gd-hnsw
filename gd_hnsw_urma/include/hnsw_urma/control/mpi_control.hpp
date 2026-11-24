@@ -18,16 +18,18 @@ namespace hnsw_urma {
 inline constexpr std::uint32_t kPeerDescriptorVersion = 3;
 
 class CanonicalConfig {
- public:
+public:
   Status Set(std::string key, std::string value);
-  [[nodiscard]] const std::map<std::string, std::string>& values() const noexcept {
+  [[nodiscard]] const std::map<std::string, std::string> &
+  values() const noexcept {
     return values_;
   }
   [[nodiscard]] Result<std::vector<std::byte>> Encode() const;
   [[nodiscard]] std::uint64_t Hash() const;
-  [[nodiscard]] static Result<CanonicalConfig> Decode(std::span<const std::byte> bytes);
+  [[nodiscard]] static Result<CanonicalConfig>
+  Decode(std::span<const std::byte> bytes);
 
- private:
+private:
   std::map<std::string, std::string> values_;
 };
 
@@ -60,9 +62,10 @@ struct PeerDescriptor {
   std::vector<PeerDeviceDescriptor> devices;
 };
 
-[[nodiscard]] Result<std::vector<std::byte>> EncodePeerDescriptor(
-    const PeerDescriptor& descriptor);
-[[nodiscard]] Result<PeerDescriptor> DecodePeerDescriptor(std::span<const std::byte> bytes);
+[[nodiscard]] Result<std::vector<std::byte>>
+EncodePeerDescriptor(const PeerDescriptor &descriptor);
+[[nodiscard]] Result<PeerDescriptor>
+DecodePeerDescriptor(std::span<const std::byte> bytes);
 
 struct ProcessPlacement {
   std::string hostname;
@@ -71,30 +74,36 @@ struct ProcessPlacement {
 };
 
 class MpiControl {
- public:
-  MpiControl(const MpiControl&) = delete;
-  MpiControl& operator=(const MpiControl&) = delete;
+public:
+  MpiControl(const MpiControl &) = delete;
+  MpiControl &operator=(const MpiControl &) = delete;
   ~MpiControl();
 
-  [[nodiscard]] static Result<std::unique_ptr<MpiControl>> Initialize(int* argc, char*** argv);
+  [[nodiscard]] static Result<std::unique_ptr<MpiControl>>
+  Initialize(int *argc, char ***argv);
 
   [[nodiscard]] int rank() const noexcept { return rank_; }
   [[nodiscard]] int world_size() const noexcept { return world_size_; }
-  [[nodiscard]] int provided_thread_level() const noexcept { return provided_thread_level_; }
-  [[nodiscard]] const ProcessPlacement& placement() const noexcept { return placement_; }
+  [[nodiscard]] int provided_thread_level() const noexcept {
+    return provided_thread_level_;
+  }
+  [[nodiscard]] const ProcessPlacement &placement() const noexcept {
+    return placement_;
+  }
 
   [[nodiscard]] Status ValidateShardWorld(std::uint32_t shard_count) const;
-  [[nodiscard]] Result<CanonicalConfig> SynchronizeConfig(const CanonicalConfig& local,
-                                                           int root = 0) const;
-  [[nodiscard]] Result<std::vector<PeerDescriptor>> AllGatherPeerDescriptors(
-      const PeerDescriptor& local) const;
-  [[nodiscard]] Result<std::vector<std::vector<std::byte>>> AllGatherBytes(
-      std::span<const std::byte> local, std::size_t maximum_per_rank) const;
-  [[nodiscard]] Status ConvergeStatus(const Status& local,
+  [[nodiscard]] Result<CanonicalConfig>
+  SynchronizeConfig(const CanonicalConfig &local, int root = 0) const;
+  [[nodiscard]] Result<std::vector<PeerDescriptor>>
+  AllGatherPeerDescriptors(const PeerDescriptor &local) const;
+  [[nodiscard]] Result<std::vector<std::vector<std::byte>>>
+  AllGatherBytes(std::span<const std::byte> local,
+                 std::size_t maximum_per_rank) const;
+  [[nodiscard]] Status ConvergeStatus(const Status &local,
                                       std::string_view phase) const;
   [[nodiscard]] Status Barrier() const;
 
- private:
+private:
   MpiControl() = default;
   [[nodiscard]] Status CheckControlThread() const;
 
@@ -108,4 +117,4 @@ class MpiControl {
 
 [[nodiscard]] bool MpiSupportCompiled();
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

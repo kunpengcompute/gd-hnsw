@@ -11,14 +11,14 @@ namespace hnsw_urma {
 // Scheduler/Control is the sole owner. Keeping allocation single-threaded
 // avoids a global free-list mutex on admission and completion.
 class QuerySlotPool {
- public:
-  [[nodiscard]] static Result<QuerySlotPool> Create(std::uint32_t source_rank,
-                                                    std::uint32_t capacity,
-                                                    std::uint64_t generation_base = 0);
-  QuerySlotPool(QuerySlotPool&& other) noexcept;
-  QuerySlotPool& operator=(QuerySlotPool&& other) noexcept;
-  QuerySlotPool(const QuerySlotPool&) = delete;
-  QuerySlotPool& operator=(const QuerySlotPool&) = delete;
+public:
+  [[nodiscard]] static Result<QuerySlotPool>
+  Create(std::uint32_t source_rank, std::uint32_t capacity,
+         std::uint64_t generation_base = 0);
+  QuerySlotPool(QuerySlotPool &&other) noexcept;
+  QuerySlotPool &operator=(QuerySlotPool &&other) noexcept;
+  QuerySlotPool(const QuerySlotPool &) = delete;
+  QuerySlotPool &operator=(const QuerySlotPool &) = delete;
 
   [[nodiscard]] Result<QueryKey> Acquire();
   [[nodiscard]] Status Release(QueryKey key);
@@ -26,7 +26,7 @@ class QuerySlotPool {
     return static_cast<std::uint32_t>(slots_.size());
   }
 
- private:
+private:
   QuerySlotPool() = default;
 
   struct Slot {
@@ -39,4 +39,4 @@ class QuerySlotPool {
   std::uint32_t cursor_{0};
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

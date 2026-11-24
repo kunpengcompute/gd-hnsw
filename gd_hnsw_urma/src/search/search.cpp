@@ -9,8 +9,8 @@
 #include <string>
 #include <utility>
 
-#include "hnsw_urma/core/checked_math.hpp"
 #include "hnsw_urma/compute/distance.hpp"
+#include "hnsw_urma/core/checked_math.hpp"
 
 namespace hnsw_urma {
 namespace {
@@ -22,7 +22,7 @@ std::uint64_t SteadyNowNanoseconds() noexcept {
           .count());
 }
 
-bool Better(const HeapEntry& lhs, const HeapEntry& rhs) noexcept {
+bool Better(const HeapEntry &lhs, const HeapEntry &rhs) noexcept {
   return lhs.distance < rhs.distance ||
          (lhs.distance == rhs.distance && lhs.id < rhs.id);
 }
@@ -58,20 +58,19 @@ SearchClock::time_point CappedDeadline(
 }
 
 class ExclusiveProfileTimerState {
- public:
-  [[nodiscard]] std::uint64_t* Enter(
-      std::uint64_t& destination) noexcept {
+public:
+  [[nodiscard]] std::uint64_t *Enter(std::uint64_t &destination) noexcept {
     const auto now = SteadyNowNanoseconds();
     if (current_ != nullptr) {
       *current_ += now - started_;
     }
-    auto* previous = current_;
+    auto *previous = current_;
     current_ = &destination;
     started_ = now;
     return previous;
   }
 
-  void Leave(std::uint64_t* previous) noexcept {
+  void Leave(std::uint64_t *previous) noexcept {
     const auto now = SteadyNowNanoseconds();
     if (current_ != nullptr) {
       *current_ += now - started_;
@@ -80,15 +79,15 @@ class ExclusiveProfileTimerState {
     started_ = now;
   }
 
- private:
-  std::uint64_t* current_{nullptr};
+private:
+  std::uint64_t *current_{nullptr};
   std::uint64_t started_{0};
 };
 
 class ScopedProfileTimer {
- public:
-  ScopedProfileTimer(ExclusiveProfileTimerState& state, bool enabled,
-                     std::uint64_t& destination) noexcept
+public:
+  ScopedProfileTimer(ExclusiveProfileTimerState &state, bool enabled,
+                     std::uint64_t &destination) noexcept
       : state_(enabled ? &state : nullptr),
         previous_(enabled ? state.Enter(destination) : nullptr) {}
 
@@ -98,16 +97,17 @@ class ScopedProfileTimer {
     }
   }
 
- private:
-  ExclusiveProfileTimerState* state_{nullptr};
-  std::uint64_t* previous_{nullptr};
+private:
+  ExclusiveProfileTimerState *state_{nullptr};
+  std::uint64_t *previous_{nullptr};
 };
 
-Result<std::size_t> ResolveVisitedCapacity(const SearchParams& params,
-                                           const GlobalIndexMeta& meta) {
+Result<std::size_t> ResolveVisitedCapacity(const SearchParams &params,
+                                           const GlobalIndexMeta &meta) {
   if (params.visited_capacity != 0) {
     if ((params.visited_capacity & (params.visited_capacity - 1)) != 0) {
-      return Status(StatusCode::kInvalidArgument, "visited capacity must be a power of two");
+      return Status(StatusCode::kInvalidArgument,
+                    "visited capacity must be a power of two");
     }
     return params.visited_capacity;
   }
@@ -122,14 +122,15 @@ Result<std::size_t> ResolveVisitedCapacity(const SearchParams& params,
   std::uint64_t capacity = 1;
   while (capacity < scaled.value()) {
     if (capacity > std::numeric_limits<std::size_t>::max() / 2U) {
-      return Status(StatusCode::kResourceExhausted, "visited capacity overflows size_t");
+      return Status(StatusCode::kResourceExhausted,
+                    "visited capacity overflows size_t");
     }
     capacity *= 2;
   }
   return static_cast<std::size_t>(capacity);
 }
 
-}  // namespace
+} // namespace
 
 struct ScratchDistanceOperation {
   std::optional<DistanceTicket> ticket;
@@ -141,20 +142,15 @@ struct ScratchDistanceOperation {
 
 struct QueryScratch::Impl {
   Impl(GlobalIndexMeta global_meta, SearchParams search_params,
-       std::uint32_t lanes, MinimaxHeap search_heap,
-       VisitedTable visited_table)
-      : meta(global_meta),
-        params(search_params),
-        ready_producer_count(lanes),
-        heap(std::move(search_heap)),
-        visited(std::move(visited_table)) {}
+       std::uint32_t lanes, MinimaxHeap search_heap, VisitedTable visited_table)
+      : meta(global_meta), params(search_params), ready_producer_count(lanes),
+        heap(std::move(search_heap)), visited(std::move(visited_table)) {}
 
-  [[nodiscard]] bool Compatible(
-      const GlobalIndexMeta& global_meta, const SearchParams& search_params,
-      std::uint32_t lanes) const noexcept {
-    return meta.ntotal == global_meta.ntotal &&
-           meta.dim == global_meta.dim && meta.M == global_meta.M &&
-           meta.M0 == global_meta.M0 &&
+  [[nodiscard]] bool Compatible(const GlobalIndexMeta &global_meta,
+                                const SearchParams &search_params,
+                                std::uint32_t lanes) const noexcept {
+    return meta.ntotal == global_meta.ntotal && meta.dim == global_meta.dim &&
+           meta.M == global_meta.M && meta.M0 == global_meta.M0 &&
            meta.num_shards == global_meta.num_shards &&
            params.ef_search == search_params.ef_search &&
            params.expand_batch == search_params.expand_batch &&
@@ -162,20 +158,16 @@ struct QueryScratch::Impl {
            ready_producer_count == lanes;
   }
 
-  [[nodiscard]] Status Acquire(
-      std::uint64_t query_generation,
-      std::span<const float> input_query,
-      std::shared_ptr<const void> input_owner) {
-    if (active || query_generation == 0 ||
-        input_query.size() != meta.dim) {
+  [[nodiscard]] Status Acquire(std::uint64_t query_generation,
+                               std::span<const float> input_query,
+                               std::shared_ptr<const void> input_owner) {
+    if (active || query_generation == 0 || input_query.size() != meta.dim) {
       return Status(StatusCode::kProtocolError,
                     "query scratch is active or incompatible");
     }
     if (input_owner == nullptr) {
-      if (query_snapshot == nullptr ||
-          query_snapshot.use_count() != 1) {
-        query_snapshot =
-            std::make_shared<std::vector<float>>(meta.dim);
+      if (query_snapshot == nullptr || query_snapshot.use_count() != 1) {
+        query_snapshot = std::make_shared<std::vector<float>>(meta.dim);
       }
       std::copy(input_query.begin(), input_query.end(),
                 query_snapshot->begin());
@@ -241,10 +233,11 @@ struct QueryScratch::Impl {
 
 QueryScratch::~QueryScratch() = default;
 
-Result<std::unique_ptr<QueryScratch>> QueryScratch::Create(
-    const GlobalIndexMeta& meta, const SearchParams& params,
-    std::uint32_t active_slots, std::uint32_t ready_producer_count,
-    std::uint64_t dense_visited_budget_bytes) {
+Result<std::unique_ptr<QueryScratch>>
+QueryScratch::Create(const GlobalIndexMeta &meta, const SearchParams &params,
+                     std::uint32_t active_slots,
+                     std::uint32_t ready_producer_count,
+                     std::uint64_t dense_visited_budget_bytes) {
   auto meta_status = ValidateGlobalMeta(meta);
   if (!meta_status.ok()) {
     return meta_status;
@@ -264,8 +257,7 @@ Result<std::unique_ptr<QueryScratch>> QueryScratch::Create(
     return heap.status();
   }
   auto visited = VisitedTable::CreateAdaptive(
-      meta.ntotal, capacity.value(), active_slots,
-      dense_visited_budget_bytes);
+      meta.ntotal, capacity.value(), active_slots, dense_visited_budget_bytes);
   if (!visited.ok()) {
     return visited.status();
   }
@@ -274,13 +266,11 @@ Result<std::unique_ptr<QueryScratch>> QueryScratch::Create(
     scratch->impl_ = std::make_unique<QueryScratch::Impl>(
         meta, params, ready_producer_count, std::move(heap).value(),
         std::move(visited).value());
-    auto& storage = *scratch->impl_;
+    auto &storage = *scratch->impl_;
     const std::size_t graph_slots =
         static_cast<std::size_t>(params.expand_batch) * meta.M0;
-    const auto batch_capacity =
-        std::max<std::size_t>(meta.M, graph_slots);
-    storage.query_snapshot =
-        std::make_shared<std::vector<float>>(meta.dim);
+    const auto batch_capacity = std::max<std::size_t>(meta.M, graph_slots);
+    storage.query_snapshot = std::make_shared<std::vector<float>>(meta.dim);
     storage.neighbor_batch.neighbors.reserve(batch_capacity);
     storage.neighbor_batch.offsets.reserve(params.expand_batch + 1U);
     storage.expansion_nodes.reserve(params.expand_batch);
@@ -295,7 +285,7 @@ Result<std::unique_ptr<QueryScratch>> QueryScratch::Create(
     storage.route_counts.resize(meta.num_shards);
     storage.route_next.resize(meta.num_shards);
     return scratch;
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate query scratch");
   }
@@ -310,24 +300,19 @@ bool QueryScratch::active() const noexcept { return impl_->active; }
 struct HnswSearchTask::Impl {
   enum class RetryPhase : std::uint8_t { kNone, kGraph, kDistance };
 
-  Impl(QueryKey query_key, const GlobalIndexMeta& global_meta, const ShardMap& map,
-       GraphReader& graph, DistanceOracle& distance, QueryScratch& query_scratch,
-       SearchParams search_params,
+  Impl(QueryKey query_key, const GlobalIndexMeta &global_meta,
+       const ShardMap &map, GraphReader &graph, DistanceOracle &distance,
+       QueryScratch &query_scratch, SearchParams search_params,
        std::chrono::steady_clock::time_point deadline,
-       const SearchRuntimeContext* runtime_context)
-      : key(query_key),
-        meta(global_meta),
-        shard_map(&map),
-        graph_reader(&graph),
-        distance_oracle(&distance),
+       const SearchRuntimeContext *runtime_context)
+      : key(query_key), meta(global_meta), shard_map(&map),
+        graph_reader(&graph), distance_oracle(&distance),
         scratch(&query_scratch),
         query_lease{query_key, query_scratch.impl_->query_owner,
                     query_scratch.impl_->query_values,
                     query_scratch.impl_->query_norm},
-        query(query_lease.values()),
-        params(search_params),
-        heap(query_scratch.impl_->heap),
-        visited(query_scratch.impl_->visited),
+        query(query_lease.values()), params(search_params),
+        heap(query_scratch.impl_->heap), visited(query_scratch.impl_->visited),
         neighbor_batch(query_scratch.impl_->neighbor_batch),
         expansion_nodes(query_scratch.impl_->expansion_nodes),
         routed_ids(query_scratch.impl_->routed_ids),
@@ -341,7 +326,9 @@ struct HnswSearchTask::Impl {
         phase_lane_counts(query_scratch.impl_->phase_lane_counts),
         distance_operations(query_scratch.impl_->distance_operations),
         controller(query_key.generation,
-                   runtime_context == nullptr ? 1U : runtime_context->ready_producer_count,
+                   runtime_context == nullptr
+                       ? 1U
+                       : runtime_context->ready_producer_count,
                    search_params.profile_timing),
         ready_publisher(runtime_context == nullptr
                             ? nullptr
@@ -352,8 +339,7 @@ struct HnswSearchTask::Impl {
         entry_level(search_params.entry_point == INVALID_NODE_ID
                         ? global_meta.max_level
                         : search_params.entry_level),
-        query_deadline(deadline) {
-  }
+        query_deadline(deadline) {}
 
   ~Impl() {
     if (scratch_active) {
@@ -363,30 +349,30 @@ struct HnswSearchTask::Impl {
 
   QueryKey key;
   GlobalIndexMeta meta;
-  const ShardMap* shard_map;
-  GraphReader* graph_reader;
-  DistanceOracle* distance_oracle;
-  QueryScratch* scratch;
+  const ShardMap *shard_map;
+  GraphReader *graph_reader;
+  DistanceOracle *distance_oracle;
+  QueryScratch *scratch;
   QueryVectorLease query_lease;
   std::span<const float> query;
   SearchParams params;
-  MinimaxHeap& heap;
-  VisitedTable& visited;
-  NeighborBatch& neighbor_batch;
-  std::vector<NodeToExpand>& expansion_nodes;
-  std::vector<node_id_t>& routed_ids;
-  std::vector<shard_id_t>& group_owners;
-  std::vector<std::uint64_t>& local_offsets;
-  std::vector<float>& routed_distances;
-  std::vector<std::uint32_t>& route_counts;
-  std::vector<std::uint32_t>& route_next;
-  std::vector<HeapEntry>& commit_entries;
-  std::vector<std::uint32_t>& group_offsets;
-  std::vector<LaneOperationCount>& phase_lane_counts;
-  std::vector<ScratchDistanceOperation>& distance_operations;
+  MinimaxHeap &heap;
+  VisitedTable &visited;
+  NeighborBatch &neighbor_batch;
+  std::vector<NodeToExpand> &expansion_nodes;
+  std::vector<node_id_t> &routed_ids;
+  std::vector<shard_id_t> &group_owners;
+  std::vector<std::uint64_t> &local_offsets;
+  std::vector<float> &routed_distances;
+  std::vector<std::uint32_t> &route_counts;
+  std::vector<std::uint32_t> &route_next;
+  std::vector<HeapEntry> &commit_entries;
+  std::vector<std::uint32_t> &group_offsets;
+  std::vector<LaneOperationCount> &phase_lane_counts;
+  std::vector<ScratchDistanceOperation> &distance_operations;
   bool scratch_active{false};
   QueryRunController controller;
-  QueryReadyPublisher* ready_publisher{nullptr};
+  QueryReadyPublisher *ready_publisher{nullptr};
   QueryState state{QueryState::kInit};
   bool runtime_abort_required{false};
   Status operation_status;
@@ -444,8 +430,7 @@ struct HnswSearchTask::Impl {
     if (!params.profile_timing || stage_started_nanoseconds == 0) {
       return;
     }
-    const auto elapsed =
-        SteadyNowNanoseconds() - stage_started_nanoseconds;
+    const auto elapsed = SteadyNowNanoseconds() - stage_started_nanoseconds;
     if (layer0_started) {
       result.timing.layer0_elapsed_nanoseconds += elapsed;
     } else {
@@ -463,27 +448,27 @@ struct HnswSearchTask::Impl {
       ++result.profile.upper_level_drop_runs;
     }
     ++consecutive_upper_level_drops;
-    result.profile.upper_max_consecutive_level_drops = std::max(
-        result.profile.upper_max_consecutive_level_drops,
-        consecutive_upper_level_drops);
+    result.profile.upper_max_consecutive_level_drops =
+        std::max(result.profile.upper_max_consecutive_level_drops,
+                 consecutive_upper_level_drops);
   }
 
   void FlushUpperLevelDropRun() noexcept {
     switch (consecutive_upper_level_drops) {
-      case 0:
-        return;
-      case 1:
-        ++result.profile.upper_level_drop_runs_length_1;
-        break;
-      case 2:
-        ++result.profile.upper_level_drop_runs_length_2;
-        break;
-      case 3:
-        ++result.profile.upper_level_drop_runs_length_3;
-        break;
-      default:
-        ++result.profile.upper_level_drop_runs_length_4_plus;
-        break;
+    case 0:
+      return;
+    case 1:
+      ++result.profile.upper_level_drop_runs_length_1;
+      break;
+    case 2:
+      ++result.profile.upper_level_drop_runs_length_2;
+      break;
+    case 3:
+      ++result.profile.upper_level_drop_runs_length_3;
+      break;
+    default:
+      ++result.profile.upper_level_drop_runs_length_4_plus;
+      break;
     }
     consecutive_upper_level_drops = 0;
   }
@@ -506,20 +491,17 @@ struct HnswSearchTask::Impl {
     std::size_t write_index = 0;
     std::size_t retained_groups = 0;
     std::size_t source_begin = group_offsets.front();
-    for (std::size_t group = 0; group + 1U < group_offsets.size();
-         ++group) {
+    for (std::size_t group = 0; group + 1U < group_offsets.size(); ++group) {
       const auto source_end = group_offsets[group + 1U];
       const bool remote =
-          !distance_oracle->CanComputeLocalTrusted(
-              group_owners[group]);
+          !distance_oracle->CanComputeLocalTrusted(group_owners[group]);
       const auto retained_begin = write_index;
       if (remote) {
         ++result.profile.upper_remote_operations;
         result.profile.upper_remote_candidate_values +=
             source_end - source_begin;
       }
-      for (std::size_t index = source_begin; index < source_end;
-           ++index) {
+      for (std::size_t index = source_begin; index < source_end; ++index) {
         ++result.profile.upper_distance_candidate_values;
         auto inserted = visited.Mark(routed_ids[index]);
         if (!inserted.ok()) {
@@ -564,40 +546,29 @@ struct HnswSearchTask::Impl {
     if (!params.profile_timing) {
       return;
     }
-    const auto ready_at =
-        controller.TakeReadyTimestampNanoseconds();
+    const auto ready_at = controller.TakeReadyTimestampNanoseconds();
     const auto operation_ready_at =
         controller.TakeOperationReadyTimestampNanoseconds();
     const auto first_operation_at =
         controller.TakeFirstOperationTimestampNanoseconds();
-    const auto critical_lane =
-        controller.TakeCriticalReadyLane();
-    const auto wait_started = std::exchange(
-        wait_started_nanoseconds, 0);
-    const auto all_published = std::exchange(
-        wait_all_published_nanoseconds, 0);
-    const auto remote_operations = std::exchange(
-        wait_remote_operations, 0);
-    const auto distance_values = std::exchange(
-        wait_distance_values, 0);
-    if (ready_at == 0 || operation_ready_at == 0 ||
-        wait_started == 0 ||
-        operation_ready_at < wait_started ||
-        resumed_at < ready_at) {
+    const auto critical_lane = controller.TakeCriticalReadyLane();
+    const auto wait_started = std::exchange(wait_started_nanoseconds, 0);
+    const auto all_published = std::exchange(wait_all_published_nanoseconds, 0);
+    const auto remote_operations = std::exchange(wait_remote_operations, 0);
+    const auto distance_values = std::exchange(wait_distance_values, 0);
+    if (ready_at == 0 || operation_ready_at == 0 || wait_started == 0 ||
+        operation_ready_at < wait_started || resumed_at < ready_at) {
       return;
     }
-    const auto wait_nanoseconds =
-        operation_ready_at - wait_started;
+    const auto wait_nanoseconds = operation_ready_at - wait_started;
     if (state == QueryState::kWaitLayer0Graph) {
       result.timing.graph_wait_nanoseconds += wait_nanoseconds;
-    } else if (
-        state == QueryState::kWaitEntryDistance ||
-        state == QueryState::kWaitUpperDistance ||
-        state == QueryState::kWaitLayer0Distance) {
+    } else if (state == QueryState::kWaitEntryDistance ||
+               state == QueryState::kWaitUpperDistance ||
+               state == QueryState::kWaitLayer0Distance) {
       result.timing.distance_wait_nanoseconds += wait_nanoseconds;
     }
-    result.timing.ready_queue_nanoseconds +=
-        resumed_at - ready_at;
+    result.timing.ready_queue_nanoseconds += resumed_at - ready_at;
     if (ready_publisher == nullptr) {
       return;
     }
@@ -615,11 +586,9 @@ struct HnswSearchTask::Impl {
       return;
     }
     const auto publish_finished =
-        std::clamp(all_published, wait_started,
-                   operation_ready_at);
+        std::clamp(all_published, wait_started, operation_ready_at);
     const auto first_completed =
-        std::clamp(first_operation_at, publish_finished,
-                   operation_ready_at);
+        std::clamp(first_operation_at, publish_finished, operation_ready_at);
     ready_publisher->RecordWaitProfile({
         *kind,
         operation_ready_at - wait_started,
@@ -637,7 +606,8 @@ struct HnswSearchTask::Impl {
     status.AddContext("source_rank", std::to_string(key.source_rank))
         .AddContext("query_slot", std::to_string(key.query_slot))
         .AddContext("generation", std::to_string(key.generation))
-        .AddContext("query_state", std::to_string(static_cast<unsigned>(state)));
+        .AddContext("query_state",
+                    std::to_string(static_cast<unsigned>(state)));
     final_status = std::move(status);
     state = QueryState::kFailed;
     controller.MarkFailed();
@@ -658,9 +628,10 @@ struct HnswSearchTask::Impl {
         query_deadline);
   }
 
-  [[nodiscard]] std::optional<SearchStepResult> HandleScheduleResult(
-      Result<bool> scheduled, RetryPhase phase, QueryState wait_state,
-      std::chrono::steady_clock::time_point now) {
+  [[nodiscard]] std::optional<SearchStepResult>
+  HandleScheduleResult(Result<bool> scheduled, RetryPhase phase,
+                       QueryState wait_state,
+                       std::chrono::steady_clock::time_point now) {
     if (!scheduled.ok()) {
       if (scheduled.status().code() == StatusCode::kResourceExhausted) {
         auto epoch = controller.RequeueForRetry();
@@ -721,51 +692,49 @@ struct HnswSearchTask::Impl {
     if (ready_publisher != nullptr) {
       const auto expected_epoch = controller.next_wait_epoch();
       auto prepared = [&]() {
-        ScopedProfileTimer timer(
-            local_phase_timer, params.profile_timing,
-            result.timing.graph_plan_nanoseconds);
-        return graph_reader->PrepareForWait(
-            {key, expected_epoch, attempt_deadline, &controller,
-             ready_publisher},
-            expansion_nodes, &neighbor_batch);
+        ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                                 result.timing.graph_plan_nanoseconds);
+        return graph_reader->PrepareForWait({key, expected_epoch,
+                                             attempt_deadline, &controller,
+                                             ready_publisher},
+                                            expansion_nodes, &neighbor_batch);
       }();
       if (!prepared.ok()) {
         return prepared.status();
       }
       graph_ticket = prepared.value().ticket;
       {
-        ScopedProfileTimer timer(
-            local_phase_timer, params.profile_timing,
-            result.timing.graph_publish_nanoseconds);
+        ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                                 result.timing.graph_publish_nanoseconds);
         if (prepared.value().asynchronous) {
-        if (params.profile_timing) {
-          wait_started_nanoseconds = SteadyNowNanoseconds();
-        }
-        auto waiting = controller.BeginWait(
-            prepared.value().participating_lanes, key.generation);
-        if (!waiting.ok()) {
-          wait_started_nanoseconds = 0;
-          return RollbackGraphPreparation(waiting.status());
-        }
-        if (waiting.value() != expected_epoch) {
-          wait_started_nanoseconds = 0;
-          return RollbackGraphPreparation(Status(
-              StatusCode::kProtocolError,
-              "prepared graph wait epoch changed during preparation"));
-        }
-        ++result.profile.suspend_count;
-        resume_pending = true;
-        for (const auto& lane :
-             prepared.value().participating_lanes) {
-          wait_remote_operations += lane.operations;
-        }
+          if (params.profile_timing) {
+            wait_started_nanoseconds = SteadyNowNanoseconds();
+          }
+          auto waiting = controller.BeginWait(
+              prepared.value().participating_lanes, key.generation);
+          if (!waiting.ok()) {
+            wait_started_nanoseconds = 0;
+            return RollbackGraphPreparation(waiting.status());
+          }
+          if (waiting.value() != expected_epoch) {
+            wait_started_nanoseconds = 0;
+            return RollbackGraphPreparation(Status(
+                StatusCode::kProtocolError,
+                "prepared graph wait epoch changed during preparation"));
+          }
+          ++result.profile.suspend_count;
+          resume_pending = true;
+          for (const auto &lane : prepared.value().participating_lanes) {
+            wait_remote_operations += lane.operations;
+          }
         }
         auto published = graph_reader->PublishPrepared(*graph_ticket);
         if (!published.ok()) {
           wait_started_nanoseconds = 0;
           auto failure = Status(
               StatusCode::kInternalError,
-              "prepared graph publication failed after wait registration");
+              "prepared graph publication failed after wait "
+              "registration");
           failure.AddContext("cause", published.ToString());
           // Graph publication failures retain an unpublished, cancellable
           // phase. Never discard the ticket if rollback itself is rejected.
@@ -774,14 +743,12 @@ struct HnswSearchTask::Impl {
       }
       if (prepared.value().asynchronous) {
         if (params.profile_timing) {
-          wait_all_published_nanoseconds =
-              SteadyNowNanoseconds();
+          wait_all_published_nanoseconds = SteadyNowNanoseconds();
         }
         return true;
       }
-      ScopedProfileTimer timer(
-          local_phase_timer, params.profile_timing,
-          result.timing.graph_consume_nanoseconds);
+      ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                               result.timing.graph_consume_nanoseconds);
       auto finished = FinishGraphTicket();
       graph_harvested = true;
       graph_ticket.reset();
@@ -800,9 +767,8 @@ struct HnswSearchTask::Impl {
       wait_started_nanoseconds = SteadyNowNanoseconds();
     }
     auto submitted = [&]() {
-      ScopedProfileTimer timer(
-          local_phase_timer, params.profile_timing,
-          result.timing.graph_plan_nanoseconds);
+      ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                               result.timing.graph_plan_nanoseconds);
       return graph_reader->Submit(key, expansion_nodes, &neighbor_batch);
     }();
     if (!submitted.ok()) {
@@ -832,8 +798,8 @@ struct HnswSearchTask::Impl {
         return Status(StatusCode::kOutOfRange,
                       "global node ID is outside the index");
       }
-      return static_cast<shard_id_t>(
-          static_cast<std::uint64_t>(id) / uniform_count);
+      return static_cast<shard_id_t>(static_cast<std::uint64_t>(id) /
+                                     uniform_count);
     }
     auto location = shard_map->Locate(id);
     if (!location.ok()) {
@@ -844,9 +810,8 @@ struct HnswSearchTask::Impl {
 
   Status ConsumeRouteIds(std::span<const node_id_t> ids, bool use_visited) {
     {
-      ScopedProfileTimer timer(
-          local_phase_timer, params.profile_timing,
-          result.timing.neighbor_scan_visited_nanoseconds);
+      ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                               result.timing.neighbor_scan_visited_nanoseconds);
       for (std::size_t input_index = 0; input_index < ids.size();
            ++input_index) {
         constexpr std::size_t kVisitedPrefetchDistance = 4;
@@ -874,8 +839,7 @@ struct HnswSearchTask::Impl {
         }
         if (route_counts[owner.value()] ==
                 std::numeric_limits<std::uint32_t>::max() ||
-            routed_ids.size() ==
-                std::numeric_limits<std::uint32_t>::max()) {
+            routed_ids.size() == std::numeric_limits<std::uint32_t>::max()) {
           return Status(StatusCode::kOutOfRange,
                         "routed ID count exceeds uint32");
         }
@@ -888,9 +852,8 @@ struct HnswSearchTask::Impl {
 
   Status FinalizeRouteIds(bool use_visited) {
     {
-      ScopedProfileTimer timer(
-          local_phase_timer, params.profile_timing,
-          result.timing.route_group_sort_nanoseconds);
+      ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                               result.timing.route_group_sort_nanoseconds);
       std::uint32_t cursor = 0;
       for (std::size_t owner = 0; owner < route_counts.size(); ++owner) {
         const auto count = route_counts[owner];
@@ -936,8 +899,8 @@ struct HnswSearchTask::Impl {
             !use_visited || params.layer0_sort_mode == Layer0SortMode::kAll ||
             (params.layer0_sort_mode == Layer0SortMode::kLocalOnly &&
              distance_oracle->CanComputeLocalTrusted(shard));
-        auto bucket = std::span<node_id_t>(routed_ids).subspan(
-            begin, end - begin);
+        auto bucket =
+            std::span<node_id_t>(routed_ids).subspan(begin, end - begin);
         if (sort_bucket) {
           std::sort(bucket.begin(), bucket.end());
         }
@@ -953,8 +916,7 @@ struct HnswSearchTask::Impl {
         const auto unique_count = static_cast<std::uint32_t>(
             std::distance(bucket.begin(), unique_end));
         if (write != begin) {
-          std::move(bucket.begin(), unique_end,
-                    routed_ids.begin() + write);
+          std::move(bucket.begin(), unique_end, routed_ids.begin() + write);
         }
         write += unique_count;
         group_owners.push_back(shard);
@@ -983,19 +945,17 @@ struct HnswSearchTask::Impl {
       return {Status(StatusCode::kProtocolError,
                      "graph finish has no active ticket")};
     }
-    if (ready_publisher == nullptr ||
-        state != QueryState::kWaitLayer0Graph ||
+    if (ready_publisher == nullptr || state != QueryState::kWaitLayer0Graph ||
         !graph_reader->SupportsDirectConsume()) {
       return {graph_reader->Finish(*graph_ticket)};
     }
 
     class RouteAccumulator final : public GraphNeighborConsumer {
-     public:
-      explicit RouteAccumulator(Impl& search) : search_(search) {}
+    public:
+      explicit RouteAccumulator(Impl &search) : search_(search) {}
 
-      Status Consume(
-          std::size_t node_index,
-          std::span<const node_id_t> neighbors) override {
+      Status Consume(std::size_t node_index,
+                     std::span<const node_id_t> neighbors) override {
         if (node_index != next_node_ ||
             node_index >= search_.expansion_nodes.size()) {
           return Status(StatusCode::kProtocolError,
@@ -1007,8 +967,8 @@ struct HnswSearchTask::Impl {
         return consumed;
       }
 
-     private:
-      Impl& search_;
+    private:
+      Impl &search_;
       std::size_t next_node_{0};
     };
 
@@ -1028,13 +988,13 @@ struct HnswSearchTask::Impl {
     wait_all_published_nanoseconds = 0;
     wait_remote_operations = 0;
     wait_distance_values = 0;
-    if (group_offsets.size() < 2 ||
-        group_offsets.back() != routed_ids.size() ||
+    if (group_offsets.size() < 2 || group_offsets.back() != routed_ids.size() ||
         group_owners.size() + 1U != group_offsets.size()) {
       return Status(StatusCode::kProtocolError,
                     "routed distance groups are inconsistent");
     }
-    const std::uint32_t operation_count = static_cast<std::uint32_t>(group_offsets.size() - 1);
+    const std::uint32_t operation_count =
+        static_cast<std::uint32_t>(group_offsets.size() - 1);
     operation_status = Status::Ok();
     distance_operations.clear();
     distance_operations.resize(operation_count);
@@ -1049,13 +1009,12 @@ struct HnswSearchTask::Impl {
     state = wait_state;
     SetAttemptDeadline(now);
     auto compute_local = [&](std::size_t operation) -> Result<bool> {
-      ScopedProfileTimer timer(
-          local_phase_timer, params.profile_timing,
-          result.timing.local_distance_nanoseconds);
+      ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                               result.timing.local_distance_nanoseconds);
       const auto begin = group_offsets[operation];
       const auto count = group_offsets[operation + 1] - begin;
       const auto owner = group_owners[operation];
-      const auto& range = shard_map->ranges()[owner];
+      const auto &range = shard_map->ranges()[owner];
       local_offsets.resize(count);
       result.profile.routing_local_offset_writes += count;
       for (std::size_t index = 0; index < count; ++index) {
@@ -1063,8 +1022,9 @@ struct HnswSearchTask::Impl {
         if (id < range.global_begin ||
             static_cast<std::uint64_t>(id - range.global_begin) >=
                 range.local_count) {
-          return Status(StatusCode::kProtocolError,
-                        "local distance group contains an ID outside its owner range");
+          return Status(
+              StatusCode::kProtocolError,
+              "local distance group contains an ID outside its owner range");
         }
         local_offsets[index] =
             static_cast<std::uint64_t>(id - range.global_begin);
@@ -1074,17 +1034,16 @@ struct HnswSearchTask::Impl {
           std::span<float>(routed_distances).subspan(begin, count));
     };
     bool has_local = false;
-    for (std::size_t operation = 0; operation < operation_count;
-         ++operation) {
+    for (std::size_t operation = 0; operation < operation_count; ++operation) {
       distance_operations[operation].local =
-          distance_oracle->CanComputeLocalTrusted(
-              group_owners[operation]);
+          distance_oracle->CanComputeLocalTrusted(group_owners[operation]);
       has_local |= distance_operations[operation].local;
     }
     if (ready_publisher != nullptr) {
       phase_lane_counts.clear();
       const auto expected_epoch = controller.next_wait_epoch();
-      for (std::size_t operation = 0; operation < operation_count; ++operation) {
+      for (std::size_t operation = 0; operation < operation_count;
+           ++operation) {
         if (distance_operations[operation].local) {
           continue;
         }
@@ -1101,7 +1060,7 @@ struct HnswSearchTask::Impl {
             std::span<float>(routed_distances).subspan(begin, count),
             request_options);
         if (!prepared.ok()) {
-          for (auto& prior : distance_operations) {
+          for (auto &prior : distance_operations) {
             if (prior.ticket.has_value()) {
               (void)distance_oracle->CancelPrepared(*prior.ticket);
               prior.ticket.reset();
@@ -1109,7 +1068,7 @@ struct HnswSearchTask::Impl {
           }
           return prepared.status();
         }
-        auto& record = distance_operations[operation];
+        auto &record = distance_operations[operation];
         record.ticket = prepared.value().ticket;
         record.asynchronous = prepared.value().owner_lane.has_value();
         if (!record.asynchronous) {
@@ -1120,23 +1079,21 @@ struct HnswSearchTask::Impl {
         const auto lane = *prepared.value().owner_lane;
         auto found = std::find_if(
             phase_lane_counts.begin(), phase_lane_counts.end(),
-            [lane](const auto& entry) { return entry.lane == lane; });
+            [lane](const auto &entry) { return entry.lane == lane; });
         if (found == phase_lane_counts.end()) {
           phase_lane_counts.push_back({lane, 1});
         } else {
           ++found->operations;
         }
       }
-      std::sort(phase_lane_counts.begin(), phase_lane_counts.end(),
-                [](const auto& lhs, const auto& rhs) {
-                  return lhs.lane < rhs.lane;
-                });
-      const bool defer_ready =
-          has_local && !phase_lane_counts.empty();
+      std::sort(
+          phase_lane_counts.begin(), phase_lane_counts.end(),
+          [](const auto &lhs, const auto &rhs) { return lhs.lane < rhs.lane; });
+      const bool defer_ready = has_local && !phase_lane_counts.empty();
       if (defer_ready) {
         auto deferred = controller.BeginDeferredReady();
         if (!deferred.ok()) {
-          for (auto& record : distance_operations) {
+          for (auto &record : distance_operations) {
             if (record.ticket.has_value()) {
               (void)distance_oracle->CancelPrepared(*record.ticket);
             }
@@ -1154,7 +1111,7 @@ struct HnswSearchTask::Impl {
           if (defer_ready) {
             controller.EndDeferredReady();
           }
-          for (auto& record : distance_operations) {
+          for (auto &record : distance_operations) {
             if (record.ticket.has_value()) {
               (void)distance_oracle->CancelPrepared(*record.ticket);
             }
@@ -1185,8 +1142,9 @@ struct HnswSearchTask::Impl {
         resume_pending = true;
       }
       for (std::size_t index = 0; index < distance_operations.size(); ++index) {
-        auto& record = distance_operations[index];
-        if (!record.ticket.has_value()) continue;
+        auto &record = distance_operations[index];
+        if (!record.ticket.has_value())
+          continue;
         ScopedProfileTimer timer(
             local_phase_timer, params.profile_timing,
             result.timing.remote_prepare_publish_nanoseconds);
@@ -1195,27 +1153,30 @@ struct HnswSearchTask::Impl {
           runtime_abort_required = true;
           // Only later operations are certainly unpublished. Keep the current
           // and earlier slots stable until rank-fatal shutdown stops Progress.
-          for (std::size_t later = index + 1; later < distance_operations.size(); ++later) {
-            auto& pending = distance_operations[later];
-            if (!pending.ticket) continue;
+          for (std::size_t later = index + 1;
+               later < distance_operations.size(); ++later) {
+            auto &pending = distance_operations[later];
+            if (!pending.ticket)
+              continue;
             auto cancelled = distance_oracle->CancelPrepared(*pending.ticket);
-            if (cancelled.ok()) pending.ticket.reset();
+            if (cancelled.ok())
+              pending.ticket.reset();
           }
           wait_started_nanoseconds = 0;
-          if (defer_ready) controller.EndDeferredReady();
+          if (defer_ready)
+            controller.EndDeferredReady();
           return Status(StatusCode::kInternalError,
-                        "prepared distance publication failed after wait registration")
+                        "prepared distance publication failed after wait "
+                        "registration")
               .AddContext("cause", published.ToString());
         }
       }
-      if (!phase_lane_counts.empty() &&
-          params.profile_timing) {
-        wait_all_published_nanoseconds =
-            SteadyNowNanoseconds();
+      if (!phase_lane_counts.empty() && params.profile_timing) {
+        wait_all_published_nanoseconds = SteadyNowNanoseconds();
       }
       for (std::size_t operation = 0; operation < operation_count;
            ++operation) {
-        auto& record = distance_operations[operation];
+        auto &record = distance_operations[operation];
         if (!record.local) {
           continue;
         }
@@ -1229,8 +1190,7 @@ struct HnswSearchTask::Impl {
           if (defer_ready) {
             operation_status = status;
             static_cast<void>(controller.RequestFailure(
-                key.generation, TerminalOutcome::kFailed,
-                status.code()));
+                key.generation, TerminalOutcome::kFailed, status.code()));
             controller.EndDeferredReady();
             return true;
           }
@@ -1244,13 +1204,12 @@ struct HnswSearchTask::Impl {
       if (!phase_lane_counts.empty()) {
         return true;
       }
-      for (auto& record : distance_operations) {
+      for (auto &record : distance_operations) {
         if (!record.ticket.has_value()) {
           continue;
         }
-        ScopedProfileTimer timer(
-            local_phase_timer, params.profile_timing,
-            result.timing.remote_finish_nanoseconds);
+        ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                                 result.timing.remote_finish_nanoseconds);
         auto finished = distance_oracle->Finish(*record.ticket);
         if (!finished.ok() && operation_status.ok()) {
           operation_status = finished;
@@ -1260,17 +1219,15 @@ struct HnswSearchTask::Impl {
       return false;
     }
     std::uint32_t pending_operations = 0;
-    for (std::size_t operation = 0; operation < operation_count;
-         ++operation) {
+    for (std::size_t operation = 0; operation < operation_count; ++operation) {
       if (distance_operations[operation].local) {
         auto local = compute_local(operation);
         if (!local.ok()) {
           return local.status();
         }
         if (!local.value()) {
-          return Status(
-              StatusCode::kProtocolError,
-              "trusted local distance path declined its group");
+          return Status(StatusCode::kProtocolError,
+                        "trusted local distance path declined its group");
         }
         distance_operations[operation].harvested = true;
       } else {
@@ -1334,7 +1291,7 @@ struct HnswSearchTask::Impl {
   }
 
   void ProbeDistances() {
-    for (auto& operation : distance_operations) {
+    for (auto &operation : distance_operations) {
       if (operation.harvested || operation.terminal_notified ||
           !operation.ticket.has_value()) {
         continue;
@@ -1361,17 +1318,18 @@ struct HnswSearchTask::Impl {
       return;
     }
     switch (state) {
-      case QueryState::kWaitLayer0Graph:
-        ProbeGraph();
-        break;
-      case QueryState::kWaitEntryDistance:
-      case QueryState::kWaitUpperDistance:
-      case QueryState::kWaitLayer0Distance:
-        ProbeDistances();
-        break;
-      default:
-        Fail(Status(StatusCode::kInternalError, "waiting run state has no asynchronous phase"));
-        return;
+    case QueryState::kWaitLayer0Graph:
+      ProbeGraph();
+      break;
+    case QueryState::kWaitEntryDistance:
+    case QueryState::kWaitUpperDistance:
+    case QueryState::kWaitLayer0Distance:
+      ProbeDistances();
+      break;
+    default:
+      Fail(Status(StatusCode::kInternalError,
+                  "waiting run state has no asynchronous phase"));
+      return;
     }
     if (controller.state() == RunState::kWaiting && now >= attempt_deadline) {
       Fail(Status(StatusCode::kTimeout, "search operation deadline exceeded"));
@@ -1381,9 +1339,8 @@ struct HnswSearchTask::Impl {
   void ConsumeTerminalResults() {
     if (ready_publisher != nullptr) {
       if (!graph_harvested && graph_ticket.has_value()) {
-        ScopedProfileTimer timer(
-            local_phase_timer, params.profile_timing,
-            result.timing.graph_consume_nanoseconds);
+        ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                                 result.timing.graph_consume_nanoseconds);
         auto finished = FinishGraphTicket();
         if (!finished.status.ok() && operation_status.ok()) {
           operation_status = std::move(finished.status);
@@ -1391,13 +1348,12 @@ struct HnswSearchTask::Impl {
         graph_harvested = true;
         graph_ticket.reset();
       }
-      for (auto& operation : distance_operations) {
+      for (auto &operation : distance_operations) {
         if (operation.harvested || !operation.ticket.has_value()) {
           continue;
         }
-        ScopedProfileTimer timer(
-            local_phase_timer, params.profile_timing,
-            result.timing.remote_finish_nanoseconds);
+        ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                                 result.timing.remote_finish_nanoseconds);
         auto finished = distance_oracle->Finish(*operation.ticket);
         if (!finished.ok() && operation_status.ok()) {
           operation_status = std::move(finished);
@@ -1408,9 +1364,8 @@ struct HnswSearchTask::Impl {
     }
     if (graph_terminal_notified && !graph_harvested &&
         graph_ticket.has_value()) {
-      ScopedProfileTimer timer(
-          local_phase_timer, params.profile_timing,
-          result.timing.graph_consume_nanoseconds);
+      ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                               result.timing.graph_consume_nanoseconds);
       auto finished = FinishGraphTicket();
       if (!finished.status.ok() && operation_status.ok()) {
         operation_status = std::move(finished.status);
@@ -1418,14 +1373,13 @@ struct HnswSearchTask::Impl {
       graph_harvested = true;
       graph_terminal_notified = false;
     }
-    for (auto& operation : distance_operations) {
+    for (auto &operation : distance_operations) {
       if (!operation.terminal_notified || operation.harvested ||
           !operation.ticket.has_value()) {
         continue;
       }
-      ScopedProfileTimer timer(
-          local_phase_timer, params.profile_timing,
-          result.timing.remote_finish_nanoseconds);
+      ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                               result.timing.remote_finish_nanoseconds);
       auto finished = distance_oracle->Finish(*operation.ticket);
       if (!finished.ok() && operation_status.ok()) {
         operation_status = std::move(finished);
@@ -1449,9 +1403,8 @@ struct HnswSearchTask::Impl {
   }
 
   Result<std::span<const node_id_t>> ReadUpperGraphImmediately() {
-    ScopedProfileTimer timer(
-        local_phase_timer, params.profile_timing,
-        result.timing.upper_search_nanoseconds);
+    ScopedProfileTimer timer(local_phase_timer, params.profile_timing,
+                             result.timing.upper_search_nanoseconds);
     return graph_reader->ReadUpperNeighbors(current_id, current_level);
   }
 
@@ -1473,7 +1426,8 @@ struct HnswSearchTask::Impl {
     }
     auto pushed = heap.PushUnique(current_id, current_distance);
     if (!pushed.ok() || !pushed.value()) {
-      Fail(pushed.ok() ? Status(StatusCode::kInternalError, "unable to seed layer-0 heap")
+      Fail(pushed.ok() ? Status(StatusCode::kInternalError,
+                                "unable to seed layer-0 heap")
                        : pushed.status());
       return;
     }
@@ -1500,27 +1454,30 @@ struct HnswSearchTask::Impl {
 HnswSearchTask::~HnswSearchTask() = default;
 
 Result<std::unique_ptr<HnswSearchTask>> HnswSearchTask::Create(
-    QueryKey key, const GlobalIndexMeta& meta, const ShardMap& shard_map,
-    GraphReader& graph_reader, DistanceOracle& distance_oracle,
-    std::span<const float> query, const SearchParams& params,
+    QueryKey key, const GlobalIndexMeta &meta, const ShardMap &shard_map,
+    GraphReader &graph_reader, DistanceOracle &distance_oracle,
+    std::span<const float> query, const SearchParams &params,
     std::chrono::steady_clock::time_point admission_time,
-    const SearchRuntimeContext* runtime_context, QueryScratch* scratch,
+    const SearchRuntimeContext *runtime_context, QueryScratch *scratch,
     std::shared_ptr<const void> query_owner) {
   auto meta_status = ValidateGlobalMeta(meta);
   if (!meta_status.ok()) {
     return meta_status;
   }
-  if (query.size() != meta.dim || params.topk == 0 || params.ef_search < params.topk ||
-      params.expand_batch == 0 || params.expand_batch > 64 ||
-      params.operation_timeout.count() <= 0 || params.query_timeout < params.operation_timeout ||
+  if (query.size() != meta.dim || params.topk == 0 ||
+      params.ef_search < params.topk || params.expand_batch == 0 ||
+      params.expand_batch > 64 || params.operation_timeout.count() <= 0 ||
+      params.query_timeout < params.operation_timeout ||
       (runtime_context != nullptr &&
        (runtime_context->ready_publisher == nullptr ||
-        runtime_context->ready_producer_count == 0 || !graph_reader.SupportsPreparedWait() ||
+        runtime_context->ready_producer_count == 0 ||
+        !graph_reader.SupportsPreparedWait() ||
         !distance_oracle.SupportsPreparedWait()))) {
-    return Status(StatusCode::kInvalidArgument, "invalid query shape or search parameters");
+    return Status(StatusCode::kInvalidArgument,
+                  "invalid query shape or search parameters");
   }
-  const bool custom_entry = params.entry_point != INVALID_NODE_ID ||
-                            params.entry_level != -1;
+  const bool custom_entry =
+      params.entry_point != INVALID_NODE_ID || params.entry_level != -1;
   if (key.source_rank >= meta.num_shards ||
       (custom_entry &&
        (params.entry_point == INVALID_NODE_ID || params.entry_level < 0 ||
@@ -1544,7 +1501,8 @@ Result<std::unique_ptr<HnswSearchTask>> HnswSearchTask::Create(
     if (scratch == nullptr) {
       auto owned = QueryScratch::Create(
           meta, params, 1,
-          runtime_context == nullptr ? 1U : runtime_context->ready_producer_count);
+          runtime_context == nullptr ? 1U
+                                     : runtime_context->ready_producer_count);
       if (!owned.ok()) {
         return owned.status();
       }
@@ -1557,15 +1515,15 @@ Result<std::unique_ptr<HnswSearchTask>> HnswSearchTask::Create(
       return Status(StatusCode::kInvalidArgument,
                     "query scratch does not match the search configuration");
     }
-    auto acquired = scratch->impl_->Acquire(
-        key.generation, query, std::move(query_owner));
+    auto acquired =
+        scratch->impl_->Acquire(key.generation, query, std::move(query_owner));
     if (!acquired.ok()) {
       return acquired;
     }
     try {
-      task->impl_ = std::make_unique<Impl>(
-          key, meta, shard_map, graph_reader, distance_oracle, *scratch,
-          params, deadline.value(), runtime_context);
+      task->impl_ = std::make_unique<Impl>(key, meta, shard_map, graph_reader,
+                                           distance_oracle, *scratch, params,
+                                           deadline.value(), runtime_context);
     } catch (...) {
       scratch->impl_->Release(key.generation);
       throw;
@@ -1577,15 +1535,16 @@ Result<std::unique_ptr<HnswSearchTask>> HnswSearchTask::Create(
       return admitted;
     }
     return task;
-  } catch (const std::bad_alloc&) {
-    return Status(StatusCode::kResourceExhausted, "unable to allocate query context");
+  } catch (const std::bad_alloc &) {
+    return Status(StatusCode::kResourceExhausted,
+                  "unable to allocate query context");
   }
 }
 
-SearchStepResult HnswSearchTask::Step(std::chrono::steady_clock::time_point now) {
-  const auto resumed_at = impl_->params.profile_timing
-                              ? SteadyNowNanoseconds()
-                              : 0;
+SearchStepResult
+HnswSearchTask::Step(std::chrono::steady_clock::time_point now) {
+  const auto resumed_at =
+      impl_->params.profile_timing ? SteadyNowNanoseconds() : 0;
   if (impl_->state == QueryState::kCompleted) {
     return SearchStepResult::kCompleted;
   }
@@ -1598,13 +1557,13 @@ SearchStepResult HnswSearchTask::Step(std::chrono::steady_clock::time_point now)
   impl_->StartStageTiming(resumed_at);
   if (now >= impl_->query_deadline) {
     if (impl_->ready_publisher == nullptr) {
-      impl_->Fail(Status(StatusCode::kTimeout,
-                         "absolute query deadline exceeded"));
+      impl_->Fail(
+          Status(StatusCode::kTimeout, "absolute query deadline exceeded"));
       return SearchStepResult::kFailed;
     }
-    auto failed = impl_->controller.RequestFailure(
-        impl_->key.generation, TerminalOutcome::kTimedOut,
-        StatusCode::kTimeout);
+    auto failed = impl_->controller.RequestFailure(impl_->key.generation,
+                                                   TerminalOutcome::kTimedOut,
+                                                   StatusCode::kTimeout);
     if (!failed.ok()) {
       impl_->Fail(failed);
       return SearchStepResult::kFailed;
@@ -1643,8 +1602,8 @@ SearchStepResult HnswSearchTask::Step(std::chrono::steady_clock::time_point now)
     auto scheduled = phase == Impl::RetryPhase::kGraph
                          ? impl_->ScheduleGraph(wait_state, now)
                          : impl_->ScheduleDistances(wait_state, now);
-    auto resolved = impl_->HandleScheduleResult(
-        std::move(scheduled), phase, wait_state, now);
+    auto resolved = impl_->HandleScheduleResult(std::move(scheduled), phase,
+                                                wait_state, now);
     if (resolved.has_value()) {
       return *resolved;
     }
@@ -1657,302 +1616,296 @@ SearchStepResult HnswSearchTask::Step(std::chrono::steady_clock::time_point now)
       return SearchStepResult::kFailed;
     }
     switch (impl_->state) {
-      case QueryState::kInit: {
-        auto scheduled = impl_->ScheduleEntry(now);
-        auto resolved = impl_->HandleScheduleResult(
-            std::move(scheduled), Impl::RetryPhase::kDistance,
-            QueryState::kWaitEntryDistance, now);
-        if (resolved.has_value()) {
-          return *resolved;
-        }
-        break;
+    case QueryState::kInit: {
+      auto scheduled = impl_->ScheduleEntry(now);
+      auto resolved = impl_->HandleScheduleResult(
+          std::move(scheduled), Impl::RetryPhase::kDistance,
+          QueryState::kWaitEntryDistance, now);
+      if (resolved.has_value()) {
+        return *resolved;
       }
+      break;
+    }
 
-      case QueryState::kWaitEntryDistance:
-        if (impl_->OperationFailed()) {
-          return SearchStepResult::kFailed;
-        }
-        impl_->current_id = impl_->entry_point;
-        impl_->current_distance = impl_->routed_distances[0];
-        impl_->current_level = impl_->entry_level;
-        if (impl_->current_level > 0) {
-          auto marked = impl_->visited.Mark(impl_->entry_point);
-          if (!marked.ok() || !marked.value()) {
-            impl_->Fail(
-                marked.ok()
-                    ? Status(StatusCode::kInternalError,
-                             "unable to seed upper visited table")
-                    : marked.status());
-            return SearchStepResult::kFailed;
-          }
-          impl_->state = QueryState::kReadyUpperGraph;
-        } else {
-          impl_->StartLayer0();
-        }
-        break;
-
-      case QueryState::kReadyUpperGraph: {
-        auto neighbors = impl_->ReadUpperGraphImmediately();
-        if (!neighbors.ok()) {
-          impl_->Fail(neighbors.status());
-          return SearchStepResult::kFailed;
-        }
-        auto status = impl_->RouteIds(neighbors.value(), false);
-        if (!status.ok()) {
-          impl_->Fail(status);
-          return SearchStepResult::kFailed;
-        }
-        status = impl_->FilterUpperVisitedCandidates();
-        if (!status.ok()) {
-          impl_->Fail(status);
-          return SearchStepResult::kFailed;
-        }
-        impl_->state = QueryState::kReadyUpperDistance;
-        break;
-      }
-
-      case QueryState::kReadyUpperDistance:
-        if (impl_->routed_ids.empty()) {
-          impl_->RecordUpperLevelDrop(
-              !impl_->upper_had_candidates_before_visited);
-          --impl_->current_level;
-          if (impl_->current_level > 0) {
-            impl_->state = QueryState::kReadyUpperGraph;
-          } else {
-            impl_->StartLayer0();
-          }
-          break;
-        }
-        {
-          auto scheduled = impl_->ScheduleDistances(
-              QueryState::kWaitUpperDistance, now);
-          auto resolved = impl_->HandleScheduleResult(
-              std::move(scheduled), Impl::RetryPhase::kDistance,
-              QueryState::kWaitUpperDistance, now);
-          if (resolved.has_value()) {
-            return *resolved;
-          }
-          break;
-        }
-
-      case QueryState::kWaitUpperDistance: {
-        ScopedProfileTimer timer(
-            impl_->local_phase_timer, impl_->params.profile_timing,
-            impl_->result.timing.upper_search_nanoseconds);
-        if (impl_->OperationFailed()) {
-          return SearchStepResult::kFailed;
-        }
-        HeapEntry best{impl_->current_id, impl_->current_distance};
-        for (std::size_t index = 0; index < impl_->routed_ids.size(); ++index) {
-          HeapEntry candidate{impl_->routed_ids[index], impl_->routed_distances[index]};
-          if (Better(candidate, best)) {
-            best = candidate;
-          }
-        }
-        ++impl_->result.profile.upper_steps;
-        if (best.id != impl_->current_id) {
-          impl_->RecordUpperSameLevelMove();
-          impl_->current_id = best.id;
-          impl_->current_distance = best.distance;
-        } else {
-          impl_->RecordUpperLevelDrop(false);
-          --impl_->current_level;
-        }
-        if (impl_->current_level > 0) {
-          impl_->state = QueryState::kReadyUpperGraph;
-        } else {
-          impl_->StartLayer0();
-        }
-        break;
-      }
-
-      case QueryState::kReadyLayer0Expand:
-        impl_->expansion_nodes.clear();
-        for (std::uint32_t count = 0; count < impl_->params.expand_batch; ++count) {
-          auto candidate = impl_->heap.PopMinCandidate();
-          if (!candidate.has_value()) {
-            break;
-          }
-          impl_->expansion_nodes.push_back({candidate->id, 0});
-        }
-        if (impl_->expansion_nodes.empty()) {
-          return impl_->FinishQuery();
-        }
-        impl_->result.profile.nodes_expanded += impl_->expansion_nodes.size();
-        {
-          auto scheduled = impl_->ScheduleGraph(
-              QueryState::kWaitLayer0Graph, now);
-          auto resolved = impl_->HandleScheduleResult(
-              std::move(scheduled), Impl::RetryPhase::kGraph,
-              QueryState::kWaitLayer0Graph, now);
-          if (resolved.has_value()) {
-            return *resolved;
-          }
-          break;
-        }
-
-      case QueryState::kWaitLayer0Graph: {
-        if (impl_->OperationFailed()) {
-          return SearchStepResult::kFailed;
-        }
-        if (!impl_->graph_direct_consumed) {
-          if (impl_->neighbor_batch.offsets.size() !=
-              impl_->expansion_nodes.size() + 1U) {
-            impl_->Fail(Status(
-                StatusCode::kProtocolError,
-                "graph result boundaries mismatch"));
-            return SearchStepResult::kFailed;
-          }
-          impl_->result.profile.edges_scanned +=
-              impl_->neighbor_batch.neighbors.size();
-          auto status =
-              impl_->RouteIds(impl_->neighbor_batch.neighbors, true);
-          if (!status.ok()) {
-            impl_->Fail(status);
-            return SearchStepResult::kFailed;
-          }
-        }
-        if (impl_->routed_ids.empty()) {
-          impl_->state = QueryState::kReadyLayer0Expand;
-        } else {
-          impl_->state = QueryState::kReadyLayer0Distance;
-        }
-        break;
-      }
-
-      case QueryState::kReadyLayer0Distance: {
-        auto scheduled = impl_->ScheduleDistances(
-            QueryState::kWaitLayer0Distance, now);
-        auto resolved = impl_->HandleScheduleResult(
-            std::move(scheduled), Impl::RetryPhase::kDistance,
-            QueryState::kWaitLayer0Distance, now);
-        if (resolved.has_value()) {
-          return *resolved;
-        }
-        break;
-      }
-
-      case QueryState::kWaitLayer0Distance:
-        if (impl_->OperationFailed()) {
-          return SearchStepResult::kFailed;
-        }
-        impl_->state = QueryState::kReadyCommit;
-        break;
-
-      case QueryState::kReadyCommit: {
-        ScopedProfileTimer timer(
-            impl_->local_phase_timer, impl_->params.profile_timing,
-            impl_->result.timing.commit_heap_nanoseconds);
-        constexpr std::size_t kCommitBatch = 8;
-        // Keep validation separate from filtering so the compiler can
-        // vectorize the finite checks without the heap-bound branch.
-        std::size_t checked = 0;
-        for (; checked + kCommitBatch <=
-               impl_->routed_distances.size();
-             checked += kCommitBatch) {
-          bool finite = true;
-          for (std::size_t lane = 0; lane < kCommitBatch; ++lane) {
-            finite &=
-                std::isfinite(impl_->routed_distances[checked + lane]);
-          }
-          if (!finite) {
-            impl_->Fail(Status(
-                StatusCode::kInvalidArgument,
-                "heap entry requires a valid ID and finite distance"));
-            return SearchStepResult::kFailed;
-          }
-        }
-        for (; checked < impl_->routed_distances.size(); ++checked) {
-          if (!std::isfinite(impl_->routed_distances[checked])) {
-            impl_->Fail(Status(
-                StatusCode::kInvalidArgument,
-                "heap entry requires a valid ID and finite distance"));
-            return SearchStepResult::kFailed;
-          }
-        }
-
-        impl_->commit_entries.resize(impl_->routed_ids.size());
-        std::size_t competitive_count = 0;
-        const auto initial_worst = impl_->heap.max();
-        const bool heap_was_full =
-            impl_->heap.result_size() == impl_->heap.capacity();
-        const auto filter_batch =
-            [&](std::size_t begin, std::size_t count) {
-              for (std::size_t lane = 0; lane < count; ++lane) {
-                const auto index = begin + lane;
-                const HeapEntry entry{
-                    impl_->routed_ids[index],
-                    impl_->routed_distances[index]};
-                // An accepted entry can only improve the current worst
-                // result. Reject against the stable pre-commit bound before
-                // the deterministic sort.
-                if (heap_was_full && initial_worst.has_value() &&
-                    !Better(entry, *initial_worst)) {
-                  ++impl_->result.profile.heap_rejections;
-                  ++impl_->result.profile.heap_prefilter_rejections;
-                } else {
-                  impl_->commit_entries[competitive_count++] = entry;
-                }
-              }
-            };
-        std::size_t filtered = 0;
-        for (; filtered + kCommitBatch <= impl_->routed_ids.size();
-             filtered += kCommitBatch) {
-          filter_batch(filtered, kCommitBatch);
-        }
-        if (filtered < impl_->routed_ids.size()) {
-          filter_batch(
-              filtered, impl_->routed_ids.size() - filtered);
-        }
-        impl_->commit_entries.resize(competitive_count);
-        std::sort(impl_->commit_entries.begin(), impl_->commit_entries.end(), Better);
-        for (std::size_t entry_index = 0;
-             entry_index < impl_->commit_entries.size(); ++entry_index) {
-          const auto& entry = impl_->commit_entries[entry_index];
-          const auto worst = impl_->heap.max();
-          if (impl_->heap.result_size() == impl_->heap.capacity() &&
-              worst.has_value() && !Better(entry, *worst)) {
-            impl_->result.profile.heap_rejections +=
-                impl_->commit_entries.size() - entry_index;
-            impl_->result.profile.heap_suffix_rejections +=
-                impl_->commit_entries.size() - entry_index;
-            break;
-          }
-
-          // RouteIds() already marked these IDs in VisitedTable. Therefore
-          // this sorted commit batch contains no duplicate heap IDs.
-          const bool pushed_into_full_heap =
-              impl_->heap.result_size() == impl_->heap.capacity();
-          auto pushed = impl_->heap.PushUnique(entry.id, entry.distance);
-          if (!pushed.ok()) {
-            impl_->Fail(pushed.status());
-            return SearchStepResult::kFailed;
-          }
-          if (pushed.value()) {
-            ++impl_->result.profile.heap_pushes;
-            if (pushed_into_full_heap) {
-              ++impl_->result.profile.heap_full_pushes;
-            }
-          } else {
-            ++impl_->result.profile.heap_rejections;
-          }
-        }
-        impl_->result.profile.local_distance_count += impl_->routed_ids.size();
-        impl_->state = QueryState::kReadyLayer0Expand;
-        break;
-      }
-
-      case QueryState::kCompleted:
-        return SearchStepResult::kCompleted;
-      case QueryState::kFailed:
+    case QueryState::kWaitEntryDistance:
+      if (impl_->OperationFailed()) {
         return SearchStepResult::kFailed;
+      }
+      impl_->current_id = impl_->entry_point;
+      impl_->current_distance = impl_->routed_distances[0];
+      impl_->current_level = impl_->entry_level;
+      if (impl_->current_level > 0) {
+        auto marked = impl_->visited.Mark(impl_->entry_point);
+        if (!marked.ok() || !marked.value()) {
+          impl_->Fail(marked.ok() ? Status(StatusCode::kInternalError,
+                                           "unable to seed upper visited table")
+                                  : marked.status());
+          return SearchStepResult::kFailed;
+        }
+        impl_->state = QueryState::kReadyUpperGraph;
+      } else {
+        impl_->StartLayer0();
+      }
+      break;
+
+    case QueryState::kReadyUpperGraph: {
+      auto neighbors = impl_->ReadUpperGraphImmediately();
+      if (!neighbors.ok()) {
+        impl_->Fail(neighbors.status());
+        return SearchStepResult::kFailed;
+      }
+      auto status = impl_->RouteIds(neighbors.value(), false);
+      if (!status.ok()) {
+        impl_->Fail(status);
+        return SearchStepResult::kFailed;
+      }
+      status = impl_->FilterUpperVisitedCandidates();
+      if (!status.ok()) {
+        impl_->Fail(status);
+        return SearchStepResult::kFailed;
+      }
+      impl_->state = QueryState::kReadyUpperDistance;
+      break;
+    }
+
+    case QueryState::kReadyUpperDistance:
+      if (impl_->routed_ids.empty()) {
+        impl_->RecordUpperLevelDrop(
+            !impl_->upper_had_candidates_before_visited);
+        --impl_->current_level;
+        if (impl_->current_level > 0) {
+          impl_->state = QueryState::kReadyUpperGraph;
+        } else {
+          impl_->StartLayer0();
+        }
+        break;
+      }
+      {
+        auto scheduled =
+            impl_->ScheduleDistances(QueryState::kWaitUpperDistance, now);
+        auto resolved = impl_->HandleScheduleResult(
+            std::move(scheduled), Impl::RetryPhase::kDistance,
+            QueryState::kWaitUpperDistance, now);
+        if (resolved.has_value()) {
+          return *resolved;
+        }
+        break;
+      }
+
+    case QueryState::kWaitUpperDistance: {
+      ScopedProfileTimer timer(impl_->local_phase_timer,
+                               impl_->params.profile_timing,
+                               impl_->result.timing.upper_search_nanoseconds);
+      if (impl_->OperationFailed()) {
+        return SearchStepResult::kFailed;
+      }
+      HeapEntry best{impl_->current_id, impl_->current_distance};
+      for (std::size_t index = 0; index < impl_->routed_ids.size(); ++index) {
+        HeapEntry candidate{impl_->routed_ids[index],
+                            impl_->routed_distances[index]};
+        if (Better(candidate, best)) {
+          best = candidate;
+        }
+      }
+      ++impl_->result.profile.upper_steps;
+      if (best.id != impl_->current_id) {
+        impl_->RecordUpperSameLevelMove();
+        impl_->current_id = best.id;
+        impl_->current_distance = best.distance;
+      } else {
+        impl_->RecordUpperLevelDrop(false);
+        --impl_->current_level;
+      }
+      if (impl_->current_level > 0) {
+        impl_->state = QueryState::kReadyUpperGraph;
+      } else {
+        impl_->StartLayer0();
+      }
+      break;
+    }
+
+    case QueryState::kReadyLayer0Expand:
+      impl_->expansion_nodes.clear();
+      for (std::uint32_t count = 0; count < impl_->params.expand_batch;
+           ++count) {
+        auto candidate = impl_->heap.PopMinCandidate();
+        if (!candidate.has_value()) {
+          break;
+        }
+        impl_->expansion_nodes.push_back({candidate->id, 0});
+      }
+      if (impl_->expansion_nodes.empty()) {
+        return impl_->FinishQuery();
+      }
+      impl_->result.profile.nodes_expanded += impl_->expansion_nodes.size();
+      {
+        auto scheduled =
+            impl_->ScheduleGraph(QueryState::kWaitLayer0Graph, now);
+        auto resolved = impl_->HandleScheduleResult(
+            std::move(scheduled), Impl::RetryPhase::kGraph,
+            QueryState::kWaitLayer0Graph, now);
+        if (resolved.has_value()) {
+          return *resolved;
+        }
+        break;
+      }
+
+    case QueryState::kWaitLayer0Graph: {
+      if (impl_->OperationFailed()) {
+        return SearchStepResult::kFailed;
+      }
+      if (!impl_->graph_direct_consumed) {
+        if (impl_->neighbor_batch.offsets.size() !=
+            impl_->expansion_nodes.size() + 1U) {
+          impl_->Fail(Status(StatusCode::kProtocolError,
+                             "graph result boundaries mismatch"));
+          return SearchStepResult::kFailed;
+        }
+        impl_->result.profile.edges_scanned +=
+            impl_->neighbor_batch.neighbors.size();
+        auto status = impl_->RouteIds(impl_->neighbor_batch.neighbors, true);
+        if (!status.ok()) {
+          impl_->Fail(status);
+          return SearchStepResult::kFailed;
+        }
+      }
+      if (impl_->routed_ids.empty()) {
+        impl_->state = QueryState::kReadyLayer0Expand;
+      } else {
+        impl_->state = QueryState::kReadyLayer0Distance;
+      }
+      break;
+    }
+
+    case QueryState::kReadyLayer0Distance: {
+      auto scheduled =
+          impl_->ScheduleDistances(QueryState::kWaitLayer0Distance, now);
+      auto resolved = impl_->HandleScheduleResult(
+          std::move(scheduled), Impl::RetryPhase::kDistance,
+          QueryState::kWaitLayer0Distance, now);
+      if (resolved.has_value()) {
+        return *resolved;
+      }
+      break;
+    }
+
+    case QueryState::kWaitLayer0Distance:
+      if (impl_->OperationFailed()) {
+        return SearchStepResult::kFailed;
+      }
+      impl_->state = QueryState::kReadyCommit;
+      break;
+
+    case QueryState::kReadyCommit: {
+      ScopedProfileTimer timer(impl_->local_phase_timer,
+                               impl_->params.profile_timing,
+                               impl_->result.timing.commit_heap_nanoseconds);
+      constexpr std::size_t kCommitBatch = 8;
+      // Keep validation separate from filtering so the compiler can
+      // vectorize the finite checks without the heap-bound branch.
+      std::size_t checked = 0;
+      for (; checked + kCommitBatch <= impl_->routed_distances.size();
+           checked += kCommitBatch) {
+        bool finite = true;
+        for (std::size_t lane = 0; lane < kCommitBatch; ++lane) {
+          finite &= std::isfinite(impl_->routed_distances[checked + lane]);
+        }
+        if (!finite) {
+          impl_->Fail(
+              Status(StatusCode::kInvalidArgument,
+                     "heap entry requires a valid ID and finite distance"));
+          return SearchStepResult::kFailed;
+        }
+      }
+      for (; checked < impl_->routed_distances.size(); ++checked) {
+        if (!std::isfinite(impl_->routed_distances[checked])) {
+          impl_->Fail(
+              Status(StatusCode::kInvalidArgument,
+                     "heap entry requires a valid ID and finite distance"));
+          return SearchStepResult::kFailed;
+        }
+      }
+
+      impl_->commit_entries.resize(impl_->routed_ids.size());
+      std::size_t competitive_count = 0;
+      const auto initial_worst = impl_->heap.max();
+      const bool heap_was_full =
+          impl_->heap.result_size() == impl_->heap.capacity();
+      const auto filter_batch = [&](std::size_t begin, std::size_t count) {
+        for (std::size_t lane = 0; lane < count; ++lane) {
+          const auto index = begin + lane;
+          const HeapEntry entry{impl_->routed_ids[index],
+                                impl_->routed_distances[index]};
+          // An accepted entry can only improve the current worst
+          // result. Reject against the stable pre-commit bound before
+          // the deterministic sort.
+          if (heap_was_full && initial_worst.has_value() &&
+              !Better(entry, *initial_worst)) {
+            ++impl_->result.profile.heap_rejections;
+            ++impl_->result.profile.heap_prefilter_rejections;
+          } else {
+            impl_->commit_entries[competitive_count++] = entry;
+          }
+        }
+      };
+      std::size_t filtered = 0;
+      for (; filtered + kCommitBatch <= impl_->routed_ids.size();
+           filtered += kCommitBatch) {
+        filter_batch(filtered, kCommitBatch);
+      }
+      if (filtered < impl_->routed_ids.size()) {
+        filter_batch(filtered, impl_->routed_ids.size() - filtered);
+      }
+      impl_->commit_entries.resize(competitive_count);
+      std::sort(impl_->commit_entries.begin(), impl_->commit_entries.end(),
+                Better);
+      for (std::size_t entry_index = 0;
+           entry_index < impl_->commit_entries.size(); ++entry_index) {
+        const auto &entry = impl_->commit_entries[entry_index];
+        const auto worst = impl_->heap.max();
+        if (impl_->heap.result_size() == impl_->heap.capacity() &&
+            worst.has_value() && !Better(entry, *worst)) {
+          impl_->result.profile.heap_rejections +=
+              impl_->commit_entries.size() - entry_index;
+          impl_->result.profile.heap_suffix_rejections +=
+              impl_->commit_entries.size() - entry_index;
+          break;
+        }
+
+        // RouteIds() already marked these IDs in VisitedTable. Therefore
+        // this sorted commit batch contains no duplicate heap IDs.
+        const bool pushed_into_full_heap =
+            impl_->heap.result_size() == impl_->heap.capacity();
+        auto pushed = impl_->heap.PushUnique(entry.id, entry.distance);
+        if (!pushed.ok()) {
+          impl_->Fail(pushed.status());
+          return SearchStepResult::kFailed;
+        }
+        if (pushed.value()) {
+          ++impl_->result.profile.heap_pushes;
+          if (pushed_into_full_heap) {
+            ++impl_->result.profile.heap_full_pushes;
+          }
+        } else {
+          ++impl_->result.profile.heap_rejections;
+        }
+      }
+      impl_->result.profile.local_distance_count += impl_->routed_ids.size();
+      impl_->state = QueryState::kReadyLayer0Expand;
+      break;
+    }
+
+    case QueryState::kCompleted:
+      return SearchStepResult::kCompleted;
+    case QueryState::kFailed:
+      return SearchStepResult::kFailed;
     }
   }
   return SearchStepResult::kYielded;
 }
 
-Result<bool> HnswSearchTask::ProgressWaiting(
-    std::chrono::steady_clock::time_point now) {
+Result<bool>
+HnswSearchTask::ProgressWaiting(std::chrono::steady_clock::time_point now) {
   // Compatibility polling is gated until the Search Worker has published all
   // legacy tickets and phase metadata.
   if (!impl_->wait_published.load(std::memory_order_acquire) ||
@@ -1960,8 +1913,8 @@ Result<bool> HnswSearchTask::ProgressWaiting(
     return false;
   }
   if (now >= impl_->query_deadline) {
-    impl_->Fail(Status(StatusCode::kTimeout,
-                       "absolute query deadline exceeded"));
+    impl_->Fail(
+        Status(StatusCode::kTimeout, "absolute query deadline exceeded"));
     return impl_->final_status;
   }
   impl_->ProbeWaiting(now);
@@ -1976,23 +1929,28 @@ Result<bool> HnswSearchTask::ProgressWaiting(
 }
 
 QueryState HnswSearchTask::query_state() const noexcept { return impl_->state; }
-RunState HnswSearchTask::run_state() const noexcept { return impl_->controller.state(); }
+RunState HnswSearchTask::run_state() const noexcept {
+  return impl_->controller.state();
+}
 bool HnswSearchTask::requires_runtime_abort() const noexcept {
   return impl_->runtime_abort_required;
 }
-const Status& HnswSearchTask::status() const noexcept { return impl_->final_status; }
-const SearchResult& HnswSearchTask::result() const noexcept { return impl_->result; }
+const Status &HnswSearchTask::status() const noexcept {
+  return impl_->final_status;
+}
+const SearchResult &HnswSearchTask::result() const noexcept {
+  return impl_->result;
+}
 Status HnswSearchTask::BindOwner(std::uint32_t owner) noexcept {
   return impl_->controller.BindOwner(owner);
 }
 
-const QueryRunController& HnswSearchTask::run_controller() const noexcept {
+const QueryRunController &HnswSearchTask::run_controller() const noexcept {
   return impl_->controller;
 }
 Status HnswSearchTask::RequestFailure(TerminalOutcome outcome,
                                       StatusCode code) noexcept {
-  return impl_->controller.RequestFailure(impl_->key.generation, outcome,
-                                          code);
+  return impl_->controller.RequestFailure(impl_->key.generation, outcome, code);
 }
 std::optional<QueryRetryHandle> HnswSearchTask::TakeRetryHandle() noexcept {
   auto handle = impl_->retry_handle;
@@ -2015,7 +1973,8 @@ Result<SearchResult> RunToCompletion(std::unique_ptr<HnswSearchTask> task,
       return task->status();
     }
   }
-  return Status(StatusCode::kTimeout, "search exceeded local maximum step count");
+  return Status(StatusCode::kTimeout,
+                "search exceeded local maximum step count");
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

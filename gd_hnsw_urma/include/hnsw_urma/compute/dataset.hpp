@@ -18,25 +18,25 @@ struct FloatDataset {
   FloatDataset(std::uint64_t row_count, std::uint32_t dimension,
                std::vector<float> data)
       : rows(row_count), dim(dimension),
-        values_(std::make_shared<std::vector<float>>(
-            std::move(data))) {}
+        values_(std::make_shared<std::vector<float>>(std::move(data))) {}
 
   std::uint64_t rows{0};
   std::uint32_t dim{0};
 
   // Returns empty if the row is outside either the shape or backing storage.
   [[nodiscard]] std::span<const float> Row(std::uint64_t row) const noexcept;
-  [[nodiscard]] const std::vector<float>& values() const noexcept;
+  [[nodiscard]] const std::vector<float> &values() const noexcept;
   [[nodiscard]] std::shared_ptr<const void> owner() const noexcept {
     return values_;
   }
 
- private:
+private:
   std::shared_ptr<const std::vector<float>> values_;
 };
 
-[[nodiscard]] Result<FloatDataset> LoadFloatBin(const std::filesystem::path& path);
-[[nodiscard]] Status WriteFloatBin(const std::filesystem::path& path,
-                                   const FloatDataset& dataset);
+[[nodiscard]] Result<FloatDataset>
+LoadFloatBin(const std::filesystem::path &path);
+[[nodiscard]] Status WriteFloatBin(const std::filesystem::path &path,
+                                   const FloatDataset &dataset);
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

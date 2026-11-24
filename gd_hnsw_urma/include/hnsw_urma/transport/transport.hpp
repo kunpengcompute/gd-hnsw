@@ -30,7 +30,8 @@ struct OperationTicket {
   std::uint32_t owner_lane{0};
   std::uint64_t generation{0};
 
-  friend bool operator==(const OperationTicket&, const OperationTicket&) = default;
+  friend bool operator==(const OperationTicket &,
+                         const OperationTicket &) = default;
 };
 
 struct ReadOperation {
@@ -75,16 +76,18 @@ struct LanePostBatchResult {
 // Internal transport execution boundary. Only a Progress Lane may call an
 // implementation. Search code receives higher-level reader/oracle interfaces.
 class LanePostEngine {
- public:
+public:
   virtual ~LanePostEngine() = default;
-  virtual Status PostRead(const ReadOperation& operation) = 0;
-  virtual Status PostWriteNotify(const WriteNotifyOperation& operation) = 0;
+  virtual Status PostRead(const ReadOperation &operation) = 0;
+  virtual Status PostWriteNotify(const WriteNotifyOperation &operation) = 0;
   // Accept a possibly shorter prefix using current WR/descriptor credits.
   // Only posted entries may DMA; retryable suffixes remain unsubmitted.
-  virtual LanePostBatchResult PostReads(std::span<const ReadOperation> operations);
-  virtual LanePostBatchResult PostWriteNotifies(
-      std::span<const WriteNotifyOperation> operations);
-  virtual Result<std::size_t> Poll(std::span<TransportCompletion> completions) = 0;
+  virtual LanePostBatchResult
+  PostReads(std::span<const ReadOperation> operations);
+  virtual LanePostBatchResult
+  PostWriteNotifies(std::span<const WriteNotifyOperation> operations);
+  virtual Result<std::size_t>
+  Poll(std::span<TransportCompletion> completions) = 0;
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

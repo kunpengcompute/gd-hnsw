@@ -1,7 +1,7 @@
 #pragma once
-#include "hnsw_urma/milvus_ub_runtime.hpp"
-#include "hnsw_urma/milvus_query_executor.hpp"
 #include "hnsw_urma/core/page_aligned_buffer.hpp"
+#include "hnsw_urma/milvus_query_executor.hpp"
+#include "hnsw_urma/milvus_ub_runtime.hpp"
 #include "hnsw_urma/runtime/rpc/transport.hpp"
 #include "hnsw_urma/runtime/rpc_runtime.hpp"
 #include "hnsw_urma/search/remote_io.hpp"
@@ -13,7 +13,8 @@ struct MilvusUbRuntime::DistributedState {
   RuntimeConfig requested;
   EffectiveRuntimeConfig effective;
   // Reverse destruction: stop workers, destroy transport registrations, then
-  // release backing storage. Published mailbox and local shard belong to runtime.
+  // release backing storage. Published mailbox and local shard belong to
+  // runtime.
   std::optional<PageAlignedBuffer> read_buffer;
   std::unique_ptr<UmdkResourceBackend> backend;
   std::optional<UrmaResourceBundle> bundle;
@@ -34,4 +35,4 @@ struct MilvusUbRuntime::DistributedState {
   std::unique_ptr<RuntimeThreadGroup> threads;
 #endif
 };
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

@@ -19,39 +19,44 @@ enum class DistanceImplementation : std::uint8_t {
   kAuto,
 };
 
-[[nodiscard]] float ScalarL2(std::span<const float> lhs, std::span<const float> rhs) noexcept;
-[[nodiscard]] float ScalarDot(std::span<const float> lhs, std::span<const float> rhs) noexcept;
-[[nodiscard]] float L2FromDotNorm(float query_norm, float vector_norm, float dot) noexcept;
+[[nodiscard]] float ScalarL2(std::span<const float> lhs,
+                             std::span<const float> rhs) noexcept;
+[[nodiscard]] float ScalarDot(std::span<const float> lhs,
+                              std::span<const float> rhs) noexcept;
+[[nodiscard]] float L2FromDotNorm(float query_norm, float vector_norm,
+                                  float dot) noexcept;
 
-[[nodiscard]] float ComputeDistance(std::span<const float> lhs, std::span<const float> rhs,
-                                    Metric metric,
+[[nodiscard]] float ComputeDistance(std::span<const float> lhs,
+                                    std::span<const float> rhs, Metric metric,
                                     DistanceImplementation implementation =
                                         DistanceImplementation::kAuto) noexcept;
 
 [[nodiscard]] Status ComputeDistanceBatch(
     std::span<const float> query, std::span<const float> row_major_vectors,
     std::uint64_t vector_count, Metric metric, std::span<float> output,
-    DistanceImplementation implementation = DistanceImplementation::kAuto) noexcept;
+    DistanceImplementation implementation =
+        DistanceImplementation::kAuto) noexcept;
 
 // Computes up to four independent rows while loading each query block once.
 // Row pointers must each reference query.size() floats.
-[[nodiscard]] Status ComputeDistanceBatch4(
-    std::span<const float> query,
-    std::span<const float* const> vector_rows, Metric metric,
-    std::span<float> output,
-    DistanceImplementation implementation =
-        DistanceImplementation::kAuto) noexcept;
+[[nodiscard]] Status
+ComputeDistanceBatch4(std::span<const float> query,
+                      std::span<const float *const> vector_rows, Metric metric,
+                      std::span<float> output,
+                      DistanceImplementation implementation =
+                          DistanceImplementation::kAuto) noexcept;
 
 // Experimental L2 kernel using ||q-v||^2 = ||q||^2 + ||v||^2 - 2(q.v).
 // vector_norms and output must contain four elements.
-[[nodiscard]] Status ComputeL2DotNormBatch4(
-    std::span<const float> query, float query_norm,
-    std::span<const float* const> vector_rows,
-    std::span<const float> vector_norms, std::span<float> output,
-    DistanceImplementation implementation =
-        DistanceImplementation::kAuto) noexcept;
+[[nodiscard]] Status
+ComputeL2DotNormBatch4(std::span<const float> query, float query_norm,
+                       std::span<const float *const> vector_rows,
+                       std::span<const float> vector_norms,
+                       std::span<float> output,
+                       DistanceImplementation implementation =
+                           DistanceImplementation::kAuto) noexcept;
 
 [[nodiscard]] bool SimdDistanceAvailable() noexcept;
 [[nodiscard]] std::string_view ActiveDistanceImplementationName() noexcept;
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

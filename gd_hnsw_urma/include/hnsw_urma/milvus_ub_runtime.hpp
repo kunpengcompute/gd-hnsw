@@ -3,8 +3,8 @@
 #ifndef HNSW_URMA_MILVUS_UB_RUNTIME_H_
 #define HNSW_URMA_MILVUS_UB_RUNTIME_H_
 
-#include <cstdint>
 #include <chrono>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -17,16 +17,16 @@
 #include "hnsw_urma/core/status.hpp"
 #include "hnsw_urma/index/format.hpp"
 #include "hnsw_urma/runtime/rpc/mailbox.hpp"
+#include "hnsw_urma/runtime/thread_group.hpp"
 #include "hnsw_urma/search/io.hpp"
 #include "hnsw_urma/search/local_io.hpp"
 #include "hnsw_urma/search/query_context.hpp"
-#include "hnsw_urma/runtime/thread_group.hpp"
 
 namespace hnsw_urma {
 
 class MilvusUbRuntime {
- public:
-  static MilvusUbRuntime& Instance();
+public:
+  static MilvusUbRuntime &Instance();
 
   // Called from UBHNSWIndex::LoadV2Index for each segment. Moves ownership
   // of the LoadedIndex into the singleton. The first call seeds meta_,
@@ -39,16 +39,20 @@ class MilvusUbRuntime {
   // Bind only after successful seed. A different graph/epoch requires a
   // successful Shutdown; equal metadata alone never establishes identity.
   Status BindGlobalGraphIdentity(std::string graph_id, std::uint64_t epoch);
-  struct SeededShardInfo { std::uint32_t dim; std::uint64_t count; };
-  Result<std::optional<SeededShardInfo>> ReuseGlobalGraphShard(
-      const std::string& graph_id, std::uint64_t epoch, shard_id_t shard) const;
+  struct SeededShardInfo {
+    std::uint32_t dim;
+    std::uint64_t count;
+  };
+  Result<std::optional<SeededShardInfo>>
+  ReuseGlobalGraphShard(const std::string &graph_id, std::uint64_t epoch,
+                        shard_id_t shard) const;
 
   // Blocking service search, padded with -1 / +inf when fewer than topk
   // neighbors exist. All callers use the same distributed executor.
   Status Search(std::span<const float> query, std::uint32_t nq,
                 std::uint32_t dim, std::uint32_t topk, std::uint32_t ef_search,
-                Metric metric, std::vector<std::int64_t>& out_ids,
-                std::vector<float>& out_dists,
+                Metric metric, std::vector<std::int64_t> &out_ids,
+                std::vector<float> &out_dists,
                 std::chrono::steady_clock::time_point request_deadline =
                     std::chrono::steady_clock::time_point::max());
 
@@ -83,8 +87,7 @@ class MilvusUbRuntime {
   // with the same key replaces the previous entry (idempotent re-activation).
   Status ImportPeerHandles(shard_id_t shard_id, std::uint32_t role,
                            std::span<const std::byte> rjetty_descriptor,
-                           std::uint32_t jetty_token,
-                           void* target_segment);
+                           std::uint32_t jetty_token, void *target_segment);
 
   // Removes the stored pair for (shard_id, role) without touching any
   // native resource (ownership stays with UrmaManager).
@@ -99,9 +102,9 @@ class MilvusUbRuntime {
   // (Go/CGO) can register and publish it via UrmaManager's 4-role model.
   struct ShardMemory {
     shard_id_t shard_id{0};
-    void* graph_address{nullptr};
+    void *graph_address{nullptr};
     std::uint64_t graph_bytes{0};
-    void* vector_address{nullptr};
+    void *vector_address{nullptr};
     std::uint64_t vector_bytes{0};
   };
 
@@ -112,13 +115,13 @@ class MilvusUbRuntime {
 
   // Publish-side identity: the global graph's entry point (meta_.entry_point)
   // and its level (meta_.max_level). Fails when no shard has been loaded.
-  Status GetEntryPoint(node_id_t& out_entry_vertex_id,
-                       std::int32_t& out_entry_level) const;
+  Status GetEntryPoint(node_id_t &out_entry_vertex_id,
+                       std::int32_t &out_entry_level) const;
 
   // Resolves which shard owns the global entry point. This is the correct
   // EntryShardID to publish in the URMA resource directory (the entry
   // point's level is NOT a shard id).
-  Status GetEntryShard(shard_id_t& out_entry_shard_id) const;
+  Status GetEntryShard(shard_id_t &out_entry_shard_id) const;
 
   // ---- M-4: shard numbering same-source validation -----------------------
   //
@@ -136,11 +139,12 @@ class MilvusUbRuntime {
   bool Ready() const;
 
   // Start the pinned scheduler and READ/RPC/distance workers after discovery.
-  Status EnableDistributedSearch(std::chrono::steady_clock::time_point deadline =
-                                    std::chrono::steady_clock::time_point::max());
+  Status
+  EnableDistributedSearch(std::chrono::steady_clock::time_point deadline =
+                              std::chrono::steady_clock::time_point::max());
 
-  Result<std::uint64_t> EstimateRuntimeMemory(const std::filesystem::path& root,
-                                             shard_id_t local_shard) const;
+  Result<std::uint64_t> EstimateRuntimeMemory(const std::filesystem::path &root,
+                                              shard_id_t local_shard) const;
 
   // Pins the one shard served from local memory in distributed mode. The shard
   // must already be loaded; changing the assignment requires Shutdown first.
@@ -159,8 +163,8 @@ class MilvusUbRuntime {
   // (the default) makes EnableDistributedSearch fail with kInvalidArgument
   // in service mode; portable tests that legitimately self-manage URMA may
   // call AcquireSelfManagedUrmaRuntime instead.
-  void SetInjectedUrmaContext(void* urma_context);
-  [[nodiscard]] void* InjectedUrmaContext() const;
+  void SetInjectedUrmaContext(void *urma_context);
+  [[nodiscard]] void *InjectedUrmaContext() const;
 
   // Reports whether the distributed runtime is up and its RPC distance data
   // plane (mailbox) has been built. False before EnableDistributedSearch.
@@ -174,6 +178,19 @@ class MilvusUbRuntime {
   // Diagnostic. how many of shard_map's declared shards are loaded.
   std::size_t LoadedShardCount() const;
   std::size_t ExpectedShardCount() const;
+
+  // Atomic snapshot of the shard-load state for the distributed-enable ready
+  // gate. Unlike calling LocalShardId()/LoadedShardCount()/ExpectedShardCount()
+  // separately (each takes and releases state_mutex_ on its own, so a
+  // concurrent LoadShard can tear the triple), this reads all three under a
+  // single state_mutex_ acquisition so a caller cannot observe an inconsistent
+  // combination (e.g. loaded bumped but local_id not yet updated).
+  struct ShardLoadSnapshot {
+    std::optional<shard_id_t> local_shard_id;
+    std::size_t loaded_count;
+    std::size_t expected_count;
+  };
+  ShardLoadSnapshot GetShardLoadSnapshot() const;
 
   // ---- M-6: RPC distance peer-handle path -------------------------------
   //
@@ -196,11 +213,11 @@ class MilvusUbRuntime {
   // segment; notify is published as peer role 4).
   // Fails when EnsureRpcMailbox has not succeeded.
   struct RpcMailboxRegion {
-    void* requests_address{nullptr};
+    void *requests_address{nullptr};
     std::uint64_t requests_bytes{0};
-    void* responses_address{nullptr};
+    void *responses_address{nullptr};
     std::uint64_t responses_bytes{0};
-    void* notify_address{nullptr};
+    void *notify_address{nullptr};
     std::uint64_t notify_bytes{0};
     std::uint32_t ring_depth{0};
   };
@@ -209,7 +226,7 @@ class MilvusUbRuntime {
   // driver needs) are non-const accessors on RpcMailboxMemory. The logical
   // memory accessors requests()/responses() have const overloads, but the
   // registration accessors do not.
-  Status GetRpcMailboxRegions(RpcMailboxRegion& out);
+  Status GetRpcMailboxRegions(RpcMailboxRegion &out);
 
   // Startup configuration staged from Go; runtimeOptions extends these fields.
   struct Knobs {
@@ -258,13 +275,13 @@ class MilvusUbRuntime {
   // SetKnobs is called by the C ABI layer (UbSetConfig); T5 topology
   // construction reads the snapshot when building thread groups.
   Knobs GetKnobs() const;
-  void SetKnobs(const Knobs& knobs);
+  void SetKnobs(const Knobs &knobs);
 
- private:
+private:
   MilvusUbRuntime() = default;
   ~MilvusUbRuntime() = default;
-  MilvusUbRuntime(const MilvusUbRuntime&) = delete;
-  MilvusUbRuntime& operator=(const MilvusUbRuntime&) = delete;
+  MilvusUbRuntime(const MilvusUbRuntime &) = delete;
+  MilvusUbRuntime &operator=(const MilvusUbRuntime &) = delete;
 
   // Maps the Go-staged knobs onto a RuntimeConfig. Shared by
   // EnsureRpcMailbox (which publishes the mailbox before the distributed
@@ -277,8 +294,9 @@ class MilvusUbRuntime {
 
   // M-5: build+start (or return existing) distributed runtime under
   // state_mutex_. Implemented in milvus_distributed_runtime.cpp.
-  Status EnableDistributedSearchLocked(std::chrono::steady_clock::time_point deadline =
-                                          std::chrono::steady_clock::time_point::max());
+  Status EnableDistributedSearchLocked(
+      std::chrono::steady_clock::time_point deadline =
+          std::chrono::steady_clock::time_point::max());
 
   struct DistributedState;
 
@@ -291,7 +309,7 @@ class MilvusUbRuntime {
   // R1: host-injected native urma_context_t* (Milvus UrmaManager owns it).
   // Accessed under state_mutex_ during EnableDistributedSearch; set via
   // SetInjectedUrmaContext before enable. nullptr until the host injects.
-  void* injected_urma_context_{nullptr};
+  void *injected_urma_context_{nullptr};
 
   // Seeded from the first LoadedIndex; subsequent loads must agree.
   std::unique_ptr<GlobalIndexMeta> meta_;
@@ -312,7 +330,7 @@ class MilvusUbRuntime {
   struct PeerHandle {
     std::vector<std::byte> rjetty_descriptor;
     std::uint32_t jetty_token{0};
-    void* segment{nullptr};
+    void *segment{nullptr};
   };
   std::map<std::pair<shard_id_t, std::uint32_t>, PeerHandle> peer_handles_;
 
@@ -326,8 +344,9 @@ class MilvusUbRuntime {
   std::unique_ptr<RpcMailboxMemory> rpc_memory_;
 };
 
-Result<RuntimeConfig> BuildMilvusRuntimeConfig(const MilvusUbRuntime::Knobs& knobs);
+Result<RuntimeConfig>
+BuildMilvusRuntimeConfig(const MilvusUbRuntime::Knobs &knobs);
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma
 
-#endif  // HNSW_URMA_MILVUS_UB_RUNTIME_H_
+#endif // HNSW_URMA_MILVUS_UB_RUNTIME_H_

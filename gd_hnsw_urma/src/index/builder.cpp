@@ -16,18 +16,21 @@ struct ScoredId {
   node_id_t id;
 };
 
-std::vector<node_id_t> Nearest(std::span<const float> vectors, std::uint64_t rows,
-                               std::uint32_t dim, node_id_t source,
-                               std::span<const node_id_t> candidates, std::uint32_t count,
-                               std::uint32_t metric) {
+std::vector<node_id_t> Nearest(std::span<const float> vectors,
+                               std::uint64_t rows, std::uint32_t dim,
+                               node_id_t source,
+                               std::span<const node_id_t> candidates,
+                               std::uint32_t count, std::uint32_t metric) {
   std::vector<ScoredId> scored;
   scored.reserve(candidates.size());
-  const auto source_vector = vectors.subspan(static_cast<std::size_t>(source) * dim, dim);
+  const auto source_vector =
+      vectors.subspan(static_cast<std::size_t>(source) * dim, dim);
   for (node_id_t candidate : candidates) {
     if (candidate == source) {
       continue;
     }
-    const auto target = vectors.subspan(static_cast<std::size_t>(candidate) * dim, dim);
+    const auto target =
+        vectors.subspan(static_cast<std::size_t>(candidate) * dim, dim);
     float value = 0.0F;
     for (std::uint32_t component = 0; component < dim; ++component) {
       if (metric == 0) {
@@ -39,19 +42,22 @@ std::vector<node_id_t> Nearest(std::span<const float> vectors, std::uint64_t row
     }
     scored.push_back({value, candidate});
   }
-  std::sort(scored.begin(), scored.end(), [](const ScoredId& lhs, const ScoredId& rhs) {
-    return lhs.distance < rhs.distance ||
-           (lhs.distance == rhs.distance && lhs.id < rhs.id);
-  });
+  std::sort(scored.begin(), scored.end(),
+            [](const ScoredId &lhs, const ScoredId &rhs) {
+              return lhs.distance < rhs.distance ||
+                     (lhs.distance == rhs.distance && lhs.id < rhs.id);
+            });
   std::vector<node_id_t> result(count, INVALID_NODE_ID);
-  for (std::size_t index = 0; index < std::min(result.size(), scored.size()); ++index) {
+  for (std::size_t index = 0; index < std::min(result.size(), scored.size());
+       ++index) {
     result[index] = scored[index].id;
   }
   static_cast<void>(rows);
   return result;
 }
 
-std::uint16_t DeterministicLevel(node_id_t id, std::uint32_t M, std::uint64_t rows) {
+std::uint16_t DeterministicLevel(node_id_t id, std::uint32_t M,
+                                 std::uint64_t rows) {
   if (rows <= 1) {
     return 0;
   }
@@ -65,18 +71,21 @@ std::uint16_t DeterministicLevel(node_id_t id, std::uint32_t M, std::uint64_t ro
   return level;
 }
 
-}  // namespace
+} // namespace
 
-Status BuildReferenceIndex(const std::filesystem::path& root, std::span<const float> vectors,
-                           std::uint64_t rows, std::uint32_t dim,
-                           const ReferenceBuildOptions& options, std::uint64_t max_rows) {
+Status BuildReferenceIndex(const std::filesystem::path &root,
+                           std::span<const float> vectors, std::uint64_t rows,
+                           std::uint32_t dim,
+                           const ReferenceBuildOptions &options,
+                           std::uint64_t max_rows) {
   if (rows == 0 || rows > std::numeric_limits<node_id_t>::max() || dim == 0 ||
       options.num_shards == 0 || options.num_shards > rows || options.M == 0 ||
       options.M0 == 0 || options.ef_search == 0 || rows > max_rows ||
-      options.metric > 1 ||
-      rows > vectors.size() / dim || rows * dim != vectors.size()) {
+      options.metric > 1 || rows > vectors.size() / dim ||
+      rows * dim != vectors.size()) {
     return Status(StatusCode::kInvalidArgument,
-                  "reference builder shape/options invalid or exceeds its explicit row limit");
+                  "reference builder shape/options invalid or exceeds its "
+                  "explicit row limit");
   }
 
   std::vector<ShardRange> ranges;
@@ -92,11 +101,15 @@ Status BuildReferenceIndex(const std::filesystem::path& root, std::span<const fl
 
   std::vector<node_id_t> all_ids(static_cast<std::size_t>(rows));
   std::iota(all_ids.begin(), all_ids.end(), node_id_t{0});
-  std::vector<node_id_t> layer0(static_cast<std::size_t>(rows) * options.M0, INVALID_NODE_ID);
+  std::vector<node_id_t> layer0(static_cast<std::size_t>(rows) * options.M0,
+                                INVALID_NODE_ID);
   for (node_id_t id = 0; id < rows; ++id) {
-    auto nearest = Nearest(vectors, rows, dim, id, all_ids, options.M0, options.metric);
+    auto nearest =
+        Nearest(vectors, rows, dim, id, all_ids, options.M0, options.metric);
     std::copy(nearest.begin(), nearest.end(),
-              layer0.begin() + static_cast<std::ptrdiff_t>(static_cast<std::uint64_t>(id) * options.M0));
+              layer0.begin() +
+                  static_cast<std::ptrdiff_t>(static_cast<std::uint64_t>(id) *
+                                              options.M0));
   }
 
   std::vector<std::uint16_t> levels(static_cast<std::size_t>(rows));
@@ -129,8 +142,10 @@ Status BuildReferenceIndex(const std::filesystem::path& root, std::span<const fl
           candidates.push_back(candidate);
         }
       }
-      auto nearest = Nearest(vectors, rows, dim, id, candidates, options.M, options.metric);
-      upper_neighbors.insert(upper_neighbors.end(), nearest.begin(), nearest.end());
+      auto nearest = Nearest(vectors, rows, dim, id, candidates, options.M,
+                             options.metric);
+      upper_neighbors.insert(upper_neighbors.end(), nearest.begin(),
+                             nearest.end());
     }
   }
 
@@ -153,14 +168,18 @@ Status BuildReferenceIndex(const std::filesystem::path& root, std::span<const fl
   if (!status.ok()) {
     return status;
   }
-  for (const auto& range : ranges) {
-    const auto graph_begin = static_cast<std::size_t>(range.global_begin) * options.M0;
-    const auto vector_begin = static_cast<std::size_t>(range.global_begin) * dim;
+  for (const auto &range : ranges) {
+    const auto graph_begin =
+        static_cast<std::size_t>(range.global_begin) * options.M0;
+    const auto vector_begin =
+        static_cast<std::size_t>(range.global_begin) * dim;
     status = WriteShardFile(
         root, meta, range,
-        std::span<const node_id_t>(layer0).subspan(graph_begin,
-                                                   static_cast<std::size_t>(range.local_count) * options.M0),
-        vectors.subspan(vector_begin, static_cast<std::size_t>(range.local_count) * dim));
+        std::span<const node_id_t>(layer0).subspan(
+            graph_begin,
+            static_cast<std::size_t>(range.local_count) * options.M0),
+        vectors.subspan(vector_begin,
+                        static_cast<std::size_t>(range.local_count) * dim));
     if (!status.ok()) {
       return status;
     }
@@ -168,4 +187,4 @@ Status BuildReferenceIndex(const std::filesystem::path& root, std::span<const fl
   return Status::Ok();
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

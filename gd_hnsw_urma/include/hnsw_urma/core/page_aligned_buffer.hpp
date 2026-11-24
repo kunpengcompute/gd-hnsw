@@ -13,24 +13,25 @@ namespace hnsw_urma {
 // to the host page size. logical_memory() is the application-visible prefix;
 // registration_memory() includes any zero-filled tail padding required by URMA.
 class PageAlignedBuffer {
- public:
+public:
   PageAlignedBuffer() = default;
   ~PageAlignedBuffer();
-  PageAlignedBuffer(const PageAlignedBuffer&) = delete;
-  PageAlignedBuffer& operator=(const PageAlignedBuffer&) = delete;
-  PageAlignedBuffer(PageAlignedBuffer&& other) noexcept;
-  PageAlignedBuffer& operator=(PageAlignedBuffer&& other) noexcept;
+  PageAlignedBuffer(const PageAlignedBuffer &) = delete;
+  PageAlignedBuffer &operator=(const PageAlignedBuffer &) = delete;
+  PageAlignedBuffer(PageAlignedBuffer &&other) noexcept;
+  PageAlignedBuffer &operator=(PageAlignedBuffer &&other) noexcept;
 
   [[nodiscard]] static Result<std::size_t> SystemPageSize();
-  [[nodiscard]] static Result<PageAlignedBuffer> Create(std::size_t logical_bytes);
-  [[nodiscard]] static Result<PageAlignedBuffer> CopyFrom(
-      std::span<const std::byte> source);
-  [[nodiscard]] static Result<PageAlignedBuffer> CreateShared(
-      std::size_t logical_bytes);
-  [[nodiscard]] static Result<PageAlignedBuffer> CopyFromShared(
-      std::span<const std::byte> source);
-  [[nodiscard]] static Result<PageAlignedBuffer> OpenShared(
-      std::string_view name, std::size_t logical_bytes);
+  [[nodiscard]] static Result<PageAlignedBuffer>
+  Create(std::size_t logical_bytes);
+  [[nodiscard]] static Result<PageAlignedBuffer>
+  CopyFrom(std::span<const std::byte> source);
+  [[nodiscard]] static Result<PageAlignedBuffer>
+  CreateShared(std::size_t logical_bytes);
+  [[nodiscard]] static Result<PageAlignedBuffer>
+  CopyFromShared(std::span<const std::byte> source);
+  [[nodiscard]] static Result<PageAlignedBuffer>
+  OpenShared(std::string_view name, std::size_t logical_bytes);
 
   [[nodiscard]] std::span<std::byte> logical_memory() noexcept;
   [[nodiscard]] std::span<const std::byte> logical_memory() const noexcept;
@@ -42,7 +43,9 @@ class PageAlignedBuffer {
   [[nodiscard]] Status UnlinkSharedMemory();
 
   [[nodiscard]] std::size_t page_size() const noexcept { return page_size_; }
-  [[nodiscard]] std::size_t logical_bytes() const noexcept { return logical_bytes_; }
+  [[nodiscard]] std::size_t logical_bytes() const noexcept {
+    return logical_bytes_;
+  }
   [[nodiscard]] std::size_t registered_bytes() const noexcept {
     return registered_bytes_;
   }
@@ -53,12 +56,12 @@ class PageAlignedBuffer {
     return shared_name_;
   }
 
- private:
+private:
   enum class Storage : unsigned char { kEmpty, kHeap, kShared };
 
   void Reset() noexcept;
 
-  std::byte* data_{nullptr};
+  std::byte *data_{nullptr};
   std::size_t logical_bytes_{0};
   std::size_t registered_bytes_{0};
   std::size_t page_size_{0};
@@ -67,4 +70,4 @@ class PageAlignedBuffer {
   std::string shared_name_;
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

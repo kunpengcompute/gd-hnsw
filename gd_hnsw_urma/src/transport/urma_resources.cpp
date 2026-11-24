@@ -15,17 +15,16 @@ namespace {
 
 constexpr std::size_t kNoBadWorkRequest = static_cast<std::size_t>(-1);
 
-Result<std::uint32_t> PerOperationCompletionDepth(
-    std::uint32_t send_depth) {
+Result<std::uint32_t> PerOperationCompletionDepth(std::uint32_t send_depth) {
   auto depth = CheckedAdd(send_depth, 1U);
   if (!depth.ok()) {
-    return Status(StatusCode::kOutOfRange,
-                  "completion depth overflows uint32");
+    return Status(StatusCode::kOutOfRange, "completion depth overflows uint32");
   }
   return depth.value();
 }
 
-Status RequireLimit(std::uint32_t requested, std::uint32_t maximum, const char* name) {
+Status RequireLimit(std::uint32_t requested, std::uint32_t maximum,
+                    const char *name) {
   if (requested > maximum) {
     return Status(StatusCode::kResourceExhausted,
                   std::string(name) + " exceeds the provider capability")
@@ -36,7 +35,8 @@ Status RequireLimit(std::uint32_t requested, std::uint32_t maximum, const char* 
 }
 
 UrmaResourceRequest QueueRequest(UrmaResourceKind kind, std::uint32_t lane,
-                                 OperationClass operation_class, std::uint32_t depth,
+                                 OperationClass operation_class,
+                                 std::uint32_t depth,
                                  UrmaResourceHandle dependency = {}) {
   UrmaResourceRequest request;
   request.kind = kind;
@@ -47,23 +47,23 @@ UrmaResourceRequest QueueRequest(UrmaResourceKind kind, std::uint32_t lane,
   return request;
 }
 
-}  // namespace
+} // namespace
 
-Result<UrmaResourcePlan> PlanUrmaResources(const UrmaCapabilities& capabilities,
-                                           const UrmaResourceOptions& options) {
+Result<UrmaResourcePlan> PlanUrmaResources(const UrmaCapabilities &capabilities,
+                                           const UrmaResourceOptions &options) {
   if (options.communication_lanes == 0 || options.wr_list_max == 0 ||
       options.read_jfs_depth == 0 || options.request_jfs_depth == 0 ||
       options.response_jfs_depth == 0 ||
       options.request_jfs_per_rpc_lane == 0 ||
-      options.response_jfs_per_rpc_lane == 0 ||
-      options.read_jfc_depth == 0 ||
+      options.response_jfs_per_rpc_lane == 0 || options.read_jfc_depth == 0 ||
       options.request_jfc_depth == 0 || options.response_jfc_depth == 0 ||
-      options.target_jfr_depth == 0 || options.target_error_completions_per_jfr == 0) {
-    return Status(StatusCode::kInvalidArgument,
-                  "URMA lane counts, queue depths, and batching limits must be non-zero");
+      options.target_jfr_depth == 0 ||
+      options.target_error_completions_per_jfr == 0) {
+    return Status(
+        StatusCode::kInvalidArgument,
+        "URMA lane counts, queue depths, and batching limits must be non-zero");
   }
-  if (options.read_progress_threads == 0 ||
-      options.rpc_progress_threads == 0 ||
+  if (options.read_progress_threads == 0 || options.rpc_progress_threads == 0 ||
       static_cast<std::uint64_t>(options.read_progress_threads) +
               options.rpc_progress_threads !=
           options.communication_lanes) {
@@ -74,24 +74,22 @@ Result<UrmaResourcePlan> PlanUrmaResources(const UrmaCapabilities& capabilities,
       CheckedMultiply<std::uint32_t>(options.rpc_progress_threads, 2U);
   Result<std::uint32_t> queue_class_count =
       rpc_queue_classes.ok()
-          ? CheckedAdd(options.read_progress_threads,
-                       rpc_queue_classes.value())
+          ? CheckedAdd(options.read_progress_threads, rpc_queue_classes.value())
           : Result<std::uint32_t>(rpc_queue_classes.status());
   if (!queue_class_count.ok()) {
     return queue_class_count.status();
   }
   auto jfs_per_rpc_lane = CheckedAdd<std::uint32_t>(
-      options.request_jfs_per_rpc_lane,
-      options.response_jfs_per_rpc_lane);
-  auto rpc_jfs_count = jfs_per_rpc_lane.ok()
-                           ? CheckedMultiply<std::uint32_t>(
-                                 options.rpc_progress_threads,
-                                 jfs_per_rpc_lane.value())
-                           : Result<std::uint32_t>(jfs_per_rpc_lane.status());
-  auto send_jfs_count = rpc_jfs_count.ok()
-                            ? CheckedAdd(options.read_progress_threads,
-                                         rpc_jfs_count.value())
-                            : Result<std::uint32_t>(rpc_jfs_count.status());
+      options.request_jfs_per_rpc_lane, options.response_jfs_per_rpc_lane);
+  auto rpc_jfs_count =
+      jfs_per_rpc_lane.ok()
+          ? CheckedMultiply<std::uint32_t>(options.rpc_progress_threads,
+                                           jfs_per_rpc_lane.value())
+          : Result<std::uint32_t>(jfs_per_rpc_lane.status());
+  auto send_jfs_count =
+      rpc_jfs_count.ok()
+          ? CheckedAdd(options.read_progress_threads, rpc_jfs_count.value())
+          : Result<std::uint32_t>(rpc_jfs_count.status());
   if (!send_jfs_count.ok()) {
     return send_jfs_count.status();
   }
@@ -105,19 +103,23 @@ Result<UrmaResourcePlan> PlanUrmaResources(const UrmaCapabilities& capabilities,
     return target_jfc_depth.status();
   }
 
-  for (const auto& [requested, maximum, name] : {
+  for (const auto &[requested, maximum, name] : {
            std::tuple{send_jfs_count.value(),
-                      options.duplex_jetty ? capabilities.max_jetty : capabilities.max_jfs,
-                      options.duplex_jetty ? "send Jetty count" : "send JFS count"},
+                      options.duplex_jetty ? capabilities.max_jetty
+                                           : capabilities.max_jfs,
+                      options.duplex_jetty ? "send Jetty count"
+                                           : "send JFS count"},
            std::tuple{queue_class_count.value(), capabilities.max_jfr,
                       "target JFR count"},
            std::tuple{total_jfc.value(), capabilities.max_jfc, "JFC count"},
-           std::tuple{options.read_jfs_depth, capabilities.max_jfs_depth, "read JFS depth"},
+           std::tuple{options.read_jfs_depth, capabilities.max_jfs_depth,
+                      "read JFS depth"},
            std::tuple{options.request_jfs_depth, capabilities.max_jfs_depth,
                       "request JFS depth"},
            std::tuple{options.response_jfs_depth, capabilities.max_jfs_depth,
                       "response JFS depth"},
-           std::tuple{options.read_jfc_depth, capabilities.max_jfc_depth, "read JFC depth"},
+           std::tuple{options.read_jfc_depth, capabilities.max_jfc_depth,
+                      "read JFC depth"},
            std::tuple{options.request_jfc_depth, capabilities.max_jfc_depth,
                       "request JFC depth"},
            std::tuple{options.response_jfc_depth, capabilities.max_jfc_depth,
@@ -139,16 +141,14 @@ Result<UrmaResourcePlan> PlanUrmaResources(const UrmaCapabilities& capabilities,
       options.request_jfs_depth, options.request_jfs_per_rpc_lane);
   auto total_response_depth = CheckedMultiply<std::uint32_t>(
       options.response_jfs_depth, options.response_jfs_per_rpc_lane);
-  auto minimum_request_jfc = total_request_depth.ok()
-                                 ? PerOperationCompletionDepth(
-                                       total_request_depth.value())
-                                 : Result<std::uint32_t>(
-                                       total_request_depth.status());
-  auto minimum_response_jfc = total_response_depth.ok()
-                                  ? PerOperationCompletionDepth(
-                                        total_response_depth.value())
-                                  : Result<std::uint32_t>(
-                                        total_response_depth.status());
+  auto minimum_request_jfc =
+      total_request_depth.ok()
+          ? PerOperationCompletionDepth(total_request_depth.value())
+          : Result<std::uint32_t>(total_request_depth.status());
+  auto minimum_response_jfc =
+      total_response_depth.ok()
+          ? PerOperationCompletionDepth(total_response_depth.value())
+          : Result<std::uint32_t>(total_response_depth.status());
   if (!minimum_request_jfc.ok()) {
     return minimum_request_jfc.status();
   }
@@ -159,9 +159,12 @@ Result<UrmaResourcePlan> PlanUrmaResources(const UrmaCapabilities& capabilities,
       options.request_jfc_depth < minimum_request_jfc.value() ||
       options.response_jfc_depth < minimum_response_jfc.value()) {
     return Status(StatusCode::kInvalidArgument,
-                  "JFC depth is too small for queue depth and completion moderation")
-        .AddContext("minimum_request_jfc", std::to_string(minimum_request_jfc.value()))
-        .AddContext("minimum_response_jfc", std::to_string(minimum_response_jfc.value()));
+                  "JFC depth is too small for queue depth and completion "
+                  "moderation")
+        .AddContext("minimum_request_jfc",
+                    std::to_string(minimum_request_jfc.value()))
+        .AddContext("minimum_response_jfc",
+                    std::to_string(minimum_response_jfc.value()));
   }
 
   UrmaResourcePlan plan;
@@ -173,11 +176,12 @@ Result<UrmaResourcePlan> PlanUrmaResources(const UrmaCapabilities& capabilities,
   return plan;
 }
 
-UrmaResourceBundle::UrmaResourceBundle(UrmaResourceBundle&& other) noexcept {
+UrmaResourceBundle::UrmaResourceBundle(UrmaResourceBundle &&other) noexcept {
   *this = std::move(other);
 }
 
-UrmaResourceBundle& UrmaResourceBundle::operator=(UrmaResourceBundle&& other) noexcept {
+UrmaResourceBundle &
+UrmaResourceBundle::operator=(UrmaResourceBundle &&other) noexcept {
   if (this != &other) {
     Reset();
     backend_ = std::exchange(other.backend_, nullptr);
@@ -195,9 +199,11 @@ UrmaResourceBundle& UrmaResourceBundle::operator=(UrmaResourceBundle&& other) no
 
 UrmaResourceBundle::~UrmaResourceBundle() { Reset(); }
 
-void UrmaResourceBundle::DestroyReverse(std::vector<OwnedResource>& resources) noexcept {
+void UrmaResourceBundle::DestroyReverse(
+    std::vector<OwnedResource> &resources) noexcept {
   if (backend_ != nullptr) {
-    for (auto iterator = resources.rbegin(); iterator != resources.rend(); ++iterator) {
+    for (auto iterator = resources.rbegin(); iterator != resources.rend();
+         ++iterator) {
       backend_->Destroy(iterator->kind, iterator->handle);
     }
   }
@@ -215,23 +221,25 @@ void UrmaResourceBundle::Reset() noexcept {
 }
 
 Result<UrmaResourceBundle> UrmaResourceBundle::CreateLocal(
-    UrmaResourceBackend& backend, const UrmaResourcePlan& plan,
+    UrmaResourceBackend &backend, const UrmaResourcePlan &plan,
     std::span<const UrmaSegmentRegistration> segments) {
   UrmaResourceBundle bundle;
   bundle.backend_ = &backend;
   bundle.plan_ = plan;
   try {
     bundle.local_resources_.reserve(2U + segments.size() + plan.send_jfc_count +
-                                    plan.send_jfs_count + plan.target_jfr_count);
+                                    plan.send_jfs_count +
+                                    plan.target_jfr_count);
     bundle.registered_segments_.reserve(segments.size());
     bundle.lane_resources_.resize(plan.options.communication_lanes);
     bundle.lane_claimed_.assign(plan.options.communication_lanes, false);
-  } catch (const std::bad_alloc&) {
-    return Status(StatusCode::kResourceExhausted, "unable to allocate URMA resource ledger");
+  } catch (const std::bad_alloc &) {
+    return Status(StatusCode::kResourceExhausted,
+                  "unable to allocate URMA resource ledger");
   }
 
-  const auto create = [&](const UrmaResourceRequest& request)
-      -> Result<UrmaResourceHandle> {
+  const auto create =
+      [&](const UrmaResourceRequest &request) -> Result<UrmaResourceHandle> {
     auto result = backend.Create(request);
     if (result.ok()) {
       bundle.local_resources_.push_back({request.kind, result.value()});
@@ -239,15 +247,15 @@ Result<UrmaResourceBundle> UrmaResourceBundle::CreateLocal(
     return result;
   };
 
-  auto context = create(QueueRequest(UrmaResourceKind::kContext, 0,
-                                     OperationClass::kRead, 0));
+  auto context = create(
+      QueueRequest(UrmaResourceKind::kContext, 0, OperationClass::kRead, 0));
   if (!context.ok()) {
     return context.status();
   }
   bundle.context_ = context.value();
   for (std::size_t segment_index = 0; segment_index < segments.size();
        ++segment_index) {
-    const auto& segment = segments[segment_index];
+    const auto &segment = segments[segment_index];
     UrmaResourceRequest request;
     request.kind = UrmaResourceKind::kRegisteredSegment;
     request.dependency = context.value();
@@ -257,11 +265,12 @@ Result<UrmaResourceBundle> UrmaResourceBundle::CreateLocal(
     if (!registered.ok()) {
       auto status = registered.status();
       status.AddContext("segment_index", std::to_string(segment_index))
-          .AddContext("segment_name",
-                      segment.name.empty() ? "unnamed" : std::string(segment.name))
-          .AddContext("address",
-                      std::to_string(
-                          reinterpret_cast<std::uintptr_t>(segment.address)))
+          .AddContext("segment_name", segment.name.empty()
+                                          ? "unnamed"
+                                          : std::string(segment.name))
+          .AddContext(
+              "address",
+              std::to_string(reinterpret_cast<std::uintptr_t>(segment.address)))
           .AddContext("logical_bytes",
                       std::to_string(segment.logical_bytes == 0
                                          ? segment.bytes
@@ -271,17 +280,18 @@ Result<UrmaResourceBundle> UrmaResourceBundle::CreateLocal(
     }
     bundle.registered_segments_.push_back(registered.value());
   }
-  auto target_jfc = create(QueueRequest(UrmaResourceKind::kTargetJfc, 0,
-                                        OperationClass::kRead, plan.target_jfc_depth,
-                                        context.value()));
+  auto target_jfc = create(
+      QueueRequest(UrmaResourceKind::kTargetJfc, 0, OperationClass::kRead,
+                   plan.target_jfc_depth, context.value()));
   if (!target_jfc.ok()) {
     return target_jfc.status();
   }
 
-  const OperationClass classes[] = {
-      OperationClass::kRead, OperationClass::kRequestWrite,
-      OperationClass::kResponseWrite};
-  for (std::uint32_t lane = 0; lane < plan.options.communication_lanes; ++lane) {
+  const OperationClass classes[] = {OperationClass::kRead,
+                                    OperationClass::kRequestWrite,
+                                    OperationClass::kResponseWrite};
+  for (std::uint32_t lane = 0; lane < plan.options.communication_lanes;
+       ++lane) {
     bundle.lane_resources_[lane].lane = lane;
     bundle.lane_resources_[lane].duplex_jetty = plan.options.duplex_jetty;
     for (const auto operation_class : classes) {
@@ -298,16 +308,18 @@ Result<UrmaResourceBundle> UrmaResourceBundle::CreateLocal(
         jfs_depth = plan.options.response_jfs_depth;
         jfc_depth = plan.options.response_jfc_depth;
       }
-      auto jfc = create(QueueRequest(UrmaResourceKind::kSendJfc, lane, operation_class,
-                                     jfc_depth, context.value()));
+      auto jfc =
+          create(QueueRequest(UrmaResourceKind::kSendJfc, lane, operation_class,
+                              jfc_depth, context.value()));
       if (!jfc.ok()) {
         return jfc.status();
       }
       // UB duplex Jettys require a shared JFR. Create it before the Jettys so
       // reverse teardown releases every Jetty before its receive resource.
       const auto create_target = [&]() {
-        return create(QueueRequest(UrmaResourceKind::kTargetJfr, lane, operation_class,
-                                   plan.options.target_jfr_depth, target_jfc.value()));
+        return create(
+            QueueRequest(UrmaResourceKind::kTargetJfr, lane, operation_class,
+                         plan.options.target_jfr_depth, target_jfc.value()));
       };
       UrmaResourceHandle target;
       if (plan.options.duplex_jetty) {
@@ -326,16 +338,15 @@ Result<UrmaResourceBundle> UrmaResourceBundle::CreateLocal(
       std::vector<UrmaResourceHandle> jfs_handles;
       try {
         jfs_handles.reserve(jfs_count);
-      } catch (const std::bad_alloc&) {
+      } catch (const std::bad_alloc &) {
         return Status(StatusCode::kResourceExhausted,
                       "unable to allocate JFS handle list");
       }
-      for (std::uint32_t jfs_index = 0; jfs_index < jfs_count;
-           ++jfs_index) {
-        auto request = QueueRequest(plan.options.duplex_jetty
-                                        ? UrmaResourceKind::kSendJetty
-                                        : UrmaResourceKind::kSendJfs,
-                                    lane, operation_class, jfs_depth, jfc.value());
+      for (std::uint32_t jfs_index = 0; jfs_index < jfs_count; ++jfs_index) {
+        auto request = QueueRequest(
+            plan.options.duplex_jetty ? UrmaResourceKind::kSendJetty
+                                      : UrmaResourceKind::kSendJfs,
+            lane, operation_class, jfs_depth, jfc.value());
         request.secondary_dependency = target;
         auto jfs = create(request);
         if (!jfs.ok()) {
@@ -350,7 +361,7 @@ Result<UrmaResourceBundle> UrmaResourceBundle::CreateLocal(
         }
         target = jfr.value();
       }
-      auto& resources = bundle.lane_resources_[lane];
+      auto &resources = bundle.lane_resources_[lane];
       if (operation_class == OperationClass::kRead) {
         resources.read_jfc = jfc.value();
         resources.read_jfs = jfs_handles.front();
@@ -371,19 +382,22 @@ Result<UrmaResourceBundle> UrmaResourceBundle::CreateLocal(
 
 Result<UrmaLaneResources> UrmaResourceBundle::ClaimLane(std::uint32_t lane) {
   if (phase_ != UrmaTeardownPhase::kRunning) {
-    return Status(StatusCode::kInvalidArgument, "cannot claim a lane during teardown");
+    return Status(StatusCode::kInvalidArgument,
+                  "cannot claim a lane during teardown");
   }
   if (lane >= lane_resources_.size()) {
     return Status(StatusCode::kOutOfRange, "progress lane is out of range");
   }
   if (lane_claimed_[lane]) {
-    return Status(StatusCode::kInvalidArgument, "progress lane was already claimed");
+    return Status(StatusCode::kInvalidArgument,
+                  "progress lane was already claimed");
   }
   lane_claimed_[lane] = true;
   return lane_resources_[lane];
 }
 
-Result<UrmaLaneResources> UrmaResourceBundle::ControlLaneResources(std::uint32_t lane) const {
+Result<UrmaLaneResources>
+UrmaResourceBundle::ControlLaneResources(std::uint32_t lane) const {
   if (phase_ != UrmaTeardownPhase::kRunning) {
     return Status(StatusCode::kInvalidArgument,
                   "control resources are unavailable during teardown");
@@ -398,21 +412,24 @@ Result<UrmaLaneResources> UrmaResourceBundle::ControlLaneResources(std::uint32_t
   return lane_resources_[lane];
 }
 
-Result<UrmaResourceHandle> UrmaResourceBundle::CreatePeerResource(
-    const UrmaResourceRequest& input) {
+Result<UrmaResourceHandle>
+UrmaResourceBundle::CreatePeerResource(const UrmaResourceRequest &input) {
   if (phase_ != UrmaTeardownPhase::kRunning || backend_ == nullptr) {
-    return Status(StatusCode::kInvalidArgument,
-                  "peer resources can only be imported while the bundle is running");
+    return Status(
+        StatusCode::kInvalidArgument,
+        "peer resources can only be imported while the bundle is running");
   }
   if (std::any_of(lane_claimed_.begin(), lane_claimed_.end(),
                   [](bool claimed) { return claimed; })) {
-    return Status(StatusCode::kInvalidArgument,
-                  "peer imports must finish before progress lane ownership transfer");
+    return Status(
+        StatusCode::kInvalidArgument,
+        "peer imports must finish before progress lane ownership transfer");
   }
   if (input.kind != UrmaResourceKind::kImportedSegment &&
       input.kind != UrmaResourceKind::kImportedEndpoint &&
       input.kind != UrmaResourceKind::kAdvice) {
-    return Status(StatusCode::kInvalidArgument, "resource is not a peer import or advice");
+    return Status(StatusCode::kInvalidArgument,
+                  "resource is not a peer import or advice");
   }
   UrmaResourceRequest request = input;
   if (request.dependency.value == 0) {
@@ -424,7 +441,7 @@ Result<UrmaResourceHandle> UrmaResourceBundle::CreatePeerResource(
   }
   try {
     peer_resources_.push_back({request.kind, created.value()});
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     backend_->Destroy(request.kind, created.value());
     return Status(StatusCode::kResourceExhausted,
                   "unable to record imported peer resource");
@@ -433,12 +450,14 @@ Result<UrmaResourceHandle> UrmaResourceBundle::CreatePeerResource(
 }
 
 bool UrmaResourceBundle::all_lanes_claimed() const noexcept {
-  return std::all_of(lane_claimed_.begin(), lane_claimed_.end(), [](bool value) { return value; });
+  return std::all_of(lane_claimed_.begin(), lane_claimed_.end(),
+                     [](bool value) { return value; });
 }
 
 Status UrmaResourceBundle::StopAdmission() {
   if (phase_ != UrmaTeardownPhase::kRunning) {
-    return Status(StatusCode::kInvalidArgument, "admission can only stop from running state");
+    return Status(StatusCode::kInvalidArgument,
+                  "admission can only stop from running state");
   }
   phase_ = UrmaTeardownPhase::kAdmissionStopped;
   return Status::Ok();
@@ -446,7 +465,8 @@ Status UrmaResourceBundle::StopAdmission() {
 
 Status UrmaResourceBundle::MarkDrained() {
   if (phase_ != UrmaTeardownPhase::kAdmissionStopped) {
-    return Status(StatusCode::kInvalidArgument, "in-flight operations must drain after admission stops");
+    return Status(StatusCode::kInvalidArgument,
+                  "in-flight operations must drain after admission stops");
   }
   phase_ = UrmaTeardownPhase::kDrained;
   return Status::Ok();
@@ -454,7 +474,8 @@ Status UrmaResourceBundle::MarkDrained() {
 
 Status UrmaResourceBundle::MarkFirstBarrier() {
   if (phase_ != UrmaTeardownPhase::kDrained) {
-    return Status(StatusCode::kInvalidArgument, "first barrier requires drained lanes");
+    return Status(StatusCode::kInvalidArgument,
+                  "first barrier requires drained lanes");
   }
   phase_ = UrmaTeardownPhase::kFirstBarrier;
   return Status::Ok();
@@ -462,7 +483,8 @@ Status UrmaResourceBundle::MarkFirstBarrier() {
 
 Status UrmaResourceBundle::ReleasePeerResources() {
   if (phase_ != UrmaTeardownPhase::kFirstBarrier) {
-    return Status(StatusCode::kInvalidArgument, "peer imports require the first global barrier");
+    return Status(StatusCode::kInvalidArgument,
+                  "peer imports require the first global barrier");
   }
   DestroyReverse(peer_resources_);
   phase_ = UrmaTeardownPhase::kPeersReleased;
@@ -471,7 +493,8 @@ Status UrmaResourceBundle::ReleasePeerResources() {
 
 Status UrmaResourceBundle::MarkSecondBarrier() {
   if (phase_ != UrmaTeardownPhase::kPeersReleased) {
-    return Status(StatusCode::kInvalidArgument, "second barrier requires peer imports to be released");
+    return Status(StatusCode::kInvalidArgument,
+                  "second barrier requires peer imports to be released");
   }
   phase_ = UrmaTeardownPhase::kSecondBarrier;
   return Status::Ok();
@@ -479,22 +502,24 @@ Status UrmaResourceBundle::MarkSecondBarrier() {
 
 Status UrmaResourceBundle::ReleaseLocalResources() {
   if (phase_ != UrmaTeardownPhase::kSecondBarrier) {
-    return Status(StatusCode::kInvalidArgument, "local resources require the second global barrier");
+    return Status(StatusCode::kInvalidArgument,
+                  "local resources require the second global barrier");
   }
   DestroyReverse(local_resources_);
   phase_ = UrmaTeardownPhase::kLocalReleased;
   return Status::Ok();
 }
 
-OpportunisticPostOutcome PostOpportunisticBatch(
-    std::span<const OpportunisticPostDescriptor> ready, std::size_t wr_list_max,
-    UrmaWorkRequestPoster& poster) {
+OpportunisticPostOutcome
+PostOpportunisticBatch(std::span<const OpportunisticPostDescriptor> ready,
+                       std::size_t wr_list_max, UrmaWorkRequestPoster &poster) {
   OpportunisticPostOutcome outcome;
   if (ready.empty()) {
     return outcome;
   }
   if (wr_list_max == 0) {
-    outcome.status = Status(StatusCode::kInvalidArgument, "WR-list maximum must be non-zero");
+    outcome.status = Status(StatusCode::kInvalidArgument,
+                            "WR-list maximum must be non-zero");
     return outcome;
   }
   const auto jfs_key = ready.front().jfs_key;
@@ -514,13 +539,15 @@ OpportunisticPostOutcome PostOpportunisticBatch(
   return outcome;
 }
 
-Result<std::uint64_t> DmaLoadNotifyAcquire(const std::uint64_t* notify,
-                                           DmaVisibilityDomain& visibility) {
-  if (notify == nullptr || reinterpret_cast<std::uintptr_t>(notify) % alignof(std::uint64_t) != 0) {
-    return Status(StatusCode::kInvalidArgument, "notify address must be non-null and aligned");
+Result<std::uint64_t> DmaLoadNotifyAcquire(const std::uint64_t *notify,
+                                           DmaVisibilityDomain &visibility) {
+  if (notify == nullptr ||
+      reinterpret_cast<std::uintptr_t>(notify) % alignof(std::uint64_t) != 0) {
+    return Status(StatusCode::kInvalidArgument,
+                  "notify address must be non-null and aligned");
   }
-  const auto* device_notify =
-      reinterpret_cast<const volatile std::uint64_t*>(notify);
+  const auto *device_notify =
+      reinterpret_cast<const volatile std::uint64_t *>(notify);
   const auto value = *device_notify;
   if (value == 0) {
     return value;
@@ -540,4 +567,4 @@ Status MapUrmaProviderStatus(int provider_status, std::string operation) {
       .AddContext("provider_status", std::to_string(provider_status));
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

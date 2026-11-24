@@ -9,8 +9,8 @@
 #include <thread>
 #include <utility>
 
-#include "hnsw_urma/core/status.hpp"
 #include "hnsw_urma/core/checked_math.hpp"
+#include "hnsw_urma/core/status.hpp"
 
 namespace hnsw_urma {
 
@@ -23,15 +23,14 @@ struct MpmcRingMetrics {
 // Fixed-capacity bounded MPMC ring. Producers and consumers claim monotonically
 // increasing positions; the per-cell sequence prevents a later item from being
 // consumed before an earlier claimed position has been published.
-template <typename T>
-class MpmcRing {
- public:
+template <typename T> class MpmcRing {
+public:
   MpmcRing() = default;
-  MpmcRing(const MpmcRing&) = delete;
-  MpmcRing& operator=(const MpmcRing&) = delete;
+  MpmcRing(const MpmcRing &) = delete;
+  MpmcRing &operator=(const MpmcRing &) = delete;
 
-  MpmcRing(MpmcRing&& other) noexcept { MoveFrom(std::move(other)); }
-  MpmcRing& operator=(MpmcRing&& other) noexcept {
+  MpmcRing(MpmcRing &&other) noexcept { MoveFrom(std::move(other)); }
+  MpmcRing &operator=(MpmcRing &&other) noexcept {
     if (this != &other) {
       MoveFrom(std::move(other));
     }
@@ -43,7 +42,8 @@ class MpmcRing {
   }
   [[nodiscard]] static Result<std::size_t> RequiredBytes(std::size_t capacity) {
     auto storage = StorageBytes(capacity);
-    if (!storage.ok()) return storage.status();
+    if (!storage.ok())
+      return storage.status();
     return CheckedAdd(sizeof(MpmcRing), storage.value());
   }
 
@@ -53,24 +53,23 @@ class MpmcRing {
                     "MPMC ring capacity must be at least two");
     }
     auto bytes = RequiredBytes(capacity);
-    if (!bytes.ok()) return bytes.status();
+    if (!bytes.ok())
+      return bytes.status();
     try {
       MpmcRing ring;
       ring.capacity_ = capacity;
       ring.cells_ = std::make_unique<Cell[]>(capacity);
       for (std::size_t index = 0; index < capacity; ++index) {
-        ring.cells_[index].sequence.store(index,
-                                          std::memory_order_relaxed);
+        ring.cells_[index].sequence.store(index, std::memory_order_relaxed);
       }
       return ring;
-    } catch (const std::bad_alloc&) {
+    } catch (const std::bad_alloc &) {
       return Status(StatusCode::kResourceExhausted,
                     "unable to allocate MPMC ring");
     }
   }
 
-  template <typename U>
-  [[nodiscard]] Status TryPush(U&& value) noexcept {
+  template <typename U> [[nodiscard]] Status TryPush(U &&value) noexcept {
     if (cells_ == nullptr) {
       return Status(StatusCode::kInvalidArgument,
                     "MPMC ring is not initialized");
@@ -78,8 +77,7 @@ class MpmcRing {
     std::uint64_t position = 0;
     if (!ClaimEnqueuePosition(position, false)) {
       full_count_.fetch_add(1, std::memory_order_relaxed);
-      return Status(StatusCode::kResourceExhausted,
-                    "MPMC ring is full");
+      return Status(StatusCode::kResourceExhausted, "MPMC ring is full");
     }
     PublishClaimed(position, std::forward<U>(value));
     return Status::Ok();
@@ -92,7 +90,7 @@ class MpmcRing {
   // transient release window instead of turning a valid reservation into a
   // false queue-full failure.
   template <typename U>
-  [[nodiscard]] Status PushWithReservedCapacity(U&& value) noexcept {
+  [[nodiscard]] Status PushWithReservedCapacity(U &&value) noexcept {
     if (cells_ == nullptr) {
       return Status(StatusCode::kInvalidArgument,
                     "MPMC ring is not initialized");
@@ -108,40 +106,33 @@ class MpmcRing {
       return std::nullopt;
     }
     auto position = dequeue_position_.load(std::memory_order_relaxed);
-    Cell* cell = nullptr;
-    while (true) {
+    Cell *cell = nullptr;
+    for (bool claimed = false; !claimed;) {
       cell = &cells_[position % capacity_];
-      const auto sequence =
-          cell->sequence.load(std::memory_order_acquire);
+      const auto sequence = cell->sequence.load(std::memory_order_acquire);
       const auto difference = static_cast<std::intptr_t>(sequence) -
                               static_cast<std::intptr_t>(position + 1U);
       if (difference == 0) {
         if (dequeue_position_.compare_exchange_weak(
                 position, position + 1U, std::memory_order_relaxed,
                 std::memory_order_relaxed)) {
-          break;
+          claimed = true;
         }
       } else if (difference < 0) {
         return std::nullopt;
       } else {
-        position =
-            dequeue_position_.load(std::memory_order_relaxed);
+        position = dequeue_position_.load(std::memory_order_relaxed);
       }
     }
     T value = std::move(cell->value);
-    cell->sequence.store(position + capacity_,
-                         std::memory_order_release);
+    cell->sequence.store(position + capacity_, std::memory_order_release);
     return value;
   }
 
-  [[nodiscard]] std::size_t capacity() const noexcept {
-    return capacity_;
-  }
+  [[nodiscard]] std::size_t capacity() const noexcept { return capacity_; }
   [[nodiscard]] std::size_t size() const noexcept {
-    const auto tail =
-        enqueue_position_.load(std::memory_order_acquire);
-    const auto head =
-        dequeue_position_.load(std::memory_order_acquire);
+    const auto tail = enqueue_position_.load(std::memory_order_acquire);
+    const auto head = dequeue_position_.load(std::memory_order_acquire);
     return tail >= head ? static_cast<std::size_t>(tail - head) : 0;
   }
   // Only while all producers/consumers are stopped and the ring is drained.
@@ -150,24 +141,23 @@ class MpmcRing {
     full_count_.store(0, std::memory_order_relaxed);
   }
   [[nodiscard]] MpmcRingMetrics metrics() const noexcept {
-    return {
-        size(), high_watermark_.load(std::memory_order_relaxed),
-        full_count_.load(std::memory_order_relaxed)};
+    return {size(), high_watermark_.load(std::memory_order_relaxed),
+            full_count_.load(std::memory_order_relaxed)};
   }
 
- private:
+private:
   struct Cell {
     std::atomic<std::uint64_t> sequence{0};
     T value{};
   };
 
-  [[nodiscard]] bool ClaimEnqueuePosition(
-      std::uint64_t& position, bool wait_for_reserved_capacity) noexcept {
+  [[nodiscard]] bool
+  ClaimEnqueuePosition(std::uint64_t &position,
+                       bool wait_for_reserved_capacity) noexcept {
     position = enqueue_position_.load(std::memory_order_relaxed);
-    while (true) {
-      auto& cell = cells_[position % capacity_];
-      const auto sequence =
-          cell.sequence.load(std::memory_order_acquire);
+    for (bool settled = false; !settled;) {
+      auto &cell = cells_[position % capacity_];
+      const auto sequence = cell.sequence.load(std::memory_order_acquire);
       const auto difference = static_cast<std::intptr_t>(sequence) -
                               static_cast<std::intptr_t>(position);
       if (difference == 0) {
@@ -186,19 +176,20 @@ class MpmcRing {
         position = enqueue_position_.load(std::memory_order_relaxed);
       }
     }
+    // Unreachable: the loop above only exits via one of its return statements.
+    return false;
   }
 
   template <typename U>
-  void PublishClaimed(std::uint64_t position, U&& value) noexcept {
-    auto& cell = cells_[position % capacity_];
+  void PublishClaimed(std::uint64_t position, U &&value) noexcept {
+    auto &cell = cells_[position % capacity_];
     cell.value = std::forward<U>(value);
     cell.sequence.store(position + 1U, std::memory_order_release);
     UpdateHighWatermark(position + 1U);
   }
 
   void UpdateHighWatermark(std::uint64_t published_tail) noexcept {
-    const auto head =
-        dequeue_position_.load(std::memory_order_acquire);
+    const auto head = dequeue_position_.load(std::memory_order_acquire);
     // Another producer may publish a later claimed position first, allowing
     // consumers to advance past this producer before it records the metric.
     // In that case this older publication cannot establish a new high-water
@@ -208,14 +199,17 @@ class MpmcRing {
     }
     const auto depth = published_tail - head;
     auto observed = high_watermark_.load(std::memory_order_relaxed);
-    while (observed < depth &&
-           !high_watermark_.compare_exchange_weak(
-               observed, depth, std::memory_order_relaxed,
-               std::memory_order_relaxed)) {
+    while (observed < depth) {
+      if (high_watermark_.compare_exchange_weak(observed, depth,
+                                                std::memory_order_relaxed,
+                                                std::memory_order_relaxed)) {
+        break;
+      }
+      // observed is refreshed by the failed compare_exchange_weak above.
     }
   }
 
-  void MoveFrom(MpmcRing&& other) noexcept {
+  void MoveFrom(MpmcRing &&other) noexcept {
     cells_ = std::move(other.cells_);
     capacity_ = std::exchange(other.capacity_, 0);
     enqueue_position_.store(
@@ -224,12 +218,10 @@ class MpmcRing {
     dequeue_position_.store(
         other.dequeue_position_.load(std::memory_order_relaxed),
         std::memory_order_relaxed);
-    high_watermark_.store(
-        other.high_watermark_.load(std::memory_order_relaxed),
-        std::memory_order_relaxed);
-    full_count_.store(
-        other.full_count_.load(std::memory_order_relaxed),
-        std::memory_order_relaxed);
+    high_watermark_.store(other.high_watermark_.load(std::memory_order_relaxed),
+                          std::memory_order_relaxed);
+    full_count_.store(other.full_count_.load(std::memory_order_relaxed),
+                      std::memory_order_relaxed);
     other.enqueue_position_.store(0, std::memory_order_relaxed);
     other.dequeue_position_.store(0, std::memory_order_relaxed);
     other.high_watermark_.store(0, std::memory_order_relaxed);
@@ -244,4 +236,4 @@ class MpmcRing {
   std::atomic<std::uint64_t> full_count_{0};
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

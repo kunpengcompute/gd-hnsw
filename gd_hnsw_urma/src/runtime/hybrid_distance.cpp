@@ -9,14 +9,14 @@
 namespace hnsw_urma {
 
 class HybridDistanceOracle::Impl {
- public:
+public:
   static constexpr ticket_t kPullTicket = ticket_t{1} << 62U;
   static constexpr ticket_t kPushdownTicket = ticket_t{1} << 63U;
   static constexpr ticket_t kBackendMask = kPullTicket | kPushdownTicket;
 
-  [[nodiscard]] DistanceOracle* Select(
-      shard_id_t owner_shard, std::size_t id_count, bool& local,
-      bool& pushdown_selected) const noexcept {
+  [[nodiscard]] DistanceOracle *Select(shard_id_t owner_shard,
+                                       std::size_t id_count, bool &local,
+                                       bool &pushdown_selected) const noexcept {
     local = owner_shard == local_shard;
     pushdown_selected =
         !local &&
@@ -25,8 +25,8 @@ class HybridDistanceOracle::Impl {
     return pushdown_selected ? pushdown : pull;
   }
 
-  [[nodiscard]] Result<DistanceTicket> Encode(
-      DistanceTicket child, bool pushdown_selected) const noexcept {
+  [[nodiscard]] Result<DistanceTicket>
+  Encode(DistanceTicket child, bool pushdown_selected) const noexcept {
     if (child.value == 0 || child.generation == 0 ||
         (child.value & kBackendMask) != 0) {
       return Status(StatusCode::kProtocolError,
@@ -36,8 +36,8 @@ class HybridDistanceOracle::Impl {
     return child;
   }
 
-  [[nodiscard]] Result<std::pair<DistanceOracle*, DistanceTicket>> Decode(
-      DistanceTicket tagged) const noexcept {
+  [[nodiscard]] Result<std::pair<DistanceOracle *, DistanceTicket>>
+  Decode(DistanceTicket tagged) const noexcept {
     const auto backend_tag = tagged.value & kBackendMask;
     if (tagged.generation == 0 ||
         (backend_tag != kPullTicket && backend_tag != kPushdownTicket)) {
@@ -49,15 +49,14 @@ class HybridDistanceOracle::Impl {
       return Status(StatusCode::kProtocolError,
                     "hybrid distance ticket is empty");
     }
-    return std::pair{
-        backend_tag == kPushdownTicket ? pushdown : pull, tagged};
+    return std::pair{backend_tag == kPushdownTicket ? pushdown : pull, tagged};
   }
 
   shard_id_t local_shard{0};
   DistancePolicy policy{DistancePolicy::kAuto};
   std::uint32_t pull_threshold{0};
-  DistanceOracle* pull{nullptr};
-  DistanceOracle* pushdown{nullptr};
+  DistanceOracle *pull{nullptr};
+  DistanceOracle *pushdown{nullptr};
   std::atomic<std::uint64_t> local_batches{0};
   std::atomic<std::uint64_t> pull_batches{0};
   std::atomic<std::uint64_t> pushdown_batches{0};
@@ -68,10 +67,10 @@ HybridDistanceOracle::HybridDistanceOracle(std::unique_ptr<Impl> impl)
 
 HybridDistanceOracle::~HybridDistanceOracle() = default;
 
-Result<std::unique_ptr<HybridDistanceOracle>> HybridDistanceOracle::Create(
-    shard_id_t local_shard, DistancePolicy policy,
-    std::uint32_t pull_threshold, DistanceOracle& pull,
-    DistanceOracle& pushdown) {
+Result<std::unique_ptr<HybridDistanceOracle>>
+HybridDistanceOracle::Create(shard_id_t local_shard, DistancePolicy policy,
+                             std::uint32_t pull_threshold, DistanceOracle &pull,
+                             DistanceOracle &pushdown) {
   if (pull_threshold == 0) {
     return Status(StatusCode::kInvalidArgument,
                   "invalid hybrid distance configuration");
@@ -85,18 +84,18 @@ Result<std::unique_ptr<HybridDistanceOracle>> HybridDistanceOracle::Create(
     impl->pushdown = &pushdown;
     return std::unique_ptr<HybridDistanceOracle>(
         new HybridDistanceOracle(std::move(impl)));
-  } catch (const std::bad_alloc&) {
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate hybrid distance oracle");
   }
 }
 
 Result<DistanceTicket> HybridDistanceOracle::Submit(
-    QueryKey query, std::span<const float> query_vector,
-    shard_id_t owner_shard, std::span<const node_id_t> ids,
-    std::span<float> output, DistanceRequestOptions options) {
-  return SubmitForWait(
-      query, 1, query_vector, owner_shard, ids, output, options);
+    QueryKey query, std::span<const float> query_vector, shard_id_t owner_shard,
+    std::span<const node_id_t> ids, std::span<float> output,
+    DistanceRequestOptions options) {
+  return SubmitForWait(query, 1, query_vector, owner_shard, ids, output,
+                       options);
 }
 
 Result<DistanceTicket> HybridDistanceOracle::SubmitForWait(
@@ -107,27 +106,26 @@ Result<DistanceTicket> HybridDistanceOracle::SubmitForWait(
   try {
     auto storage = std::make_shared<const std::vector<float>>(
         query_vector.begin(), query_vector.end());
-    return SubmitLeaseForWait(
-        {query, std::move(storage)}, wait_epoch, owner_shard, ids, output,
-        options);
-  } catch (const std::bad_alloc&) {
+    return SubmitLeaseForWait({query, std::move(storage)}, wait_epoch,
+                              owner_shard, ids, output, options);
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to snapshot hybrid query vector");
   }
 }
 
 Result<DistanceTicket> HybridDistanceOracle::SubmitLeaseForWait(
-    const QueryVectorLease& lease, std::uint64_t wait_epoch,
+    const QueryVectorLease &lease, std::uint64_t wait_epoch,
     shard_id_t owner_shard, std::span<const node_id_t> ids,
     std::span<float> output, DistanceRequestOptions options) {
   bool local = false;
   bool use_pushdown = false;
-  auto* backend = impl_->Select(owner_shard, ids.size(), local, use_pushdown);
+  auto *backend = impl_->Select(owner_shard, ids.size(), local, use_pushdown);
   if (!use_pushdown) {
     options = {};
   }
-  auto submitted = backend->SubmitLeaseForWait(
-      lease, wait_epoch, owner_shard, ids, output, options);
+  auto submitted = backend->SubmitLeaseForWait(lease, wait_epoch, owner_shard,
+                                               ids, output, options);
   if (!submitted.ok()) {
     return submitted.status();
   }
@@ -135,9 +133,9 @@ Result<DistanceTicket> HybridDistanceOracle::SubmitLeaseForWait(
   if (!tagged.ok()) {
     return tagged.status();
   }
-  auto& counter = local ? impl_->local_batches
-                        : use_pushdown ? impl_->pushdown_batches
-                                       : impl_->pull_batches;
+  auto &counter = local          ? impl_->local_batches
+                  : use_pushdown ? impl_->pushdown_batches
+                                 : impl_->pull_batches;
   counter.fetch_add(1, std::memory_order_relaxed);
   return tagged;
 }
@@ -151,34 +149,33 @@ Result<bool> HybridDistanceOracle::Poll(DistanceTicket ticket) {
 }
 
 bool HybridDistanceOracle::SupportsPreparedWait() const noexcept {
-  return impl_->pull->SupportsPreparedWait() && impl_->pushdown->SupportsPreparedWait();
+  return impl_->pull->SupportsPreparedWait() &&
+         impl_->pushdown->SupportsPreparedWait();
 }
 
 Result<PreparedDistanceOperation> HybridDistanceOracle::PrepareForWait(
-    QueryWaitPreparation preparation,
-    std::span<const float> query_vector, shard_id_t owner_shard,
-    std::span<const node_id_t> ids, std::span<float> output,
-    DistanceRequestOptions options) {
+    QueryWaitPreparation preparation, std::span<const float> query_vector,
+    shard_id_t owner_shard, std::span<const node_id_t> ids,
+    std::span<float> output, DistanceRequestOptions options) {
   try {
     auto storage = std::make_shared<const std::vector<float>>(
         query_vector.begin(), query_vector.end());
-    return PrepareLeaseForWait(
-        preparation, {preparation.query, std::move(storage)}, owner_shard,
-        ids, output, options);
-  } catch (const std::bad_alloc&) {
+    return PrepareLeaseForWait(preparation,
+                               {preparation.query, std::move(storage)},
+                               owner_shard, ids, output, options);
+  } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to snapshot hybrid query vector");
   }
 }
 
-Result<PreparedDistanceOperation>
-HybridDistanceOracle::PrepareLeaseForWait(
-    QueryWaitPreparation preparation, const QueryVectorLease& lease,
+Result<PreparedDistanceOperation> HybridDistanceOracle::PrepareLeaseForWait(
+    QueryWaitPreparation preparation, const QueryVectorLease &lease,
     shard_id_t owner_shard, std::span<const node_id_t> ids,
     std::span<float> output, DistanceRequestOptions options) {
   bool local = false;
   bool use_pushdown = false;
-  auto* backend = impl_->Select(owner_shard, ids.size(), local, use_pushdown);
+  auto *backend = impl_->Select(owner_shard, ids.size(), local, use_pushdown);
   if (!use_pushdown) {
     options = {};
   }
@@ -186,8 +183,8 @@ HybridDistanceOracle::PrepareLeaseForWait(
     return Status(StatusCode::kProtocolError,
                   "hybrid backend does not support prepared waits");
   }
-  auto prepared = backend->PrepareLeaseForWait(
-      preparation, lease, owner_shard, ids, output, options);
+  auto prepared = backend->PrepareLeaseForWait(preparation, lease, owner_shard,
+                                               ids, output, options);
   if (!prepared.ok()) {
     return prepared.status();
   }
@@ -196,9 +193,9 @@ HybridDistanceOracle::PrepareLeaseForWait(
     (void)backend->CancelPrepared(prepared.value().ticket);
     return tagged.status();
   }
-  auto& counter = local ? impl_->local_batches
-                        : use_pushdown ? impl_->pushdown_batches
-                                       : impl_->pull_batches;
+  auto &counter = local          ? impl_->local_batches
+                  : use_pushdown ? impl_->pushdown_batches
+                                 : impl_->pull_batches;
   counter.fetch_add(1, std::memory_order_relaxed);
   return PreparedDistanceOperation{tagged.value(), prepared.value().owner_lane};
 }
@@ -238,8 +235,8 @@ Result<bool> HybridDistanceOracle::ComputeLocalTrusted(
   if (owner_shard != impl_->local_shard) {
     return false;
   }
-  auto computed = impl_->pull->ComputeLocalTrusted(
-      query_vector, owner_shard, local_offsets, output);
+  auto computed = impl_->pull->ComputeLocalTrusted(query_vector, owner_shard,
+                                                   local_offsets, output);
   if (computed.ok() && computed.value()) {
     impl_->local_batches.fetch_add(1, std::memory_order_relaxed);
   }
@@ -247,13 +244,13 @@ Result<bool> HybridDistanceOracle::ComputeLocalTrusted(
 }
 
 Result<bool> HybridDistanceOracle::ComputeLocalTrustedLease(
-    const QueryVectorLease& lease, shard_id_t owner_shard,
+    const QueryVectorLease &lease, shard_id_t owner_shard,
     std::span<const std::uint64_t> local_offsets, std::span<float> output) {
   if (owner_shard != impl_->local_shard) {
     return false;
   }
-  auto computed = impl_->pull->ComputeLocalTrustedLease(
-      lease, owner_shard, local_offsets, output);
+  auto computed = impl_->pull->ComputeLocalTrustedLease(lease, owner_shard,
+                                                        local_offsets, output);
   if (computed.ok() && computed.value()) {
     impl_->local_batches.fetch_add(1, std::memory_order_relaxed);
   }
@@ -266,4 +263,4 @@ HybridDistanceProfile HybridDistanceOracle::profile() const {
           impl_->pushdown_batches.load(std::memory_order_relaxed)};
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

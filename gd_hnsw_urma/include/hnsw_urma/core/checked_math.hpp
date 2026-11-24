@@ -30,7 +30,8 @@ template <UnsignedInteger T>
 template <UnsignedInteger T>
 [[nodiscard]] constexpr Result<T> CheckedAlignUp(T value, T alignment) {
   if (alignment == 0 || (alignment & static_cast<T>(alignment - 1)) != 0) {
-    return Status(StatusCode::kInvalidArgument, "alignment must be a non-zero power of two");
+    return Status(StatusCode::kInvalidArgument,
+                  "alignment must be a non-zero power of two");
   }
   const T mask = static_cast<T>(alignment - 1);
   auto added = CheckedAdd(value, mask);
@@ -46,4 +47,4 @@ template <UnsignedInteger T>
          (value & static_cast<T>(alignment - 1)) == 0;
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

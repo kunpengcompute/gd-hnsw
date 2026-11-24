@@ -14,34 +14,36 @@ struct ShardRange {
   node_id_t global_begin{0};
   std::uint64_t local_count{0};
 
-  friend bool operator==(const ShardRange&, const ShardRange&) = default;
+  friend bool operator==(const ShardRange &, const ShardRange &) = default;
 };
 
 struct NodeLocation {
   shard_id_t shard_id{0};
   std::uint64_t local_id{0};
 
-  friend bool operator==(const NodeLocation&, const NodeLocation&) = default;
+  friend bool operator==(const NodeLocation &, const NodeLocation &) = default;
 };
 
 class ShardMap {
- public:
-  [[nodiscard]] static Result<ShardMap> Create(std::span<const ShardRange> ranges,
-                                               std::uint64_t ntotal);
+public:
+  [[nodiscard]] static Result<ShardMap>
+  Create(std::span<const ShardRange> ranges, std::uint64_t ntotal);
 
   [[nodiscard]] Result<NodeLocation> Locate(node_id_t global_id) const noexcept;
   [[nodiscard]] Result<ShardRange> Range(shard_id_t shard_id) const noexcept;
-  [[nodiscard]] std::span<const ShardRange> ranges() const noexcept { return ranges_; }
+  [[nodiscard]] std::span<const ShardRange> ranges() const noexcept {
+    return ranges_;
+  }
   [[nodiscard]] std::uint64_t ntotal() const noexcept { return ntotal_; }
   [[nodiscard]] bool uniform() const noexcept { return uniform_count_ != 0; }
   [[nodiscard]] std::uint64_t uniform_count() const noexcept {
     return uniform_count_;
   }
 
- private:
+private:
   std::vector<ShardRange> ranges_;
   std::uint64_t ntotal_{0};
   std::uint64_t uniform_count_{0};
 };
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

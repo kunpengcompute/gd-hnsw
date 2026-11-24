@@ -17,22 +17,23 @@ Result<QuerySlotPool> QuerySlotPool::Create(std::uint32_t source_rank,
     QuerySlotPool pool;
     pool.source_rank_ = source_rank;
     pool.slots_.resize(capacity);
-    for (auto& slot : pool.slots_) {
+    for (auto &slot : pool.slots_) {
       slot.generation = generation_base;
     }
     return pool;
-  } catch (const std::bad_alloc&) {
-    return Status(StatusCode::kResourceExhausted, "unable to allocate query slot pool");
+  } catch (const std::bad_alloc &) {
+    return Status(StatusCode::kResourceExhausted,
+                  "unable to allocate query slot pool");
   }
 }
 
-QuerySlotPool::QuerySlotPool(QuerySlotPool&& other) noexcept {
+QuerySlotPool::QuerySlotPool(QuerySlotPool &&other) noexcept {
   source_rank_ = other.source_rank_;
   slots_ = std::move(other.slots_);
   cursor_ = other.cursor_;
 }
 
-QuerySlotPool& QuerySlotPool::operator=(QuerySlotPool&& other) noexcept {
+QuerySlotPool &QuerySlotPool::operator=(QuerySlotPool &&other) noexcept {
   if (this != &other) {
     source_rank_ = other.source_rank_;
     slots_ = std::move(other.slots_);
@@ -45,12 +46,13 @@ Result<QueryKey> QuerySlotPool::Acquire() {
   for (std::uint32_t offset = 0; offset < slots_.size(); ++offset) {
     const auto index = static_cast<std::uint32_t>(
         (static_cast<std::uint64_t>(cursor_) + offset) % slots_.size());
-    auto& slot = slots_[index];
+    auto &slot = slots_[index];
     if (slot.active) {
       continue;
     }
     if (slot.generation == std::numeric_limits<std::uint64_t>::max()) {
-      return Status(StatusCode::kResourceExhausted, "query slot generation exhausted");
+      return Status(StatusCode::kResourceExhausted,
+                    "query slot generation exhausted");
     }
     ++slot.generation;
     slot.active = true;
@@ -62,14 +64,16 @@ Result<QueryKey> QuerySlotPool::Acquire() {
 
 Status QuerySlotPool::Release(QueryKey key) {
   if (key.source_rank != source_rank_ || key.query_slot >= slots_.size()) {
-    return Status(StatusCode::kProtocolError, "query slot release key is outside this pool");
+    return Status(StatusCode::kProtocolError,
+                  "query slot release key is outside this pool");
   }
-  auto& slot = slots_[key.query_slot];
+  auto &slot = slots_[key.query_slot];
   if (!slot.active || slot.generation != key.generation) {
-    return Status(StatusCode::kProtocolError, "stale or duplicate query slot release");
+    return Status(StatusCode::kProtocolError,
+                  "stale or duplicate query slot release");
   }
   slot.active = false;
   return Status::Ok();
 }
 
-}  // namespace hnsw_urma
+} // namespace hnsw_urma

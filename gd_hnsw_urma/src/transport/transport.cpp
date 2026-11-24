@@ -3,9 +3,10 @@
 namespace hnsw_urma {
 void TransportModuleAnchor() {}
 
-LanePostBatchResult LanePostEngine::PostReads(std::span<const ReadOperation> operations) {
+LanePostBatchResult
+LanePostEngine::PostReads(std::span<const ReadOperation> operations) {
   LanePostBatchResult result;
-  for (const auto& operation : operations) {
+  for (const auto &operation : operations) {
     ++result.post_calls;
     result.status = PostRead(operation);
     if (!result.status.ok()) {
@@ -19,7 +20,7 @@ LanePostBatchResult LanePostEngine::PostReads(std::span<const ReadOperation> ope
 LanePostBatchResult LanePostEngine::PostWriteNotifies(
     std::span<const WriteNotifyOperation> operations) {
   LanePostBatchResult result;
-  for (const auto& operation : operations) {
+  for (const auto &operation : operations) {
     result.status = PostWriteNotify(operation);
     if (!result.status.ok()) {
       return result;
@@ -28,4 +29,4 @@ LanePostBatchResult LanePostEngine::PostWriteNotifies(
   }
   return result;
 }
-}  // namespace hnsw_urma
+} // namespace hnsw_urma
