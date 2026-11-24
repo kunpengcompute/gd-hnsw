@@ -6,7 +6,6 @@
 #include <string_view>
 
 #include "hnsw_urma/core/checked_math.hpp"
-#include "hnsw_urma/core/log.hpp"
 
 namespace hnsw_urma {
 namespace {
@@ -369,8 +368,6 @@ LocalShard::Neighbors(node_id_t id) const noexcept {
 std::span<const node_id_t>
 LocalShard::TrustedNeighbors(std::uint64_t local_offset) const noexcept {
   if (local_offset >= range_.local_count) {
-    LOG_ERROR("LocalShard::TrustedNeighbors offset {} out of range {}",
-              local_offset, range_.local_count);
     return {};
   }
   const auto begin = static_cast<std::size_t>(local_offset * meta_.M0);
@@ -380,8 +377,6 @@ LocalShard::TrustedNeighbors(std::uint64_t local_offset) const noexcept {
 std::span<const node_id_t> LocalShard::layer0_slots() const noexcept {
   const auto memory = graph_storage_.logical_memory();
   if (memory.size() % sizeof(node_id_t) != 0) {
-    LOG_ERROR("LocalShard::layer0_slots graph storage {} not a multiple of {}",
-              memory.size(), sizeof(node_id_t));
     return {};
   }
   return {reinterpret_cast<const node_id_t *>(memory.data()),
@@ -402,8 +397,6 @@ Result<std::span<const float>> LocalShard::Vector(node_id_t id) const noexcept {
 std::span<const float>
 LocalShard::TrustedVector(std::uint64_t local_offset) const noexcept {
   if (local_offset >= range_.local_count) {
-    LOG_ERROR("LocalShard::TrustedVector offset {} out of range {}",
-              local_offset, range_.local_count);
     return {};
   }
   const auto begin = static_cast<std::size_t>(local_offset * meta_.dim);
@@ -413,8 +406,6 @@ LocalShard::TrustedVector(std::uint64_t local_offset) const noexcept {
 std::span<const float> LocalShard::vectors() const noexcept {
   const auto memory = vector_storage_.logical_memory();
   if (memory.size() % sizeof(float) != 0) {
-    LOG_ERROR("LocalShard::vectors vector storage {} not a multiple of {}",
-              memory.size(), sizeof(float));
     return {};
   }
   return {reinterpret_cast<const float *>(memory.data()),
@@ -423,8 +414,6 @@ std::span<const float> LocalShard::vectors() const noexcept {
 
 float LocalShard::TrustedVectorNorm(std::uint64_t local_offset) const noexcept {
   if (local_offset >= range_.local_count) {
-    LOG_ERROR("LocalShard::TrustedVectorNorm offset {} out of range {}",
-              local_offset, range_.local_count);
     return 0.0F;
   }
   return vector_norms_[local_offset];
