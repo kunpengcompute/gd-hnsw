@@ -86,9 +86,12 @@ bool DeadlineLater(const QueryDeadlineEntry &lhs,
 void UpdateMaximum(std::atomic<std::uint64_t> &target,
                    std::uint64_t value) noexcept {
   auto observed = target.load(std::memory_order_relaxed);
-  while (observed < value && !target.compare_exchange_weak(
-                                 observed, value, std::memory_order_relaxed,
-                                 std::memory_order_relaxed)) {
+  while (observed < value) {
+    if (target.compare_exchange_weak(observed, value, std::memory_order_relaxed,
+                                     std::memory_order_relaxed)) {
+      break;
+    }
+    // observed is refreshed by the failed compare_exchange_weak above.
   }
 }
 

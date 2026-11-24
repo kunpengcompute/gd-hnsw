@@ -64,7 +64,7 @@ DataPlaneDrainTracker::ReadLane(std::uint32_t lane) const noexcept {
   const auto &source = lanes_[lane];
   std::array<std::uint64_t, kSnapshotFields> values{};
   std::uint32_t retries = 0;
-  while (true) {
+  for (bool consistent = false; !consistent;) {
     const auto before = source.sequence.load(std::memory_order_seq_cst);
     if ((before & 1U) != 0) {
       if ((++retries & 63U) == 0) {
@@ -77,9 +77,8 @@ DataPlaneDrainTracker::ReadLane(std::uint32_t lane) const noexcept {
     }
     const auto after = source.sequence.load(std::memory_order_seq_cst);
     if (before == after) {
-      break;
-    }
-    if ((++retries & 63U) == 0) {
+      consistent = true;
+    } else if ((++retries & 63U) == 0) {
       std::this_thread::yield();
     }
   }
@@ -161,7 +160,7 @@ Status DataPlaneDrainTracker::WaitUntilDrained(
     return Status(StatusCode::kInvalidArgument,
                   "data-plane drain health check is unavailable");
   }
-  while (true) {
+  for (bool drained = false; !drained;) {
     auto status = TryMarkDrained();
     if (status.ok() || status.code() != StatusCode::kResourceExhausted) {
       return status;
@@ -176,6 +175,8 @@ Status DataPlaneDrainTracker::WaitUntilDrained(
     }
     std::this_thread::yield();
   }
+  // Unreachable: the loop above only exits via one of its return statements.
+  return Status(StatusCode::kInternalError, "drain loop exited unexpectedly");
 }
 
 Status DataPlaneDrainTracker::MarkGlobalDrainConsensus() noexcept {

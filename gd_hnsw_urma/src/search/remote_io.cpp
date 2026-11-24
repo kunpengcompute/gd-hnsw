@@ -2,12 +2,12 @@
 
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <limits>
 #include <new>
 #include <utility>
 
 #include "hnsw_urma/core/checked_math.hpp"
+#include "hnsw_urma/core/log.hpp"
 
 namespace hnsw_urma {
 namespace {
@@ -608,10 +608,13 @@ Status UrmaGraphReader::FinishConsume(GraphTicket ticket,
       if (source.lane != kNoLane) {
         const auto &view =
             operation.lane_batches[source.lane].results[source.result_index];
-#ifndef NDEBUG
-        assert(view.bytes ==
-               static_cast<std::size_t>(meta_->M0) * sizeof(node_id_t));
-#endif
+        if (view.bytes !=
+            static_cast<std::size_t>(meta_->M0) * sizeof(node_id_t)) {
+          LOG_ERROR("UrmaGraphReader::FinishConsume view bytes {} != M0*{}",
+                    view.bytes, sizeof(node_id_t));
+          return Status(StatusCode::kInternalError,
+                        "prepared graph READ batch view size is invalid");
+        }
         neighbors = std::span<const node_id_t>(
             reinterpret_cast<const node_id_t *>(view.data), meta_->M0);
         const auto invalid =
@@ -1038,9 +1041,12 @@ Status PullVectorDistanceOracle::Finish(DistanceTicket ticket) {
       std::array<const float *, 4> rows{};
       for (std::size_t row = 0; row < rows.size(); ++row) {
         const auto &view = operation.results[index + row];
-#ifndef NDEBUG
-        assert(view.bytes == meta_->dim * sizeof(float));
-#endif
+        if (view.bytes != meta_->dim * sizeof(float)) {
+          LOG_ERROR("PullVectorDistanceOracle::Finish view bytes {} != dim*{}",
+                    view.bytes, sizeof(float));
+          return Status(StatusCode::kInternalError,
+                        "prepared vector READ batch view size is invalid");
+        }
         rows[row] = reinterpret_cast<const float *>(view.data);
       }
       auto computed = ComputeDistanceBatch4(
@@ -1053,9 +1059,13 @@ Status PullVectorDistanceOracle::Finish(DistanceTicket ticket) {
     }
     for (; result.ok() && index < operation.results.size(); ++index) {
       const auto &view = operation.results[index];
-#ifndef NDEBUG
-      assert(view.bytes == meta_->dim * sizeof(float));
-#endif
+      if (view.bytes != meta_->dim * sizeof(float)) {
+        LOG_ERROR(
+            "PullVectorDistanceOracle::Finish tail view bytes {} != dim*{}",
+            view.bytes, sizeof(float));
+        return Status(StatusCode::kInternalError,
+                      "prepared vector READ batch view size is invalid");
+      }
       operation.output[index] = ComputeDistance(
           operation.query,
           std::span<const float>(reinterpret_cast<const float *>(view.data),

@@ -107,7 +107,7 @@ public:
     }
     auto position = dequeue_position_.load(std::memory_order_relaxed);
     Cell *cell = nullptr;
-    while (true) {
+    for (bool claimed = false; !claimed;) {
       cell = &cells_[position % capacity_];
       const auto sequence = cell->sequence.load(std::memory_order_acquire);
       const auto difference = static_cast<std::intptr_t>(sequence) -
@@ -116,7 +116,7 @@ public:
         if (dequeue_position_.compare_exchange_weak(
                 position, position + 1U, std::memory_order_relaxed,
                 std::memory_order_relaxed)) {
-          break;
+          claimed = true;
         }
       } else if (difference < 0) {
         return std::nullopt;
@@ -155,7 +155,7 @@ private:
   ClaimEnqueuePosition(std::uint64_t &position,
                        bool wait_for_reserved_capacity) noexcept {
     position = enqueue_position_.load(std::memory_order_relaxed);
-    while (true) {
+    for (bool settled = false; !settled;) {
       auto &cell = cells_[position % capacity_];
       const auto sequence = cell.sequence.load(std::memory_order_acquire);
       const auto difference = static_cast<std::intptr_t>(sequence) -
@@ -176,6 +176,8 @@ private:
         position = enqueue_position_.load(std::memory_order_relaxed);
       }
     }
+    // Unreachable: the loop above only exits via one of its return statements.
+    return false;
   }
 
   template <typename U>
@@ -197,9 +199,13 @@ private:
     }
     const auto depth = published_tail - head;
     auto observed = high_watermark_.load(std::memory_order_relaxed);
-    while (observed < depth && !high_watermark_.compare_exchange_weak(
-                                   observed, depth, std::memory_order_relaxed,
-                                   std::memory_order_relaxed)) {
+    while (observed < depth) {
+      if (high_watermark_.compare_exchange_weak(observed, depth,
+                                                std::memory_order_relaxed,
+                                                std::memory_order_relaxed)) {
+        break;
+      }
+      // observed is refreshed by the failed compare_exchange_weak above.
     }
   }
 

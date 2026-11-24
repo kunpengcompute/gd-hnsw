@@ -2,9 +2,10 @@
 
 #include <algorithm>
 #include <bit>
-#include <cassert>
 #include <new>
 #include <utility>
+
+#include "hnsw_urma/core/log.hpp"
 
 namespace hnsw_urma {
 namespace {
@@ -61,18 +62,45 @@ ReadBatchLane::Create(LanePostEngine &engine, std::uint32_t owner_lane,
 }
 
 Result<ReadBatchTicket> ReadBatchLane::PrepareBatch(ReadBatch &batch) noexcept {
-  assert(batch.state.load(std::memory_order_relaxed) == ReadBatchState::kFree);
-  assert(batch.owner_search < config_.search_workers);
-  assert(!batch.requests.empty() && batch.terminal_callback != nullptr);
-  assert(batch.ranges.capacity() >= batch.requests.size());
+  if (batch.state.load(std::memory_order_relaxed) != ReadBatchState::kFree) {
+    LOG_ERROR(
+        "ReadBatchLane::PrepareBatch batch not free state={}",
+        static_cast<unsigned>(batch.state.load(std::memory_order_relaxed)));
+    return Status(StatusCode::kInvalidArgument,
+                  "READ batch is not in the free state");
+  }
+  if (batch.owner_search >= config_.search_workers) {
+    LOG_ERROR("ReadBatchLane::PrepareBatch owner_search {} out of range {}",
+              batch.owner_search, config_.search_workers);
+    return Status(StatusCode::kInvalidArgument,
+                  "READ batch owner search is out of range");
+  }
+  if (batch.requests.empty() || batch.terminal_callback == nullptr) {
+    LOG_ERROR(
+        "ReadBatchLane::PrepareBatch empty requests or null terminal callback");
+    return Status(StatusCode::kInvalidArgument,
+                  "READ batch has no requests or terminal callback");
+  }
+  if (batch.ranges.capacity() < batch.requests.size()) {
+    LOG_ERROR("ReadBatchLane::PrepareBatch ranges capacity {} < requests {}",
+              batch.ranges.capacity(), batch.requests.size());
+    return Status(StatusCode::kInvalidArgument,
+                  "READ batch ranges capacity is too small");
+  }
   auto reserved = submit_queues_[batch.owner_search].Reserve(1);
   if (!reserved.ok())
     return reserved;
   batch.ranges.clear();
   for (std::size_t begin = 0; begin < batch.requests.size();) {
     const auto &request = batch.requests[begin];
-    assert(request.peer_rank < config_.peer_count &&
-           !request.destination.empty());
+    if (request.peer_rank >= config_.peer_count ||
+        request.destination.empty()) {
+      LOG_ERROR("ReadBatchLane::PrepareBatch invalid request peer_rank {} "
+                "peer_count {}",
+                request.peer_rank, config_.peer_count);
+      return Status(StatusCode::kInvalidArgument,
+                    "READ batch request peer or destination is invalid");
+    }
     std::size_t end = begin + 1;
     while (end < batch.requests.size() &&
            batch.requests[end].peer_rank == request.peer_rank &&
@@ -97,8 +125,14 @@ Result<ReadBatchTicket> ReadBatchLane::PrepareBatch(ReadBatch &batch) noexcept {
 }
 
 Status ReadBatchLane::CancelPreparedBatch(ReadBatch &batch) noexcept {
-  assert(batch.state.load(std::memory_order_relaxed) ==
-         ReadBatchState::kPrepared);
+  if (batch.state.load(std::memory_order_relaxed) !=
+      ReadBatchState::kPrepared) {
+    LOG_ERROR(
+        "ReadBatchLane::CancelPreparedBatch batch not prepared state={}",
+        static_cast<unsigned>(batch.state.load(std::memory_order_relaxed)));
+    return Status(StatusCode::kInvalidArgument,
+                  "READ batch is not in the prepared state");
+  }
   auto status = submit_queues_[batch.owner_search].CancelReservation(1);
   batch.state.store(ReadBatchState::kFree, std::memory_order_relaxed);
   return status;
@@ -116,9 +150,11 @@ void ReadBatchLane::PublishBatch(ReadBatch &batch) noexcept {
   batch.state.store(ReadBatchState::kQueued, std::memory_order_release);
   const auto published =
       submit_queues_[batch.owner_search].PushReserved(&batch);
-  assert(published.ok());
-  if (!published.ok())
-    std::terminate();
+  if (!published.ok()) {
+    LOG_ERROR("ReadBatchLane::PublishBatch PushReserved failed: {}",
+              published.message());
+    return;
+  }
   NotifyWork();
 }
 

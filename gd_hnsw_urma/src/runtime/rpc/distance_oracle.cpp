@@ -1,8 +1,8 @@
 #include "hnsw_urma/runtime/rpc/distance_oracle.hpp"
 #include "hnsw_urma/core/checked_math.hpp"
+#include "hnsw_urma/core/log.hpp"
 #include "hnsw_urma/runtime/scheduler.hpp"
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <cstdlib>
 #include <limits>
@@ -234,8 +234,12 @@ Result<RpcDistanceOracle::Operation *> RpcDistanceOracle::PrepareOperation(
   const auto claimed_index = pool.free_slots.back();
   pool.free_slots.pop_back();
   auto *claimed = &operations_[claimed_index];
-  assert(claimed->state.load(std::memory_order_relaxed) ==
-         OperationState::kFree);
+  if (claimed->state.load(std::memory_order_relaxed) != OperationState::kFree) {
+    LOG_ERROR("RpcDistanceOracle::PrepareOperation claimed slot {} not free",
+              claimed_index);
+    return Status(StatusCode::kInternalError,
+                  "RPC distance operation slot was not free");
+  }
   const auto in_use = pool.slots_in_use.load(std::memory_order_relaxed) + 1U;
   pool.slots_in_use.store(in_use, std::memory_order_relaxed);
   pool.slots_high_watermark.store(
@@ -319,8 +323,14 @@ Result<PreparedDistanceOperation> RpcDistanceOracle::PrepareLeaseForWait(
     return Status(StatusCode::kInvalidArgument,
                   "prepared distance wait metadata is invalid");
   }
-  assert(preparation.controller->owner_search() ==
-         CurrentDistanceSearchWorker());
+  if (preparation.controller->owner_search() != CurrentDistanceSearchWorker()) {
+    LOG_ERROR("RpcDistanceOracle::PrepareLeaseForWait owner_search mismatch "
+              "controller={} worker={}",
+              preparation.controller->owner_search(),
+              CurrentDistanceSearchWorker());
+    return Status(StatusCode::kInvalidArgument,
+                  "prepared distance wait owner search mismatch");
+  }
   auto operation =
       PrepareOperation(lease, preparation.wait_epoch, owner_shard, ids, output,
                        preparation.operation_deadline, options);
@@ -526,7 +536,12 @@ Result<bool> RpcDistanceOracle::OnRpcTaskOwned(std::uint32_t owner,
 void RpcDistanceOracle::RemoveOwnerActive(Operation &operation) noexcept {
   auto &owner = owner_states_[operation.rpc_owner];
   const auto position = operation.audit_position;
-  assert(position < owner.active.size());
+  if (position >= owner.active.size()) {
+    LOG_ERROR(
+        "RpcDistanceOracle::RemoveOwnerActive audit position {} >= active {}",
+        position, owner.active.size());
+    return;
+  }
   const auto last = owner.active.back();
   owner.active[position] = last;
   operations_[last.slot].audit_position = position;
@@ -616,7 +631,13 @@ Result<std::uint32_t> RpcDistanceOracle::AuditOwnerControl(
     owner.cursor %= owner.active.size();
     const auto event = owner.active[owner.cursor];
     auto &operation = operations_[event.slot];
-    assert(operation.ticket.generation == event.ticket);
+    if (operation.ticket.generation != event.ticket) {
+      LOG_ERROR("RpcDistanceOracle::AuditOwnerControl generation mismatch "
+                "operation={} event={}",
+                operation.ticket.generation, event.ticket);
+      return Status(StatusCode::kInternalError,
+                    "RPC distance audit generation mismatch");
+    }
     AddSingleWriterCounter(owner.active_audit_operations, 1);
     const auto status = ControlStatus(operation, now);
     if (status == StatusCode::kOk) {

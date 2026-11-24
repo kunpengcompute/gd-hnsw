@@ -15,6 +15,11 @@ constexpr std::uint32_t kHashC = 0x94d049bbU;
 
 std::uint32_t Candidate(QueryKey query, std::uint32_t salt,
                         std::uint32_t count) noexcept {
+  // Defensive guard against division by zero. Callers (SelectLanePowerOfTwo)
+  // already reject lane_count == 0, but keep the divisor non-zero locally so
+  // the modulo cannot trap regardless of future callers (G.EXP.22-CPP).
+  if (count == 0)
+    return 0;
   return static_cast<std::uint32_t>(StableHash(query, salt) % count);
 }
 

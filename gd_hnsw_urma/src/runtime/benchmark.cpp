@@ -1,6 +1,7 @@
 #include "hnsw_urma/runtime/benchmark.hpp"
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstring>
@@ -19,142 +20,263 @@ constexpr std::uint64_t kPayloadMagic = 0x344D42414D525548ULL;
 constexpr std::uint64_t kPayloadVersion = 9;
 constexpr std::size_t kTimingHistogramBuckets = 64;
 
-#define SEARCH_PROFILE_FIELDS(X)                                                \
-  X(nodes_expanded)                                                             \
-  X(edges_scanned)                                                              \
-  X(visited_hits) X(heap_pushes) X(heap_rejections) X(                          \
-      heap_prefilter_rejections) X(heap_suffix_rejections) X(heap_full_pushes)  \
-      X(upper_steps) X(upper_same_level_moves) X(upper_level_drops) X(          \
-          upper_empty_neighbor_level_drops) X(upper_level_drop_runs)            \
-          X(upper_max_consecutive_level_drops) X(                               \
-              upper_level_drop_runs_length_1) X(upper_level_drop_runs_length_2) \
-              X(upper_level_drop_runs_length_3) X(                              \
-                  upper_level_drop_runs_length_4_plus)                          \
-                  X(upper_distance_candidate_values) X(                         \
-                      upper_distance_visited_hits)                              \
-                      X(upper_distance_unique_values) X(                        \
-                          upper_distance_fully_visited_steps)                   \
-                          X(upper_remote_candidate_values) X(                   \
-                              upper_remote_visited_hits)                        \
-                              X(upper_remote_operations) X(                     \
-                                  upper_eliminated_remote_operations)           \
-                                  X(local_distance_count) X(suspend_count) X(   \
-                                      resume_count)                             \
-                                      X(routing_group_owner_writes) X(          \
-                                          routing_local_offset_writes)          \
-                                          X(routing_layer0_sorted_values) X(    \
-                                              routing_layer0_unsorted_values)
+// Field catalogs expressed as constexpr arrays of member pointers, replacing
+// the prior function-like X-macros (G.PRE.02-CPP / G.PRE.05). Each entry is a
+// pointer-to-data-member; iterating a catalog with a plain for-loop keeps
+// control flow visible to static analyzers and lets early returns behave as
+// ordinary function returns rather than macro-embedded jumps.
 
-#define RECORD_TIMING_FIELDS(X)                                                \
-  X(queue_wait_nanoseconds)                                                    \
-  X(execution_nanoseconds)                                                     \
-  X(upper_elapsed_nanoseconds) X(layer0_elapsed_nanoseconds)                   \
-      X(local_execution_nanoseconds) X(graph_wait_nanoseconds)                 \
-          X(distance_wait_nanoseconds) X(ready_queue_nanoseconds)              \
-              X(upper_search_nanoseconds) X(graph_plan_nanoseconds)            \
-                  X(graph_publish_nanoseconds) X(graph_consume_nanoseconds)    \
-                      X(neighbor_scan_visited_nanoseconds)                     \
-                          X(route_group_sort_nanoseconds)                      \
-                              X(local_distance_nanoseconds)                    \
-                                  X(remote_prepare_publish_nanoseconds)        \
-                                      X(remote_finish_nanoseconds)             \
-                                          X(commit_heap_nanoseconds)           \
-                                              X(controller_other_nanoseconds)
+// SearchProfile counter fields (record.search.*).
+inline constexpr auto kSearchProfileFields = std::array{
+    &SearchProfile::nodes_expanded,
+    &SearchProfile::edges_scanned,
+    &SearchProfile::visited_hits,
+    &SearchProfile::heap_pushes,
+    &SearchProfile::heap_rejections,
+    &SearchProfile::heap_prefilter_rejections,
+    &SearchProfile::heap_suffix_rejections,
+    &SearchProfile::heap_full_pushes,
+    &SearchProfile::upper_steps,
+    &SearchProfile::upper_same_level_moves,
+    &SearchProfile::upper_level_drops,
+    &SearchProfile::upper_empty_neighbor_level_drops,
+    &SearchProfile::upper_level_drop_runs,
+    &SearchProfile::upper_max_consecutive_level_drops,
+    &SearchProfile::upper_level_drop_runs_length_1,
+    &SearchProfile::upper_level_drop_runs_length_2,
+    &SearchProfile::upper_level_drop_runs_length_3,
+    &SearchProfile::upper_level_drop_runs_length_4_plus,
+    &SearchProfile::upper_distance_candidate_values,
+    &SearchProfile::upper_distance_visited_hits,
+    &SearchProfile::upper_distance_unique_values,
+    &SearchProfile::upper_distance_fully_visited_steps,
+    &SearchProfile::upper_remote_candidate_values,
+    &SearchProfile::upper_remote_visited_hits,
+    &SearchProfile::upper_remote_operations,
+    &SearchProfile::upper_eliminated_remote_operations,
+    &SearchProfile::local_distance_count,
+    &SearchProfile::suspend_count,
+    &SearchProfile::resume_count,
+    &SearchProfile::routing_group_owner_writes,
+    &SearchProfile::routing_local_offset_writes,
+    &SearchProfile::routing_layer0_sorted_values,
+    &SearchProfile::routing_layer0_unsorted_values,
+};
 
-#define PROFILE_SCALAR_FIELDS(X)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
-  X(rpc_reclaim_events_published)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   \
-  X(rpc_reclaim_events_consumed)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
-  X(rpc_exceptional_slots_in_use) X(rpc_exceptional_slots_high_watermark) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        \
-      read_batches_submitted) X(read_batches_failed) X(read_batches_timed_out) X(read_batches_cancelled) X(read_requests_posted) X(read_requests_completed) X(read_bytes_completed) X(read_wr_completion_samples) X(read_wr_completion_nanoseconds) X(read_cqe_failure_count) X(pushdown_requests) X(pushdown_responses) X(request_bytes) X(response_bytes) X(admission_high_watermark) X(lane_affinity_hits) X(lane_affinity_inserts) X(lane_affinity_replacements) X(lane_candidate_capacity_rejections)                                                                                          \
-      X(read_exceptional_batches_high_watermark) X(read_late_completion_count) X(rpc_quarantine_high_watermark) X(rpc_detached_records) X(rpc_late_completion_count) X(rpc_late_response_count) X(read_thread_count) X(rpc_thread_count) X(request_jfs_per_rpc_lane) X(response_jfs_per_rpc_lane) X(read_result_slots_high_watermark) X(                                                                                                                                                                                                                                                            \
-          read_in_flight_high_watermark) X(read_native_descriptors_high_watermark) X(read_post_calls) X(read_post_list_wrs)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         \
-          X(read_post_list_high_watermark) X(read_submit_wait_nanoseconds) X(read_reclaim_wait_nanoseconds) X(read_result_allocation_retries) X(read_result_registered_bytes) X(                                                                                                                                                                                                                                                                                                                                                                                                                    \
-              rpc_submit_queue_high_watermark) X(rpc_operation_slots_in_use) X(rpc_operation_slots_high_watermark)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  \
-              X(rpc_active_audit_passes) X(rpc_active_audit_operations) X(rpc_pool_backpressure) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 \
-                  rpc_submit_backpressure) X(rpc_exceptional_reclaimed) X(rpc_ticket_block_refills)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 \
-                  X(logical_distance_tasks) X(completed_distance_tasks) X(request_batches) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       \
-                      request_batch_tasks) X(request_batch_bytes) X(response_batches) X(response_batch_tasks) X(response_batch_bytes)                                                                                                                                                                                                                                                                                                                                                                                                                                                               \
-                      X(request_physical_writes) X(response_physical_writes) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
-                          request_completions) X(response_completions) X(request_write_completion_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      \
-                          X(response_write_completion_nanoseconds) X(rpc_client_owner_queue_nanoseconds) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         \
-                              rpc_client_owner_queue_samples) X(rpc_client_owner_pending_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               \
-                              X(rpc_client_request_prepare_nanoseconds) X(rpc_client_request_post_wait_nanoseconds) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                              \
-                                  rpc_client_round_trip_nanoseconds) X(rpc_client_round_trip_samples)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               \
-                                  X(rpc_client_response_notify_to_receive_nanoseconds) X(rpc_client_response_notify_to_receive_samples) X(rpc_client_response_notify_to_receive_task_nanoseconds) X(rpc_client_response_notify_to_receive_task_samples) X(cluster_bidirectional_post_to_notify_observed_nanoseconds) X(cluster_bidirectional_post_to_notify_observed_samples) X(rpc_client_response_received_to_task_terminal_nanoseconds) X(rpc_client_response_received_to_task_terminal_samples) X(rpc_exceptional_retained_nanoseconds) X(rpc_client_response_to_stage_terminal_nanoseconds) X( \
-                                      rpc_client_response_to_stage_terminal_samples) X(rpc_client_response_decode_nanoseconds) X(rpc_client_response_decode_samples) X(request_slot_scans)                                                                                                                                                                                                                                                                                                                                                                                                          \
-                                      X(request_slot_hits) X(request_slot_blocked_by_result_inflight) X(server_request_batches) X(server_request_tasks) X(                                                                                                                                                                                                                                                                                                                                                                                                                                          \
-                                          server_distance_values) X(request_poll_hit_to_claim_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          \
-                                          X(request_poll_hit_to_claim_samples) X(request_decode_nanoseconds) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
-                                              query_slot_store_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         \
-                                              X(query_slot_load_nanoseconds) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
-                                                  distance_compute_nanoseconds) X(filter_and_response_encode_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                           \
-                                                  X(result_ready_publications) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   \
-                                                      distance_busy_iterations) X(distance_idle_iterations)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         \
-                                                      X(result_slot_scans) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       \
-                                                          result_slot_hits) X(request_notify_observed_to_response_post_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                 \
-                                                          X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        \
-                                                              request_notify_observed_to_response_post_samples) X(result_ready_to_post_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                 \
-                                                              X(result_ready_to_post_samples) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
-                                                                  result_post_retries) X(result_post_to_completion_nanoseconds)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
-                                                                  X(result_post_to_completion_samples) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           \
-                                                                      response_scan_slots) X(response_scan_hits)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
-                                                                      X(request_slots_in_use) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \
-                                                                          request_slots_high_watermark)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             \
-                                                                          X(request_post_free_slot_waits) X(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        \
-                                                                              request_post_staging_unavailable)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
-                                                                              X(request_post_tx_unavailable)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        \
-                                                                                  X(request_post_provider_backpressure_batches)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
-                                                                                      X(ready_events_published)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
-                                                                                          X(ready_events_consumed)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  \
-                                                                                              X(ready_queue_high_watermark)
+// QueryBenchmarkRecord timing fields (record.*).
+inline constexpr auto kRecordTimingFields = std::array{
+    &QueryBenchmarkRecord::queue_wait_nanoseconds,
+    &QueryBenchmarkRecord::execution_nanoseconds,
+    &QueryBenchmarkRecord::upper_elapsed_nanoseconds,
+    &QueryBenchmarkRecord::layer0_elapsed_nanoseconds,
+    &QueryBenchmarkRecord::local_execution_nanoseconds,
+    &QueryBenchmarkRecord::graph_wait_nanoseconds,
+    &QueryBenchmarkRecord::distance_wait_nanoseconds,
+    &QueryBenchmarkRecord::ready_queue_nanoseconds,
+    &QueryBenchmarkRecord::upper_search_nanoseconds,
+    &QueryBenchmarkRecord::graph_plan_nanoseconds,
+    &QueryBenchmarkRecord::graph_publish_nanoseconds,
+    &QueryBenchmarkRecord::graph_consume_nanoseconds,
+    &QueryBenchmarkRecord::neighbor_scan_visited_nanoseconds,
+    &QueryBenchmarkRecord::route_group_sort_nanoseconds,
+    &QueryBenchmarkRecord::local_distance_nanoseconds,
+    &QueryBenchmarkRecord::remote_prepare_publish_nanoseconds,
+    &QueryBenchmarkRecord::remote_finish_nanoseconds,
+    &QueryBenchmarkRecord::commit_heap_nanoseconds,
+    &QueryBenchmarkRecord::controller_other_nanoseconds,
+};
 
-#define PROFILE_VECTOR_FIELDS(X)                                                                  \
-  X(rpc_slots_in_use_per_search)                                                                  \
-  X(rpc_slots_high_watermark_per_search)                                                          \
-  X(rpc_pool_backpressure_per_search)                                                             \
-  X(rpc_submit_backpressure_per_search)                                                           \
-  X(rpc_audit_operations_per_owner)                                                               \
-  X(ready_published_per_worker)                                                                   \
-  X(ready_consumed_per_worker)                                                                    \
-  X(ready_producer_worker_counts)                                                                 \
-  X(ready_converged_to_publish_ns_per_worker)                                                     \
-  X(ready_publish_to_pop_ns_per_worker)                                                           \
-  X(ready_pop_to_step_ns_per_worker)                                                              \
-  X(ready_run_ns_per_worker)                                                                      \
-  X(search_event_depth)                                                                           \
-  X(search_event_high_watermark)                                                                  \
-  X(read_owned_ranks_per_thread) X(rpc_owned_ranks_per_thread) X(                                 \
-      search_busy_nanoseconds_per_thread) X(search_idle_nanoseconds_per_thread)                   \
-      X(search_iterations_per_thread) X(search_new_queries_per_thread) X(                         \
-          search_ready_resumes_per_thread) X(search_retry_runs_per_thread)                        \
-          X(distance_busy_nanoseconds_per_thread) X(distance_idle_nanoseconds_per_thread) X(      \
-              distance_iterations_per_thread) X(read_busy_nanoseconds_per_thread)                 \
-              X(read_idle_nanoseconds_per_thread) X(read_progress_iterations_per_thread) X(       \
-                  rpc_busy_nanoseconds_per_thread) X(rpc_idle_nanoseconds_per_thread)             \
-                  X(rpc_progress_iterations_per_thread) X(                                        \
-                      rpc_poll_completions_nanoseconds_per_thread)                                \
-                      X(rpc_scan_responses_nanoseconds_per_thread) X(                             \
-                          rpc_post_responses_nanoseconds_per_thread)                              \
-                          X(rpc_drain_client_submissions_nanoseconds_per_thread) X(               \
-                              rpc_post_requests_nanoseconds_per_thread)                           \
-                              X(distance_request_slot_scans_per_thread) X(                        \
-                                  distance_request_slot_hits_per_thread)                          \
-                                  X(distance_request_batches_per_thread) X(                       \
-                                      distance_request_tasks_per_thread)                          \
-                                      X(distance_values_per_thread) X(                            \
-                                          wait_event_counts) X(wait_nanoseconds)                  \
-                                          X(wait_publish_nanoseconds) X(                          \
-                                              wait_first_completion_nanoseconds)                  \
-                                              X(wait_completion_spread_nanoseconds) X(            \
-                                                  wait_remote_operations)                         \
-                                                  X(wait_distance_values) X(                      \
-                                                      wait_remote_operations_high_watermark)      \
-                                                      X(wait_distance_values_high_watermark) X(   \
-                                                          wait_critical_lane_counts)              \
-                                                          X(wait_histograms) X(                   \
-                                                              wait_publish_histograms)            \
-                                                              X(wait_first_completion_histograms) \
-                                                                  X(wait_completion_spread_histograms)
+// RuntimeProfileSnapshot scalar (uint64) fields (profile.*).
+inline constexpr auto kProfileScalarFields = std::array{
+    &RuntimeProfileSnapshot::rpc_reclaim_events_published,
+    &RuntimeProfileSnapshot::rpc_reclaim_events_consumed,
+    &RuntimeProfileSnapshot::rpc_exceptional_slots_in_use,
+    &RuntimeProfileSnapshot::rpc_exceptional_slots_high_watermark,
+    &RuntimeProfileSnapshot::read_batches_submitted,
+    &RuntimeProfileSnapshot::read_batches_failed,
+    &RuntimeProfileSnapshot::read_batches_timed_out,
+    &RuntimeProfileSnapshot::read_batches_cancelled,
+    &RuntimeProfileSnapshot::read_requests_posted,
+    &RuntimeProfileSnapshot::read_requests_completed,
+    &RuntimeProfileSnapshot::read_bytes_completed,
+    &RuntimeProfileSnapshot::read_wr_completion_samples,
+    &RuntimeProfileSnapshot::read_wr_completion_nanoseconds,
+    &RuntimeProfileSnapshot::read_cqe_failure_count,
+    &RuntimeProfileSnapshot::pushdown_requests,
+    &RuntimeProfileSnapshot::pushdown_responses,
+    &RuntimeProfileSnapshot::request_bytes,
+    &RuntimeProfileSnapshot::response_bytes,
+    &RuntimeProfileSnapshot::admission_high_watermark,
+    &RuntimeProfileSnapshot::lane_affinity_hits,
+    &RuntimeProfileSnapshot::lane_affinity_inserts,
+    &RuntimeProfileSnapshot::lane_affinity_replacements,
+    &RuntimeProfileSnapshot::lane_candidate_capacity_rejections,
+    &RuntimeProfileSnapshot::read_exceptional_batches_high_watermark,
+    &RuntimeProfileSnapshot::read_late_completion_count,
+    &RuntimeProfileSnapshot::rpc_quarantine_high_watermark,
+    &RuntimeProfileSnapshot::rpc_detached_records,
+    &RuntimeProfileSnapshot::rpc_late_completion_count,
+    &RuntimeProfileSnapshot::rpc_late_response_count,
+    &RuntimeProfileSnapshot::read_thread_count,
+    &RuntimeProfileSnapshot::rpc_thread_count,
+    &RuntimeProfileSnapshot::request_jfs_per_rpc_lane,
+    &RuntimeProfileSnapshot::response_jfs_per_rpc_lane,
+    &RuntimeProfileSnapshot::read_result_slots_high_watermark,
+    &RuntimeProfileSnapshot::read_in_flight_high_watermark,
+    &RuntimeProfileSnapshot::read_native_descriptors_high_watermark,
+    &RuntimeProfileSnapshot::read_post_calls,
+    &RuntimeProfileSnapshot::read_post_list_wrs,
+    &RuntimeProfileSnapshot::read_post_list_high_watermark,
+    &RuntimeProfileSnapshot::read_submit_wait_nanoseconds,
+    &RuntimeProfileSnapshot::read_reclaim_wait_nanoseconds,
+    &RuntimeProfileSnapshot::read_result_allocation_retries,
+    &RuntimeProfileSnapshot::read_result_registered_bytes,
+    &RuntimeProfileSnapshot::rpc_submit_queue_high_watermark,
+    &RuntimeProfileSnapshot::rpc_operation_slots_in_use,
+    &RuntimeProfileSnapshot::rpc_operation_slots_high_watermark,
+    &RuntimeProfileSnapshot::rpc_active_audit_passes,
+    &RuntimeProfileSnapshot::rpc_active_audit_operations,
+    &RuntimeProfileSnapshot::rpc_pool_backpressure,
+    &RuntimeProfileSnapshot::rpc_submit_backpressure,
+    &RuntimeProfileSnapshot::rpc_exceptional_reclaimed,
+    &RuntimeProfileSnapshot::rpc_ticket_block_refills,
+    &RuntimeProfileSnapshot::logical_distance_tasks,
+    &RuntimeProfileSnapshot::completed_distance_tasks,
+    &RuntimeProfileSnapshot::request_batches,
+    &RuntimeProfileSnapshot::request_batch_tasks,
+    &RuntimeProfileSnapshot::request_batch_bytes,
+    &RuntimeProfileSnapshot::response_batches,
+    &RuntimeProfileSnapshot::response_batch_tasks,
+    &RuntimeProfileSnapshot::response_batch_bytes,
+    &RuntimeProfileSnapshot::request_physical_writes,
+    &RuntimeProfileSnapshot::response_physical_writes,
+    &RuntimeProfileSnapshot::request_completions,
+    &RuntimeProfileSnapshot::response_completions,
+    &RuntimeProfileSnapshot::request_write_completion_nanoseconds,
+    &RuntimeProfileSnapshot::response_write_completion_nanoseconds,
+    &RuntimeProfileSnapshot::rpc_client_owner_queue_nanoseconds,
+    &RuntimeProfileSnapshot::rpc_client_owner_queue_samples,
+    &RuntimeProfileSnapshot::rpc_client_owner_pending_nanoseconds,
+    &RuntimeProfileSnapshot::rpc_client_request_prepare_nanoseconds,
+    &RuntimeProfileSnapshot::rpc_client_request_post_wait_nanoseconds,
+    &RuntimeProfileSnapshot::rpc_client_round_trip_nanoseconds,
+    &RuntimeProfileSnapshot::rpc_client_round_trip_samples,
+    &RuntimeProfileSnapshot::rpc_client_response_notify_to_receive_nanoseconds,
+    &RuntimeProfileSnapshot::rpc_client_response_notify_to_receive_samples,
+    &RuntimeProfileSnapshot::
+        rpc_client_response_notify_to_receive_task_nanoseconds,
+    &RuntimeProfileSnapshot::rpc_client_response_notify_to_receive_task_samples,
+    &RuntimeProfileSnapshot::
+        cluster_bidirectional_post_to_notify_observed_nanoseconds,
+    &RuntimeProfileSnapshot::
+        cluster_bidirectional_post_to_notify_observed_samples,
+    &RuntimeProfileSnapshot::
+        rpc_client_response_received_to_task_terminal_nanoseconds,
+    &RuntimeProfileSnapshot::
+        rpc_client_response_received_to_task_terminal_samples,
+    &RuntimeProfileSnapshot::rpc_exceptional_retained_nanoseconds,
+    &RuntimeProfileSnapshot::rpc_client_response_to_stage_terminal_nanoseconds,
+    &RuntimeProfileSnapshot::rpc_client_response_to_stage_terminal_samples,
+    &RuntimeProfileSnapshot::rpc_client_response_decode_nanoseconds,
+    &RuntimeProfileSnapshot::rpc_client_response_decode_samples,
+    &RuntimeProfileSnapshot::request_slot_scans,
+    &RuntimeProfileSnapshot::request_slot_hits,
+    &RuntimeProfileSnapshot::request_slot_blocked_by_result_inflight,
+    &RuntimeProfileSnapshot::server_request_batches,
+    &RuntimeProfileSnapshot::server_request_tasks,
+    &RuntimeProfileSnapshot::server_distance_values,
+    &RuntimeProfileSnapshot::request_poll_hit_to_claim_nanoseconds,
+    &RuntimeProfileSnapshot::request_poll_hit_to_claim_samples,
+    &RuntimeProfileSnapshot::request_decode_nanoseconds,
+    &RuntimeProfileSnapshot::query_slot_store_nanoseconds,
+    &RuntimeProfileSnapshot::query_slot_load_nanoseconds,
+    &RuntimeProfileSnapshot::distance_compute_nanoseconds,
+    &RuntimeProfileSnapshot::filter_and_response_encode_nanoseconds,
+    &RuntimeProfileSnapshot::result_ready_publications,
+    &RuntimeProfileSnapshot::distance_busy_iterations,
+    &RuntimeProfileSnapshot::distance_idle_iterations,
+    &RuntimeProfileSnapshot::result_slot_scans,
+    &RuntimeProfileSnapshot::result_slot_hits,
+    &RuntimeProfileSnapshot::
+        request_notify_observed_to_response_post_nanoseconds,
+    &RuntimeProfileSnapshot::request_notify_observed_to_response_post_samples,
+    &RuntimeProfileSnapshot::result_ready_to_post_nanoseconds,
+    &RuntimeProfileSnapshot::result_ready_to_post_samples,
+    &RuntimeProfileSnapshot::result_post_retries,
+    &RuntimeProfileSnapshot::result_post_to_completion_nanoseconds,
+    &RuntimeProfileSnapshot::result_post_to_completion_samples,
+    &RuntimeProfileSnapshot::response_scan_slots,
+    &RuntimeProfileSnapshot::response_scan_hits,
+    &RuntimeProfileSnapshot::request_slots_in_use,
+    &RuntimeProfileSnapshot::request_slots_high_watermark,
+    &RuntimeProfileSnapshot::request_post_free_slot_waits,
+    &RuntimeProfileSnapshot::request_post_staging_unavailable,
+    &RuntimeProfileSnapshot::request_post_tx_unavailable,
+    &RuntimeProfileSnapshot::request_post_provider_backpressure_batches,
+    &RuntimeProfileSnapshot::ready_events_published,
+    &RuntimeProfileSnapshot::ready_events_consumed,
+    &RuntimeProfileSnapshot::ready_queue_high_watermark,
+};
+
+// RuntimeProfileSnapshot vector fields (profile.*), each std::vector<uint64_t>.
+inline constexpr auto kProfileVectorFields = std::array{
+    &RuntimeProfileSnapshot::rpc_slots_in_use_per_search,
+    &RuntimeProfileSnapshot::rpc_slots_high_watermark_per_search,
+    &RuntimeProfileSnapshot::rpc_pool_backpressure_per_search,
+    &RuntimeProfileSnapshot::rpc_submit_backpressure_per_search,
+    &RuntimeProfileSnapshot::rpc_audit_operations_per_owner,
+    &RuntimeProfileSnapshot::ready_published_per_worker,
+    &RuntimeProfileSnapshot::ready_consumed_per_worker,
+    &RuntimeProfileSnapshot::ready_producer_worker_counts,
+    &RuntimeProfileSnapshot::ready_converged_to_publish_ns_per_worker,
+    &RuntimeProfileSnapshot::ready_publish_to_pop_ns_per_worker,
+    &RuntimeProfileSnapshot::ready_pop_to_step_ns_per_worker,
+    &RuntimeProfileSnapshot::ready_run_ns_per_worker,
+    &RuntimeProfileSnapshot::search_event_depth,
+    &RuntimeProfileSnapshot::search_event_high_watermark,
+    &RuntimeProfileSnapshot::read_owned_ranks_per_thread,
+    &RuntimeProfileSnapshot::rpc_owned_ranks_per_thread,
+    &RuntimeProfileSnapshot::search_busy_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::search_idle_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::search_iterations_per_thread,
+    &RuntimeProfileSnapshot::search_new_queries_per_thread,
+    &RuntimeProfileSnapshot::search_ready_resumes_per_thread,
+    &RuntimeProfileSnapshot::search_retry_runs_per_thread,
+    &RuntimeProfileSnapshot::distance_busy_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::distance_idle_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::distance_iterations_per_thread,
+    &RuntimeProfileSnapshot::read_busy_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::read_idle_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::read_progress_iterations_per_thread,
+    &RuntimeProfileSnapshot::rpc_busy_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::rpc_idle_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::rpc_progress_iterations_per_thread,
+    &RuntimeProfileSnapshot::rpc_poll_completions_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::rpc_scan_responses_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::rpc_post_responses_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::
+        rpc_drain_client_submissions_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::rpc_post_requests_nanoseconds_per_thread,
+    &RuntimeProfileSnapshot::distance_request_slot_scans_per_thread,
+    &RuntimeProfileSnapshot::distance_request_slot_hits_per_thread,
+    &RuntimeProfileSnapshot::distance_request_batches_per_thread,
+    &RuntimeProfileSnapshot::distance_request_tasks_per_thread,
+    &RuntimeProfileSnapshot::distance_values_per_thread,
+    &RuntimeProfileSnapshot::wait_event_counts,
+    &RuntimeProfileSnapshot::wait_nanoseconds,
+    &RuntimeProfileSnapshot::wait_publish_nanoseconds,
+    &RuntimeProfileSnapshot::wait_first_completion_nanoseconds,
+    &RuntimeProfileSnapshot::wait_completion_spread_nanoseconds,
+    &RuntimeProfileSnapshot::wait_remote_operations,
+    &RuntimeProfileSnapshot::wait_distance_values,
+    &RuntimeProfileSnapshot::wait_remote_operations_high_watermark,
+    &RuntimeProfileSnapshot::wait_distance_values_high_watermark,
+    &RuntimeProfileSnapshot::wait_critical_lane_counts,
+    &RuntimeProfileSnapshot::wait_histograms,
+    &RuntimeProfileSnapshot::wait_publish_histograms,
+    &RuntimeProfileSnapshot::wait_first_completion_histograms,
+    &RuntimeProfileSnapshot::wait_completion_spread_histograms,
+};
 
 double Percentile(std::vector<std::uint64_t> values, double percentile) {
   if (values.empty())
@@ -185,9 +307,8 @@ LatencySummary MakeLatency(std::vector<std::uint64_t> values) {
 
 void AddSearchProfile(SearchProfile &total, const SearchProfile &value) {
   const auto previous_max = total.upper_max_consecutive_level_drops;
-#define ADD_SEARCH(name) total.name += value.name;
-  SEARCH_PROFILE_FIELDS(ADD_SEARCH)
-#undef ADD_SEARCH
+  for (const auto field : kSearchProfileFields)
+    total.*field += value.*field;
   total.upper_max_consecutive_level_drops =
       std::max(previous_max, value.upper_max_consecutive_level_drops);
 }
@@ -1022,19 +1143,15 @@ EncodeDistributedBenchmarkPayload(std::span<const QueryBenchmarkRecord> records,
                             ? std::bit_cast<std::uint64_t>(*record.recall)
                             : 0U);
       AppendU64(output, record.success ? 1U : 0U);
-#define APPEND_SEARCH(name) AppendU64(output, record.search.name);
-      SEARCH_PROFILE_FIELDS(APPEND_SEARCH)
-#undef APPEND_SEARCH
-#define APPEND_TIMING(name) AppendU64(output, record.name);
-      RECORD_TIMING_FIELDS(APPEND_TIMING)
-#undef APPEND_TIMING
+      for (const auto field : kSearchProfileFields)
+        AppendU64(output, record.search.*field);
+      for (const auto field : kRecordTimingFields)
+        AppendU64(output, record.*field);
     }
-#define APPEND_PROFILE(name) AppendU64(output, profile.name);
-    PROFILE_SCALAR_FIELDS(APPEND_PROFILE)
-#undef APPEND_PROFILE
-#define APPEND_PROFILE_VECTOR(name) AppendVector(output, profile.name);
-    PROFILE_VECTOR_FIELDS(APPEND_PROFILE_VECTOR)
-#undef APPEND_PROFILE_VECTOR
+    for (const auto field : kProfileScalarFields)
+      AppendU64(output, profile.*field);
+    for (const auto field : kProfileVectorFields)
+      AppendVector(output, profile.*field);
     return output;
   } catch (const std::bad_alloc &) {
     return Status(StatusCode::kResourceExhausted,
@@ -1074,22 +1191,29 @@ DecodeDistributedBenchmarkPayload(std::span<const std::byte> input) {
     return Status(StatusCode::kResourceExhausted,
                   "unable to allocate distributed benchmark records");
   }
+  // Reads one little-endian uint64 into `out`; propagates truncation as a
+  // Status.
+  auto read_u64 = [&](std::uint64_t &out) -> Status {
+    auto value = reader.U64();
+    if (!value.ok())
+      return value.status();
+    out = value.value();
+    return Status::Ok();
+  };
   for (auto &record : payload.records) {
-#define READ_RECORD_FIELD(target, field)                                       \
-  do {                                                                         \
-    auto value = reader.U64();                                                 \
-    if (!value.ok())                                                           \
-      return value.status();                                                   \
-    (target) = value.value();                                                  \
-  } while (false)
-    READ_RECORD_FIELD(record.query_id, query_id);
-    READ_RECORD_FIELD(record.latency_nanoseconds, latency_nanoseconds);
+    if (auto s = read_u64(record.query_id); !s.ok())
+      return s;
+    if (auto s = read_u64(record.latency_nanoseconds); !s.ok())
+      return s;
     std::uint64_t has_recall = 0;
     std::uint64_t recall_bits = 0;
     std::uint64_t success = 0;
-    READ_RECORD_FIELD(has_recall, has_recall);
-    READ_RECORD_FIELD(recall_bits, recall_bits);
-    READ_RECORD_FIELD(success, success);
+    if (auto s = read_u64(has_recall); !s.ok())
+      return s;
+    if (auto s = read_u64(recall_bits); !s.ok())
+      return s;
+    if (auto s = read_u64(success); !s.ok())
+      return s;
     if (has_recall > 1U || success > 1U) {
       return Status(StatusCode::kProtocolError,
                     "distributed benchmark record flags are invalid");
@@ -1103,44 +1227,31 @@ DecodeDistributedBenchmarkPayload(std::span<const std::byte> input) {
       record.recall = recall;
     }
     record.success = success != 0;
-#define READ_SEARCH(name)                                                      \
-  do {                                                                         \
-    auto value = reader.U64();                                                 \
-    if (!value.ok())                                                           \
-      return value.status();                                                   \
-    record.search.name = value.value();                                        \
-  } while (false);
-    SEARCH_PROFILE_FIELDS(READ_SEARCH)
-#undef READ_SEARCH
-#define READ_TIMING(name)                                                      \
-  do {                                                                         \
-    auto value = reader.U64();                                                 \
-    if (!value.ok())                                                           \
-      return value.status();                                                   \
-    record.name = value.value();                                               \
-  } while (false);
-    RECORD_TIMING_FIELDS(READ_TIMING)
-#undef READ_TIMING
-#undef READ_RECORD_FIELD
+    for (const auto field : kSearchProfileFields) {
+      auto value = reader.U64();
+      if (!value.ok())
+        return value.status();
+      record.search.*field = value.value();
+    }
+    for (const auto field : kRecordTimingFields) {
+      auto value = reader.U64();
+      if (!value.ok())
+        return value.status();
+      record.*field = value.value();
+    }
   }
-#define READ_PROFILE(name)                                                     \
-  do {                                                                         \
-    auto value = reader.U64();                                                 \
-    if (!value.ok())                                                           \
-      return value.status();                                                   \
-    payload.profile.name = value.value();                                      \
-  } while (false);
-  PROFILE_SCALAR_FIELDS(READ_PROFILE)
-#undef READ_PROFILE
-#define READ_PROFILE_VECTOR(name)                                              \
-  do {                                                                         \
-    auto value = ReadVector(reader);                                           \
-    if (!value.ok())                                                           \
-      return value.status();                                                   \
-    payload.profile.name = std::move(value).value();                           \
-  } while (false);
-  PROFILE_VECTOR_FIELDS(READ_PROFILE_VECTOR)
-#undef READ_PROFILE_VECTOR
+  for (const auto field : kProfileScalarFields) {
+    auto value = reader.U64();
+    if (!value.ok())
+      return value.status();
+    payload.profile.*field = value.value();
+  }
+  for (const auto field : kProfileVectorFields) {
+    auto value = ReadVector(reader);
+    if (!value.ok())
+      return value.status();
+    payload.profile.*field = std::move(value).value();
+  }
   if (!reader.done()) {
     return Status(StatusCode::kProtocolError,
                   "distributed benchmark payload has trailing bytes");

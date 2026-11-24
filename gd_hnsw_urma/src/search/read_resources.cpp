@@ -1,11 +1,11 @@
 #include "hnsw_urma/search/read_resources.hpp"
 
 #include <algorithm>
-#include <cassert>
 #include <limits>
 #include <new>
 
 #include "hnsw_urma/core/checked_math.hpp"
+#include "hnsw_urma/core/log.hpp"
 
 namespace hnsw_urma {
 Result<std::size_t>
@@ -31,6 +31,13 @@ SearchReadResources::Create(std::uint32_t owner_search,
       reinterpret_cast<std::uintptr_t>(registered_memory.data()) % 64 != 0)
     return Status(StatusCode::kInvalidArgument,
                   "Search READ memory is too small or misaligned");
+  // Defensive guard: RequiredBytes already rejects slots == 0, but make the
+  // non-zero divisor explicit here so the division cannot divide by zero
+  // regardless of future refactor (G.EXP.22-CPP).
+  if (slots == 0) {
+    return Status(StatusCode::kInvalidArgument,
+                  "Search READ pool slots must be non-zero");
+  }
   try {
     auto pool = std::make_unique<SearchReadResources>();
     pool->owner_search_ = owner_search;
@@ -58,7 +65,12 @@ Status SearchReadResources::BindLanes(std::span<ReadBatchLane *const> lanes) {
 
 Status SearchReadResources::Acquire(std::span<ReadResultView> results,
                                     std::size_t bytes) noexcept {
-  assert(bytes != 0 && bytes <= slot_bytes_);
+  if (bytes == 0 || bytes > slot_bytes_) {
+    LOG_ERROR("SearchReadResources::Acquire invalid view size {} slot_bytes {}",
+              bytes, slot_bytes_);
+    return Status(StatusCode::kInvalidArgument,
+                  "Search READ result view size is invalid");
+  }
   if (free_slots_.size() < results.size()) {
     ++profile_.allocation_retries;
     return Status(StatusCode::kResourceExhausted,
@@ -78,16 +90,29 @@ Status SearchReadResources::Acquire(std::span<ReadResultView> results,
 void SearchReadResources::Return(
     std::span<const ReadResultView> results) noexcept {
   for (const auto &view : results) {
-    assert(view.slot < slot_count_ &&
-           view.data == memory_.data() + view.slot * slot_bytes_);
+    if (view.slot >= slot_count_ ||
+        view.data != memory_.data() + view.slot * slot_bytes_) {
+      LOG_ERROR(
+          "SearchReadResources::Return invalid view slot {} slot_count {}",
+          view.slot, slot_count_);
+      continue;
+    }
     free_slots_.push_back(view.slot);
   }
-  assert(free_slots_.size() <= slot_count_);
+  if (free_slots_.size() > slot_count_) {
+    LOG_ERROR("SearchReadResources::Return free_slots {} exceeds slot_count {}",
+              free_slots_.size(), slot_count_);
+    return;
+  }
   profile_.slots_in_use = slot_count_ - free_slots_.size();
 }
 
 void SearchReadResources::ReturnRecord() noexcept {
-  assert(records_in_use_ != 0);
+  if (records_in_use_ == 0) {
+    LOG_ERROR(
+        "SearchReadResources::ReturnRecord called with no records in use");
+    return;
+  }
   --records_in_use_;
 }
 
@@ -103,11 +128,19 @@ std::size_t SearchReadResources::PollReclaims(std::size_t budget) noexcept {
     empty = 0;
     ++received;
     ++profile_.reclaim_events;
-    assert(batch->reclaim_required && !batch->reclaim_received);
+    if (!batch->reclaim_required || batch->reclaim_received) {
+      LOG_ERROR("SearchReadResources::PollReclaims invalid reclaim state "
+                "required={} received={}",
+                batch->reclaim_required, batch->reclaim_received);
+      continue;
+    }
     batch->reclaim_received = true;
     const auto callback = batch->reclaim_callback;
     auto *context = batch->reclaim_context;
-    assert(callback != nullptr);
+    if (callback == nullptr) {
+      LOG_ERROR("SearchReadResources::PollReclaims reclaim callback is null");
+      continue;
+    }
     callback(context, *batch);
   }
   return received;

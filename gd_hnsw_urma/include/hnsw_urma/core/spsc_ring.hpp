@@ -152,9 +152,13 @@ private:
     const auto head = consumer_.head.load(std::memory_order_acquire);
     const auto depth = published_tail - head;
     auto observed = producer_.high_watermark.load(std::memory_order_relaxed);
-    while (observed < depth && !producer_.high_watermark.compare_exchange_weak(
-                                   observed, depth, std::memory_order_relaxed,
-                                   std::memory_order_relaxed)) {
+    while (observed < depth) {
+      if (producer_.high_watermark.compare_exchange_weak(
+              observed, depth, std::memory_order_relaxed,
+              std::memory_order_relaxed)) {
+        break;
+      }
+      // observed is refreshed by the failed compare_exchange_weak above.
     }
   }
 

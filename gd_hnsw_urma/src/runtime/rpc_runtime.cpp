@@ -1652,25 +1652,48 @@ RpcServerRuntime::worker_profile(std::uint32_t worker) const noexcept {
     return {};
   const auto &source = worker_profiles_[worker];
   DistanceWorkerProfile result;
-#define LOAD_PROFILE(field)                                                    \
-  result.field = source.field.load(std::memory_order_relaxed)
-  LOAD_PROFILE(request_slot_scans);
-  LOAD_PROFILE(request_slot_hits);
-  LOAD_PROFILE(request_slot_blocked_by_result_inflight);
-  LOAD_PROFILE(request_batches);
-  LOAD_PROFILE(request_tasks);
-  LOAD_PROFILE(distance_values);
-  LOAD_PROFILE(request_poll_hit_to_claim_nanoseconds);
-  LOAD_PROFILE(request_poll_hit_to_claim_samples);
-  LOAD_PROFILE(request_decode_nanoseconds);
-  LOAD_PROFILE(query_slot_store_nanoseconds);
-  LOAD_PROFILE(query_slot_load_nanoseconds);
-  LOAD_PROFILE(distance_compute_nanoseconds);
-  LOAD_PROFILE(filter_and_response_encode_nanoseconds);
-  LOAD_PROFILE(result_ready_publications);
-  LOAD_PROFILE(busy_iterations);
-  LOAD_PROFILE(idle_iterations);
-#undef LOAD_PROFILE
+  // (destination member, source atomic member) pairs, replacing the prior
+  // function-like LOAD_PROFILE macro (G.PRE.02-CPP).
+  struct FieldPair {
+    std::uint64_t DistanceWorkerProfile::*dest;
+    std::atomic<std::uint64_t> AtomicWorkerProfile::*src;
+  };
+  constexpr std::array<FieldPair, 16> kFields = {{
+      {&DistanceWorkerProfile::request_slot_scans,
+       &AtomicWorkerProfile::request_slot_scans},
+      {&DistanceWorkerProfile::request_slot_hits,
+       &AtomicWorkerProfile::request_slot_hits},
+      {&DistanceWorkerProfile::request_slot_blocked_by_result_inflight,
+       &AtomicWorkerProfile::request_slot_blocked_by_result_inflight},
+      {&DistanceWorkerProfile::request_batches,
+       &AtomicWorkerProfile::request_batches},
+      {&DistanceWorkerProfile::request_tasks,
+       &AtomicWorkerProfile::request_tasks},
+      {&DistanceWorkerProfile::distance_values,
+       &AtomicWorkerProfile::distance_values},
+      {&DistanceWorkerProfile::request_poll_hit_to_claim_nanoseconds,
+       &AtomicWorkerProfile::request_poll_hit_to_claim_nanoseconds},
+      {&DistanceWorkerProfile::request_poll_hit_to_claim_samples,
+       &AtomicWorkerProfile::request_poll_hit_to_claim_samples},
+      {&DistanceWorkerProfile::request_decode_nanoseconds,
+       &AtomicWorkerProfile::request_decode_nanoseconds},
+      {&DistanceWorkerProfile::query_slot_store_nanoseconds,
+       &AtomicWorkerProfile::query_slot_store_nanoseconds},
+      {&DistanceWorkerProfile::query_slot_load_nanoseconds,
+       &AtomicWorkerProfile::query_slot_load_nanoseconds},
+      {&DistanceWorkerProfile::distance_compute_nanoseconds,
+       &AtomicWorkerProfile::distance_compute_nanoseconds},
+      {&DistanceWorkerProfile::filter_and_response_encode_nanoseconds,
+       &AtomicWorkerProfile::filter_and_response_encode_nanoseconds},
+      {&DistanceWorkerProfile::result_ready_publications,
+       &AtomicWorkerProfile::result_ready_publications},
+      {&DistanceWorkerProfile::busy_iterations,
+       &AtomicWorkerProfile::busy_iterations},
+      {&DistanceWorkerProfile::idle_iterations,
+       &AtomicWorkerProfile::idle_iterations},
+  }};
+  for (const auto &field : kFields)
+    result.*field.dest = (source.*field.src).load(std::memory_order_relaxed);
   return result;
 }
 

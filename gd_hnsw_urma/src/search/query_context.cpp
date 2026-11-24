@@ -1,8 +1,9 @@
 #include "hnsw_urma/search/query_context.hpp"
 
-#include <cassert>
 #include <chrono>
 #include <limits>
+
+#include "hnsw_urma/core/log.hpp"
 
 namespace hnsw_urma {
 
@@ -349,7 +350,12 @@ bool QueryRunController::ValidateReadyHandle(
       handle.wait_epoch != wait_epoch_.load(std::memory_order_acquire)) {
     return false;
   }
-  assert(handle.owner_search == owner_search_);
+  if (handle.owner_search != owner_search_) {
+    LOG_ERROR("QueryRunController::ValidateReadyHandle owner_search mismatch "
+              "handle={} controller={}",
+              handle.owner_search, owner_search_);
+    return false;
+  }
   return true;
 }
 

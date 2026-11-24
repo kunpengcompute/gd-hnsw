@@ -71,7 +71,7 @@ public:
     }
     const auto &entry = entries_[index];
     std::array<std::uint64_t, kWords> words{};
-    while (true) {
+    for (bool consistent = false; !consistent;) {
       const auto before = entry.sequence.load(std::memory_order_seq_cst);
       if ((before & 1U) != 0) {
         continue;
@@ -88,6 +88,9 @@ public:
         return sample;
       }
     }
+    // Unreachable: the loop above only exits via its return statement.
+    return Status(StatusCode::kInternalError,
+                  "load snapshot read loop exited unexpectedly");
   }
 
   [[nodiscard]] std::uint32_t size() const noexcept { return count_; }
