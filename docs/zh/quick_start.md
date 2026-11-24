@@ -1,128 +1,613 @@
 # 快速入门
 
-本文档提供gd_hnsw核心功能快速入门的简易指导。完整的依赖安装与编译方法请参见《[安装指南](./installation_guide.md)》，接口详细语义请参见《[API参考](./api_reference.md)》。
+本文介绍gd_hnsw与Milvus集成后的功能验证流程：获取Milvus源码和URMA补丁，加入算法源码并联合编译，通过Docker Compose启动中间件，再逐项启动Milvus组件和8个工作QueryNode，最后使用PyMilvus完成GIST数据导入、全局索引构建、加载和检索。
 
-## 介绍gd_hnsw核心概念
+本例采用直接运行Milvus进程的方式，使用8个全局图分片。操作不绑定具体服务器名称或业务IP，路径、端口和CPU/NUMA分配均可按运行环境配置。URMA设备及软件配套要求见《[安装指南](./installation_guide.md)》。
 
-- **宿主**：集成gd_hnsw并提供运行环境的服务进程（如Milvus QueryNode），负责创建URMA上下文、发布资源记录、激活跨节点链路并调用本库接口。
-- **分片（shard）**：覆盖全部数据的一张HNSW（Hierarchical Navigable Small World，分层可导航小世界）全局图被切成N份存储，每份是一个分片；**一个进程负责一个分片**。
-- **索引三元组**：离线构建产物为一个目录下的三类文件——`global.meta`（全局元信息与分片范围）、`upper_graph.index`（上层图完整邻接关系，每进程一份副本）、`shard_N.index`（分片N的第0层邻接表与向量）。
-- **离线建库**：基于Faiss在全部数据上构图，再按分片落盘三元组（构建组件由宿主侧提供）。
-- **在线检索**：各进程装载自己的分片，发布本地内存（图/向量/邮箱）、导入对端句柄后启动五类线程运行时——Control（查询调度与准入）、Search（本地图搜索推进）、Distance（执行对端下推的距离计算）、READ Progress（推进URMA远端读完成）、RPC Progress（邮箱收发推进）；任一进程可接纳查询，沿全局图跨分片搜索，直接产出全局top-K。
-- **距离下推（pushdown）**：远端分片向量的距离可下推到数据所在进程就近计算，只回传ID与距离。
+执行顺序：准备源码和配置 → 联合编译 → 启动etcd、MinIO和Pulsar → 设置进程环境 → streamingnode → datanode → 8个QueryNode → mixcoord → proxy → 导入GIST → 构建全局索引 → 加载 → 检索并计算样本召回率。
 
-## 集成gd_hnsw的Milvus集群示例
+## 准备源码和运行环境
 
-以下给出端到端跑通路径；使用其他宿主时，Milvus部署环节替换为对应宿主的集成部署即可。
+### 获取源码及补丁
 
-1. 环境准备（URMA组网、依赖安装）。验证：各节点URMA设备可枚举，节点间网络互通。
-2. 编译/获取算法库（`libub_hnsw.so`）。验证：编译产物完整（见《[安装指南](./installation_guide.md)》）。
-3. 部署集成gd_hnsw的Milvus集群（进程数=分片数）。验证：各组件Running。
-4. 离线构建全局索引三元组。验证：三元组文件齐全（`global.meta`/`upper_graph.index`/`shard_N.index`）。
-5. 装载并启用全局检索。验证：装载状态就绪、查询正常返回。
-6. 查询验证。验证：返回全局top-K。
+| 材料 | 获取方式 |
+| ---- | -------- |
+| Milvus官方源码 | [Milvus v3.0.0](https://github.com/milvus-io/milvus/releases/tag/v3.0.0) |
+| Milvus URMA补丁 | [0001-milvus-add-urma-global-hnsw-search.patch](https://gitcode.com/boostkit/milvus/blob/master/0001-milvus-add-urma-global-hnsw-search.patch) |
+| gd_hnsw算法源码 | [gd-hnsw仓库](https://gitcode.com/boostkit/gd-hnsw)，`master`分支的`gd_hnsw_urma/`目录 |
+| Milvus编译环境及完整依赖 | 数据库侧配套编译说明，入口待补充 |
+| 数据库运行环境 | 与补丁配套的完整`configs/milvus.yaml`、Docker Compose部署配置及其环境变量、覆盖文件；由数据库侧统一提供 |
 
->![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
->任一环节的验证点不通过时，请先排查再继续，不要带障进入下一步。常见失败原因与排查入口（日志位置、自检命令）见《[常见问题和故障案例](./FAQ.md#跑通路径验证失败排查)》。
+在已具备配套编译环境的终端设置工作目录并获取源码：
 
-## 环境准备
+```bash
+export QS_ROOT=/opt/milvus-urma
+export MILVUS_HOME="$QS_ROOT/milvus"
+export ALGO_REPO="$QS_ROOT/gd-hnsw"
+mkdir -p "$QS_ROOT/patches"
 
-1. 按《[安装指南](./installation_guide.md)》完成依赖安装与算法库编译（跨节点数据面需`ENABLE_URMA=ON`）。
-2. 确认各节点URMA（Unified Remote Memory Access，统一远端内存访问）设备可用（`ubctl`等工具枚举）、传输模式与设备能力匹配（当前驱动要求`rm`可靠消息模式）。
-3. 确认节点间网络互通、时间同步，并放通部署所需的服务端口。gd_hnsw跨节点数据面使用URMA设备通信，不新增TCP业务监听端口。Milvus集群还需放通自身组件与依赖的服务端口，常用端口及配置键如下；实际端口以部署所用的`configs/milvus.yaml`、配置覆盖项及容器端口映射为准。跨节点连通性应以TCP（Transmission Control Protocol，传输控制协议）/HTTP（HyperText Transfer Protocol，超文本传输协议）实测为准，不要只看ping通。
-
-| 服务 | 常用TCP端口 | 用途与配置位置 |
-|------|-------------|----------------|
-| Milvus Proxy | 19530 / 19529 | 客户端访问 / 内部通信，`proxy.port` / `proxy.internalPort` |
-| QueryNode / QueryCoord | 21123 / 19531 | 查询节点 / 查询协调服务，`queryNode.port` / `queryCoord.port` |
-| RootCoord / DataCoord / DataNode | 22125 / 13333 / 21124 | 集群协调与数据服务，对应`rootCoord.port` / `dataCoord.port` / `dataNode.port` |
-| StreamingNode | 22222 | 启用流式节点时使用，`streamingNode.port` |
-| etcd | 2379 | 元数据与URMA资源目录访问，`etcd.endpoints`；独立etcd集群的节点间通信另按其自身配置放通 |
-| MinIO或S3兼容服务 | 9000 | 使用该存储服务时的对象访问端口，`minio.address` / `minio.port` |
-| Pulsar | 6650 | 使用Pulsar消息存储时的服务端口，`pulsar.address` / `pulsar.port`；使用其他消息存储时按所选服务配置放通 |
-
-TCP/HTTP业务连通性通过后，仍须验证URMA设备与链路可用；业务端口连通不能代替URMA数据面验证。常用自检命令请参见《[常见问题和故障案例](./FAQ.md#跑通路径验证失败排查)》。
-
-## 离线构建索引三元组
-
-索引三元组是检索的输入：`global.meta`（全局元信息与各分片ID范围）、`upper_graph.index`（全局上层图完整邻接关系）、`shard_N.index`（分片N的第0层邻接表与原始向量，每分片一个）。
-
-生产环境大规模索引的Faiss适配构建由宿主侧构建组件提供，不属于本库接口面。本库提供确定性参考构建接口`BuildReferenceIndex`（`index/builder.hpp`），适用于小规模数据（默认上限100,000行，可调）的验证与测试：
-
-```cpp
-#include "hnsw_urma/index/builder.hpp"
-
-int main() {
-    hnsw_urma::ReferenceBuildOptions opts{};
-    opts.num_shards = 8;    // 分片数（须与后续运行进程数一致）
-    opts.M            = 16; // 上层每层最大邻居数
-    opts.M0           = 32; // 第0层最大邻居数
-    opts.ef_search    = 64; // 写入索引的默认ef_search
-    opts.metric       = 0;  // 0=L2, 1=负内积
-
-    // vectors：rows × dim 连续排布的float向量
-    auto st = hnsw_urma::BuildReferenceIndex("/data/idx", vectors, rows, dim, opts);
-    if (!st.ok()) { /* st.ToString() */ }
-    return 0;
-}
+git clone --branch v3.0.0 --single-branch \
+  https://github.com/milvus-io/milvus.git "$MILVUS_HOME"
+git clone --branch master --single-branch \
+  https://gitcode.com/boostkit/gd-hnsw.git "$ALGO_REPO"
+test -f "$ALGO_REPO/gd_hnsw_urma/CMakeLists.txt"
 ```
 
-构建产物（写入`/data/idx`）：
+从上表补丁页面下载原始补丁文件，保存为`$QS_ROOT/patches/0001-milvus-add-urma-global-hnsw-search.patch`，不要将网页HTML保存成补丁。进入Milvus源码目录，先检查补丁是否匹配，再应用：
 
-- `global.meta` —— 全局元信息与各分片ID范围。
-- `upper_graph.index` —— 全局上层图（第1层及以上）完整邻接关系。
-- `shard_0.index ... shard_<N-1>.index` —— 各分片的第0层邻接表与原始向量。
+```bash
+cd "$MILVUS_HOME"
+git apply --check "$QS_ROOT/patches/0001-milvus-add-urma-global-hnsw-search.patch"
+git apply "$QS_ROOT/patches/0001-milvus-add-urma-global-hnsw-search.patch"
+git rev-parse HEAD
+git -C "$ALGO_REPO" rev-parse HEAD
+```
 
->![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
->部署前把上述文件放到**每个进程都能读到**的位置（共享存储 / 各节点本地副本）。
+补丁检查失败时，先核对Milvus版本、补丁版本及目录状态，不要跳过检查继续构建。记录两个仓库的Commit及补丁校验值，便于追溯本次运行版本。
+
+### 放置算法源码并联合编译
+
+补丁工程使用`internal/core/thirdparty/ub_hnsw`作为算法源码目录，该目录下应直接包含算法的`CMakeLists.txt`、`include/`和`src/`，避免多嵌套一层`gd_hnsw_urma`。
+
+对于尚未放入算法源码的新工作目录，执行：
+
+```bash
+export ALGO_TARGET="$MILVUS_HOME/internal/core/thirdparty/ub_hnsw"
+mkdir -p "$ALGO_TARGET"
+cp -a "$ALGO_REPO/gd_hnsw_urma/." "$ALGO_TARGET/"
+test -f "$ALGO_TARGET/CMakeLists.txt"
+test -d "$ALGO_TARGET/include"
+test -d "$ALGO_TARGET/src"
+
+cd "$MILVUS_HOME"
+ENABLE_URMA=ON make
+```
+
+若补丁或配套工程已经放入算法代码，先核对该目录与选定算法版本一致，再编译。独立编译算法库的操作见《[安装指南](./installation_guide.md#编译gd_hnsw)》；本流程后续运行的是联合编译后的Milvus。
+
+检查运行产物：
+
+```bash
+test -x "$MILVUS_HOME/bin/milvus"
+test -f "$MILVUS_HOME/internal/core/output/lib/libmilvus_core.so"
+test -f "$MILVUS_HOME/internal/core/output/lib/libjemalloc.so"
+LD_LIBRARY_PATH="$MILVUS_HOME/internal/core/output/lib:${LD_LIBRARY_PATH:-}" \
+  ldd "$MILVUS_HOME/internal/core/output/lib/libmilvus_core.so"
+```
+
+**通过标准**：构建成功，程序及动态库存在，动态链接依赖没有`not found`。编译环境、头文件、URMA依赖或其他第三方库缺失时，先按配套编译说明补齐。
+
+### 检查URMA设备和链路
+
+先按《[安装指南](./installation_guide.md#安装ub相关组件与驱动)》安装配套驱动及UMDK/URMA组件。在每个运行QueryNode的节点上，以后续启动Milvus的用户执行以下检查。本例8个工作QueryNode部署在同一台服务器上，在该服务器执行即可；跨服务器部署时，每台均需检查。
+
+1. 检查工具是否可用，并枚举设备：
+
+   ```bash
+   command -v urma_admin || exit 1
+   command -v urma_perftest || exit 1
+   urma_admin show
+   ```
+
+   **通过标准**：命令正常返回且能看到计划使用的URMA设备。未找到工具时补齐配套工具；未列出设备时，先检查驱动安装、设备配置及当前用户的访问权限。
+
+2. 查看目标设备的完整属性，核对端口状态、有效EID及传输模式：
+
+   ```bash
+   export URMA_DEVICE=bonding_dev_0  # 按上一条命令的实际设备名修改
+   urma_admin show --dev "$URMA_DEVICE" --whole
+   ```
+
+   **通过标准**：目标设备存在，所用端口处于激活状态，计划使用的EID索引对应有效EID，且设备支持RM（可靠消息）模式。将设备名和EID索引分别填入后文`queryNode.urma.device`、`queryNode.urma.eidIdx`，不要仅因设备名称相同就默认索引为0。`trans_mode`若以位图输出，最低位为1表示支持RM，例如`0x1`和`0x7`均包含RM能力。命令及字段说明见[openEuler URMA用户指南](https://docs.openeuler.org/zh/docs/24.03_LTS_SP3/unifiedbus/unifiedbus/urma/URMA%20User%20Guide.ch.html)。
+
+3. 跨服务器部署时，在两端执行URMA收发测试。先在服务端终端执行：
+
+   ```bash
+   export URMA_DEVICE=bonding_dev_0  # 服务端实际设备名
+   export URMA_EID_IDX=0            # 服务端实际有效EID索引
+   urma_perftest send_lat -d "$URMA_DEVICE" --eid_idx "$URMA_EID_IDX" \
+     -p 0 -n 1000 -I 64 --ctp
+   ```
+
+   再在客户端终端执行，设备名使用客户端本地设备，地址使用服务端实际的URMA通信IP：
+
+   ```bash
+   export URMA_DEVICE=bonding_dev_0  # 客户端实际设备名
+   export URMA_EID_IDX=0            # 客户端实际有效EID索引
+   SERVER_URMA_IP="请替换为服务端URMA通信IP"
+   urma_perftest send_lat -d "$URMA_DEVICE" --eid_idx "$URMA_EID_IDX" \
+     -p 0 -n 1000 -I 64 --ctp -S "$SERVER_URMA_IP"
+   ```
+
+   这里`-p 0`指定RM模式，`-I 64`指定inline大小，EID索引由`--eid_idx`单独指定。
+
+   **通过标准**：两端完成1000次收发测试，正常输出时延结果并成功退出，没有设备打开、建链或超时错误。按实际通信关系覆盖各节点间链路；失败时先修复设备、链路或权限问题，再启动Milvus。该测试验证基本通信，算法是否成功接入仍需完成后面的导入、构建、加载、检索及“[检查算法实际生效](#检查算法实际生效)”。
+
+### 核对数据库连接和算法配置
+
+将数据库侧配套的完整配置放在`$MILVUS_HOME/configs/milvus.yaml`，数据库服务地址、凭据、数据卷及其他数据库参数按数据库侧部署说明配置。本文仅列与后续操作直接相关的连接信息和算法字段。
+
+已跑通配置使用的访问端口如下，地址替换为本环境实际可访问的中间件地址：
+
+| 字段 | 本例访问端口 |
+| ---- | ------------ |
+| `etcd.endpoints` | 31114 |
+| `minio.address`、`minio.port` | 9008 |
+| `pulsar.address`、`pulsar.port` | 6659 |
+| `proxy.port` | 16745，后续`MILVUS_URI`与此一致 |
+
+这些是Milvus访问服务的端口，不一定等于容器内部端口；数据库侧部署的端口映射或服务入口须与其对应。凭据、鉴权及数据库存储配置保留配套文件的实际值。
+
+算法配置至少核对以下字段。下列是完整`milvus.yaml`中的局部内容，合并到对应位置，不要替换整个配置文件：
+
+```yaml
+queryNode:
+  urma:
+    enabled: true
+    device: "bonding_dev_0"
+    eidIdx: 0
+    transportMode: rm
+    globalIndex:
+      enabled: true
+      builder: faiss
+  ub:
+    enabled: true
+    queryTimeoutMs: 120000
+    operationTimeoutMs: 120000
+    runtimeOptions: "--distance-policy pushdown --use-dot-norm --layer0-sort local-only --request-ring-depth 32 --profile"
+```
+
+`bonding_dev_0`为配套配置中的设备名，执行时按实际设备替换；EID索引也需对应实际设备。两个超时字段单位为毫秒。保留本版本已经验证的其他资源参数，修改后重新启动相关进程使其生效。
+
+后面的QueryNode启动命令会覆盖部分YAML字段：配置文件中的Distance/RPC线程数为15/7，本流程运行时使用14/5；`cpuLayout`由`contiguous`覆盖为`llc-spread`，CPU来源由`cgroup`覆盖为显式CPU列表。`expandBatch=42`及`maxActiveQueries=32`同样由启动环境设置。运行选项中的`--profile`用于计时信息输出，功能是否成功仍通过四个验证模块和服务日志判断。
+
+## 准备数据库侧中间件
+
+由数据库侧准备完整Compose部署配置、环境变量及需要的覆盖文件，并完成数据卷和运行用户权限配置。以下以这些文件放在Milvus工程根目录为例，实际目录不同则修改`COMPOSE_DIR`。
+
+```bash
+export COMPOSE_DIR="$MILVUS_HOME"
+cd "$COMPOSE_DIR"
+docker compose config --services
+docker compose up -d etcd minio pulsar
+docker compose ps etcd minio pulsar
+docker compose logs --tail=80 etcd minio pulsar
+```
+
+**通过标准**：3项中间件运行正常，实际服务入口与前表及`milvus.yaml`一致。若运行环境已提供就绪中间件，核对连接即可继续。
+
+提供的Compose基础文件还包含编译容器定义，且未直接列出etcd、MinIO和Pulsar的宿主机端口映射；完整部署所需的端口映射、环境变量和覆盖配置由数据库侧配套说明补齐。本文继续使用已经准备好的数据库环境，不展开数据库组件内部配置。
+
+## 设置Milvus进程环境
+
+后续启动命令在同一Bash终端依次执行。路径使用当前工作目录，日志和PID单独保存。
+
+```bash
+export MILVUS_BIN="$MILVUS_HOME/bin/milvus"
+export MILVUS_YAML="$MILVUS_HOME/configs/milvus.yaml"
+export INDEX_DIR="$QS_ROOT/index/gist"
+export LOG_DIR="$MILVUS_HOME/logs"
+export PID_DIR="$MILVUS_HOME/run"
+mkdir -p "$INDEX_DIR" "$LOG_DIR" "$PID_DIR"
+
+export LD_LIBRARY_PATH="$MILVUS_HOME/internal/core/output/lib:${LD_LIBRARY_PATH:-}"
+export LD_PRELOAD="$MILVUS_HOME/internal/core/output/lib/libjemalloc.so"
+export MALLOC_CONF=background_thread:true
+export GODEBUG=madvdontneed=1
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY ftp_proxy PROXY_IP
+export no_proxy=127.0.0.1,localhost
+
+cd "$MILVUS_HOME"
+ps -eo pid,args | grep -F "$MILVUS_BIN run" | grep -v grep || true
+ss -lntp | grep -E ':(16745|183[0-9]|184[01])\b' || true
+```
+
+如已存在本部署的旧进程或目标端口被占用，先确认其归属并按数据库侧停止流程处理，再启动本次进程。本文不自动强制结束旧进程。
+
+`INDEX_DIR`沿用配套启动环境中的本地索引目录参数。目录名称不代表实际分片数量；本例全局图由后面的`create_index`构建，目标分片数明确设置为8。应使用匹配补丁的全局索引配置，避免误用其他测试遗留的离线索引。
+
+### 规划QueryNode的CPU和NUMA
+
+启动参数使用8个QueryNode，每进程分配48个逻辑CPU。下面是已验证启动命令采用的分配方式，执行前先核对实际拓扑：
+
+```bash
+lscpu
+numactl --hardware
+```
+
+| QueryNode编号 | 业务端口 | CPU范围示例 | NUMA节点示例 |
+| ------------- | -------- | ----------- | ------------ |
+| 0 | 1832 | 0～47 | 0 |
+| 1 | 1833 | 48～95 | 0 |
+| 2 | 1834 | 96～143 | 1 |
+| 3 | 1835 | 144～191 | 1 |
+| 4 | 1836 | 192～239 | 2 |
+| 5 | 1837 | 240～287 | 2 |
+| 6 | 1838 | 288～335 | 3 |
+| 7 | 1839 | 336～383 | 3 |
+
+表中CPU编号必须存在、在进程允许范围内，并与所选NUMA节点对应。其他CPU拓扑应重新填写下面的数组；这套48核分配是示例配置，不能当作算法在所有场景下的固定资源要求。
+
+```bash
+QN_CPU_RANGES=(0-47 48-95 96-143 144-191 192-239 240-287 288-335 336-383)
+QN_NUMA_NODES=(0 0 1 1 2 2 3 3)
+```
+
+## 按顺序启动集群
+
+以下顺序沿用本次跑通的进程启动方式。前面启动的进程可能在等待协调服务期间重试连接，因此每步先检查进程和日志，全部组件启动后再统一验证服务可用性。等待时间用于复现启动节奏，不能单独作为健康判据。
+
+### 第一步：启动streamingnode
+
+```bash
+cd "$MILVUS_HOME"
+METRICS_PORT=1830 nohup "$MILVUS_BIN" run streamingnode --run-with-subprocess \
+  > "$LOG_DIR/streamingnode.log" 2>&1 &
+echo "$!" > "$PID_DIR/streamingnode.pid"
+sleep 15
+kill -0 "$(cat "$PID_DIR/streamingnode.pid")"
+tail -n 30 "$LOG_DIR/streamingnode.log"
+```
+
+### 第二步：启动datanode
+
+```bash
+METRICS_PORT=1831 nohup "$MILVUS_BIN" run datanode --run-with-subprocess \
+  > "$LOG_DIR/datanode.log" 2>&1 &
+echo "$!" > "$PID_DIR/datanode.pid"
+sleep 10
+kill -0 "$(cat "$PID_DIR/datanode.pid")"
+tail -n 30 "$LOG_DIR/datanode.log"
+```
+
+### 第三步：启动8个工作QueryNode
+
+每个进程使用独立业务端口及CPU集合，保留已跑通命令中的算法参数：`expandBatch=42`、`maxActiveQueries=32`，Search/Distance/READ/RPC工作线程分别为10/14/2/5。
+
+```bash
+for n in 0 1 2 3 4 5 6 7; do
+    port=$((1832 + n))
+    cpu_range="${QN_CPU_RANGES[$n]}"
+    numa_node="${QN_NUMA_NODES[$n]}"
+    nohup numactl --physcpubind="$cpu_range" --membind="$numa_node" \
+      env MILVUS_CONF_querynodeport="$port" \
+      MILVUS_CONF_querynodeUbSeedDir="$INDEX_DIR" \
+      MILVUS_CONF_querynodeUbExpandBatch=42 \
+      MILVUS_CONF_querynodeUbMaxActiveQueries=32 \
+      MILVUS_CONF_querynodeUbThreadsSearch=10 \
+      MILVUS_CONF_querynodeUbThreadsDistance=14 \
+      MILVUS_CONF_querynodeUbThreadsReadProgress=2 \
+      MILVUS_CONF_querynodeUbThreadsRpcProgress=5 \
+      MILVUS_CONF_querynodeUbCpuBindMode=auto \
+      MILVUS_CONF_querynodeUbCpuLayout=llc-spread \
+      MILVUS_CONF_querynodeUbAllowedCpusSource=yaml \
+      MILVUS_CONF_querynodeUbAllowedCpus="$cpu_range" \
+      METRICS_PORT="$port" \
+      "$MILVUS_BIN" run querynode --run-with-subprocess \
+      > "$LOG_DIR/querynode_$port.log" 2>&1 &
+    echo "$!" > "$PID_DIR/querynode_$port.pid"
+    sleep 2
+    kill -0 "$(cat "$PID_DIR/querynode_$port.pid")" || exit 1
+done
+sleep 20
+```
+
+端口用于区分进程，不能直接作为全局图分片编号。实际分片归属由本版本接入层的装载和分配逻辑决定，在后续Load及算法日志中核对8个全局分片与参与进程的对应关系。
+
+### 第四步：启动mixcoord
+
+```bash
+METRICS_PORT=1840 nohup "$MILVUS_BIN" run mixcoord --run-with-subprocess \
+  > "$LOG_DIR/mixcoord.log" 2>&1 &
+echo "$!" > "$PID_DIR/mixcoord.pid"
+sleep 20
+kill -0 "$(cat "$PID_DIR/mixcoord.pid")"
+tail -n 30 "$LOG_DIR/mixcoord.log"
+```
+
+### 第五步：启动proxy
+
+```bash
+METRICS_PORT=1841 nohup "$MILVUS_BIN" run proxy --run-with-subprocess \
+  > "$LOG_DIR/proxy.log" 2>&1 &
+echo "$!" > "$PID_DIR/proxy.pid"
+sleep 30
+kill -0 "$(cat "$PID_DIR/proxy.pid")"
+tail -n 30 "$LOG_DIR/proxy.log"
+```
+
+### 检查进程和日志
+
+```bash
+for pid_file in "$PID_DIR"/*.pid; do
+    pid=$(cat "$pid_file")
+    kill -0 "$pid" || { printf '进程已退出: %s\n' "$pid_file"; exit 1; }
+done
+ps -eo pid,args | grep -F "$MILVUS_BIN run" | grep -v grep
+ss -lntp | grep -E ':(16745|183[0-9]|184[01])\b' || true
+tail -n 50 "$LOG_DIR/mixcoord.log" "$LOG_DIR/proxy.log"
+```
+
+**通过标准**：本次启动的各组件及8个QueryNode持续运行，没有持续的连接、设备或资源错误，Proxy监听端口与配置一致。由于采用子进程启动，`ps`行数不等于逻辑组件数；还需继续用客户端连接和四个功能模块验证整个链路。
+
+## 准备GIST数据及客户端
+
+### 安装Python依赖
+
+使用与Milvus 3.0接口兼容的PyMilvus。官方[Milvus v3.0.0发布说明](https://github.com/milvus-io/milvus/releases/tag/v3.0.0)列出的Python SDK版本为3.0.1；配套补丁版本若另有要求，以其说明为准。
+
+```bash
+python3 -m venv "$QS_ROOT/.venv"
+source "$QS_ROOT/.venv/bin/activate"
+python -m pip install 'pymilvus==3.0.1' h5py numpy
+python -c 'import pymilvus, h5py, numpy; print("pymilvus", pymilvus.__version__)'
+```
+
+### 获取数据并设置公共参数
+
+本例直接读取HDF5格式的GIST数据，包含`train`、`test`和`neighbors`，不需要转换为VectorDBBench格式。数据来源及格式说明见[ANN-Benchmarks数据集](https://github.com/erikbern/ann-benchmarks#data-sets)。
+
+```bash
+export MILVUS_HDF5="$QS_ROOT/datasets/gist-960-euclidean.hdf5"
+mkdir -p "$(dirname "$MILVUS_HDF5")"
+# 已有同一数据文件时，跳过下载并修改上面的路径
+curl -fL https://ann-benchmarks.com/gist-960-euclidean.hdf5 -o "$MILVUS_HDF5"
+
+export MILVUS_URI=http://127.0.0.1:16745
+export MILVUS_COLLECTION="gist_smoke_$(date +%Y%m%d_%H%M%S)_$RANDOM"
+export MILVUS_DIM=960
+export MILVUS_TOPK=10
+export MILVUS_NQ=1
+export MILVUS_EF=200
+export MILVUS_M=64
+export MILVUS_EFC=40
+export MILVUS_SHARDS=8
+export MILVUS_GLOBAL_SHARDS=8
+export MILVUS_INSERT_BATCH=10000
+export MILVUS_RPC_TIMEOUT=600
+export MILVUS_TIMEOUT=86400
+printf '本次集合: %s\n' "$MILVUS_COLLECTION"
+```
+
+`MILVUS_URI`使用当前Proxy实际地址和端口。此连接示例沿用隔离功能测试环境；启用鉴权时还需按数据库侧说明配置连接凭据。
+
+接下来的4个模块在同一已激活虚拟环境的终端中顺序执行，始终使用同一个`MILVUS_COLLECTION`。更换终端时重新设置相同值，不要在步骤之间重新生成集合名。每个模块单独连接Milvus，便于定位失败阶段。
+
+## 模块一：创建集合并导入GIST
+
+本模块导入全部100万条训练向量，将训练行号作为主键，保证后面能与HDF5真值ID对应。每批10000条，每批约36.6 MiB原始float32向量数据，仍需考虑RPC消息和序列化开销。
+
+```bash
+python - <<'PY'
+import os
+import h5py
+import numpy as np
+from pymilvus import Collection, CollectionSchema, DataType, FieldSchema, connections, utility
+
+uri = os.environ["MILVUS_URI"]
+name = os.environ["MILVUS_COLLECTION"]
+rpc_timeout = float(os.environ["MILVUS_RPC_TIMEOUT"])
+stage_timeout = float(os.environ["MILVUS_TIMEOUT"])
+dim = int(os.environ["MILVUS_DIM"])
+batch_size = int(os.environ["MILVUS_INSERT_BATCH"])
+assert batch_size > 0
+connections.connect(uri=uri, timeout=rpc_timeout)
+if utility.has_collection(name):
+    raise RuntimeError(f"集合 {name} 已存在，请确认状态，不要重复导入")
+
+with h5py.File(os.environ["MILVUS_HDF5"], "r") as h5:
+    for key in ("train", "test", "neighbors"):
+        assert key in h5, f"HDF5缺少{key}"
+    rows, actual_dim = h5["train"].shape
+    assert rows == 1_000_000 and actual_dim == dim == 960
+    schema = CollectionSchema(fields=[
+        FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=False),
+        FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=dim),
+    ], description="GIST global HNSW functional verification")
+    col = Collection(name=name, schema=schema, consistency_level="Strong",
+                     shards_num=int(os.environ["MILVUS_SHARDS"]), timeout=rpc_timeout)
+    for begin in range(0, rows, batch_size):
+        end = min(begin + batch_size, rows)
+        vectors = np.asarray(h5["train"][begin:end], dtype=np.float32)
+        ids = np.arange(begin, end, dtype=np.int64)
+        result = col.insert([ids.tolist(), vectors.tolist()], timeout=stage_timeout)
+        assert result.insert_count == end - begin
+        if end % 100000 == 0 or end == rows:
+            print(f"inserted {end}/{rows}", flush=True)
+    col.flush(timeout=stage_timeout)
+    assert col.num_entities == rows, f"行数不符: {col.num_entities}"
+    print("IMPORT_OK", name, "rows=", col.num_entities)
+connections.disconnect("default")
+PY
+```
+
+**通过标准**：最后输出`IMPORT_OK`，行数为1000000。失败时先排查连接、消息大小、存储和写入状态，不要重复执行导入导致数据状态混淆。
+
+## 模块二：构建8分片全局HNSW索引
+
+`index_type`使用`HNSW`，在索引参数中传入`global_index_shard_count`，由配套Milvus接入层创建全局图。集合写入分片数与全局图分片数是不同参数，本例都取8，全局图参与进程数也应匹配8。
+
+```bash
+python - <<'PY'
+import os
+from pymilvus import Collection, connections, utility
+
+name = os.environ["MILVUS_COLLECTION"]
+rpc_timeout = float(os.environ["MILVUS_RPC_TIMEOUT"])
+stage_timeout = float(os.environ["MILVUS_TIMEOUT"])
+connections.connect(uri=os.environ["MILVUS_URI"], timeout=rpc_timeout)
+col = Collection(name)
+assert col.num_entities == 1_000_000
+col.create_index(
+    field_name="vector", index_name="idx_vector",
+    index_params={
+        "index_type": "HNSW",
+        "metric_type": "L2",
+        "params": {
+            "M": int(os.environ["MILVUS_M"]),
+            "efConstruction": int(os.environ["MILVUS_EFC"]),
+            "global_index_shard_count": str(int(os.environ["MILVUS_GLOBAL_SHARDS"])),
+        },
+    },
+    timeout=stage_timeout,
+)
+utility.wait_for_index_building_complete(name, index_name="idx_vector", timeout=stage_timeout)
+progress = utility.index_building_progress(name, index_name="idx_vector", timeout=rpc_timeout)
+print("index progress:", progress)
+assert int(progress.get("indexed_rows", -1)) >= 1_000_000
+print("INDEX_OK")
+connections.disconnect("default")
+PY
+```
+
+**通过标准**：等待索引构建完成，已索引行数覆盖100万条，输出`INDEX_OK`。构建超时时查看datanode及相关构建日志，不能把提交索引请求成功视为构建完成。
+
+## 模块三：加载集合
+
+加载刚才构建的索引，等待数据就绪，并打印副本和QueryNode信息供核对。
+
+```bash
+python - <<'PY'
+import os
+from pymilvus import Collection, connections, utility
+
+name = os.environ["MILVUS_COLLECTION"]
+rpc_timeout = float(os.environ["MILVUS_RPC_TIMEOUT"])
+stage_timeout = float(os.environ["MILVUS_TIMEOUT"])
+connections.connect(uri=os.environ["MILVUS_URI"], timeout=rpc_timeout)
+col = Collection(name)
+col.load(replica_number=1, timeout=stage_timeout)
+utility.wait_for_loading_complete(name, timeout=stage_timeout)
+print("loading progress:", utility.loading_progress(name, timeout=rpc_timeout))
+print("load state:", utility.load_state(name))
+try:
+    replicas = col.get_replicas()
+    groups = getattr(replicas, "groups", [replicas]) if not isinstance(replicas, (list, tuple)) else replicas
+    for group in groups:
+        node_ids = getattr(group, "node_ids", getattr(group, "group_nodes", []))
+        print("replica group nodes:", sorted(int(x) for x in node_ids))
+except Exception as exc:
+    print("replica information unavailable:", exc)
+print("LOAD_OK")
+connections.disconnect("default")
+PY
+```
+
+**通过标准**：装载等待完成，进度为100%，集合Loaded并输出`LOAD_OK`。结合QueryNode日志核对全局图8个分片的实际归属和资源发布；客户端副本信息只能辅助检查，不能单独证明算法链路已启用。
+
+## 模块四：检索并计算样本召回率
+
+读取HDF5中的前`MILVUS_NQ`条查询向量及对应真值，以`ef=200`、top-K为10执行裸向量检索。默认只查1条，属于功能冒烟测试，不统计QPS。
+
+```bash
+python - <<'PY'
+import os
+import h5py
+import numpy as np
+from pymilvus import Collection, connections
+
+name = os.environ["MILVUS_COLLECTION"]
+topk = int(os.environ["MILVUS_TOPK"])
+nq = int(os.environ["MILVUS_NQ"])
+ef = int(os.environ["MILVUS_EF"])
+rpc_timeout = float(os.environ["MILVUS_RPC_TIMEOUT"])
+assert 1 <= nq <= 100
+assert 0 < topk <= ef
+with h5py.File(os.environ["MILVUS_HDF5"], "r") as h5:
+    rows = h5["train"].shape[0]
+    assert topk <= h5["neighbors"].shape[1]
+    queries = min(nq, h5["test"].shape[0])
+    assert queries > 0
+    vectors = np.asarray(h5["test"][:queries], dtype=np.float32)
+    ground_truth = np.asarray(h5["neighbors"][:queries, :topk], dtype=np.int64)
+
+connections.connect(uri=os.environ["MILVUS_URI"], timeout=rpc_timeout)
+col = Collection(name)
+results = col.search(
+    data=vectors.tolist(), anns_field="vector",
+    param={"metric_type": "L2", "params": {"ef": ef}},
+    limit=topk, consistency_level="Strong", timeout=rpc_timeout,
+)
+assert len(results) == queries
+matches = 0
+for i, hits in enumerate(results):
+    ids = [int(hit.id) for hit in hits]
+    distances = [float(hit.distance) for hit in hits]
+    assert len(ids) == topk and len(set(ids)) == topk
+    assert all(0 <= value < rows for value in ids)
+    assert np.isfinite(distances).all()
+    truth = set(int(value) for value in ground_truth[i])
+    assert len(truth) == topk and all(0 <= value < rows for value in truth)
+    count = len(set(ids) & truth)
+    matches += count
+    print(f"query={i} recall@{topk}={count / topk:.4f}")
+    print("ids:", ids)
+    print("distances:", distances)
+recall = matches / (queries * topk)
+print(f"SEARCH_COMPLETED recall@{topk}={recall:.4f} nq={queries}")
+connections.disconnect("default")
+PY
+```
+
+**通过标准**：每条查询返回10个有效且不重复的ID及有限距离，输出`SEARCH_COMPLETED`和样本Recall@10，无检索异常。样本召回率用于检查本次查询，不能用单条查询的结果代表整个数据集的召回率，也不使用任意低阈值直接宣称质量达标。
+
+## 检查算法实际生效
+
+四个功能模块完成后，再检查本次集合对应的服务日志：
+
+```bash
+for port in 1832 1833 1834 1835 1836 1837 1838 1839; do
+    printf '\n=== querynode %s ===\n' "$port"
+    grep -Ei 'URMA|global.*shard|UB effective|UB worker path search done|mailbox|UbEnableDistributedSearch' \
+      "$LOG_DIR/querynode_$port.log" | tail -50
+done
+```
+
+核对实际运行版本及配置、8个全局分片与参与进程的归属、URMA资源发布及对端导入，以及本次查询的算法完成记录。单纯返回top-K或日志里出现`URMA`字样不能代替链路核验；日志名称以所部署版本为准。
+
+本次流程完成后，保留集合、索引和日志，便于复查。重复测试时不要自动删除同名前缀的所有集合；先确认旧集合和图状态，按配套数据库流程释放或重置后再开始新一轮。
+
+## 常见问题
+
+| 现象 | 检查方向 |
+| ---- | -------- |
+| 补丁无法应用或联合编译失败 | Milvus版本、补丁、算法目录及接口是否匹配，完整编译依赖是否已安装 |
+| Pulsar无法启动 | Compose实际数据卷、运行UID/GID和目录权限，查看容器日志 |
+| Milvus进程刚启动就退出 | 动态库、配置文件、端口、URMA设备，检查对应组件日志 |
+| numactl或CPU绑定失败 | CPU编号是否存在且允许使用，CPU范围与NUMA节点是否匹配 |
+| 客户端连不上 | Proxy实际监听端口、地址、代理设置及鉴权配置 |
+| 导入或建索引超时 | 写入批大小、中间件状态、存储、构建日志及当前阶段进度 |
+| Load或检索等待、报资源未就绪 | 8个工作QueryNode、实际全局分片数、URMA链路和图资源发布状态 |
+| 召回异常 | 是否导入全量数据，主键与训练行号是否一致，查询及真值是否来自同一HDF5，实际算法及ef是否生效 |
+
+更多算法接口语义见《[API参考](./api_reference.md)》，详细排查见《[常见问题和故障案例](./FAQ.md)》。
 
 ## 集成C ABI
 
-宿主进程按以下顺序调用`ub_c_api.h`（接口详细语义见《[API参考](./api_reference.md)》）：
+本例由Milvus接入层完成算法库调用，部署和测试过程中无需手工调用C接口。自行开发宿主时，按以下生命周期接入；各接口的参数、前置条件和错误处理见《[API参考](./api_reference.md)》。
 
-1. **注入上下文**：`UbSetUrmaContext`注入宿主持有的URMA上下文（服务模式必需，本库不自行初始化URMA；启用后不可再设置）。
-2. **配置**：`UbConfigure`一次性暂存线程/内存预算/超时等配置。须提供有效的非空设备名`urma_device_name`、非空CPU列表`allowed_cpus`及其长度，并将`max_active_queries`设为大于或等于1（如16）。其他字段取0/NULL一般保留内置默认。建议先调用`UbEstimateRuntimeMemory`，提前检查配置并估算运行时内存；`max_active_queries=0`会在该步返回`kOutOfRange`。若未做估算，该错误会在创建邮箱的配置解析阶段返回；装载成功不代表配置已通过校验。CPU列表为空也会导致估算或创建邮箱失败。
-3. **装载**：推荐`UbLoadShardFromDir`装载单个分片，内置各分片行数总和与ntotal的一致性校验，并可回写元数据，适用于“一个进程一个分片”的服务部署；`UbSeedFromDir`一次性装载全部分片或指定分片子集，适用于本地调试与验证场景。随后`UbSetLocalShard`钉住本分片；可用`UbGetShardStatus`读取装载状态快照。
-4. **绑定图身份**：`UbBindGlobalGraphIdentity`把全局图绑定到其产物身份（graph_id + epoch，相同身份重复调用幂等）。
-5. **邮箱**：`UbEnsureRpcMailbox`构建RPC（Remote Procedure Call，远程过程调用）距离邮箱，并取回三段注册内存地址用于发布：requests（角色2，distance-tasks）、responses（角色3，distance-results）、notify（角色4，distance-notify）。这三段与第6步取回的图、向量两块注册内存，合为本分片对外发布的五类注册内存（角色0~4）。运行时还会注册仅供本地使用的READ结果缓冲区，该缓冲区不属于对外发布的五类资源。
-6. **发布**：`UbGetGraphPublishSnapshot`取回本分片图（角色0，topology）、向量（角色1，vectors）注册内存与全局入口点信息。资源目录是宿主维护的资源元数据服务，Milvus侧使用etcd，并非索引文件所在的磁盘目录。宿主通过自身的资源注册与发布组件，按角色分别发布图、向量、requests、responses和notify资源记录（ResourceRecord），每条记录描述一种资源。记录包含注册内存信息、分片与图身份，以及链路激活所需的端点信息；对端读取记录后激活链路，再导入句柄。gd_hnsw的C接口只提供本地内存快照，不代替宿主向etcd发布记录。
-7. **导入**：对每个对端分片与每种资源角色调用`UbImportPeerHandles`。角色0~4与注册内存一一对应：0=topology（第0层图结构）、1=vectors（基向量）、2=distance-tasks（距离请求，邮箱requests段）、3=distance-results（距离响应，邮箱responses段）、4=distance-notify（完成通知，邮箱notify段）。导入前可用`UbValidateShardLayout`校验分片数量、编号范围与入口点归属。该接口不比对构建版本或内容指纹，不能单独保证目录记录与本地索引来自同一次构建。
-8. **启用**：`UbEnableDistributedSearch`启动五类线程运行时。启动前提（任一不满足即拒绝）：恰好一个本地分片、本地RPC邮箱已构建、每个远端分片全部五种角色的对端句柄均已导入、已注入URMA上下文并配置有效的非空设备名。启用失败的原因可写入`msg`，资源就绪后可重试。`UbRpcDistanceReady`仅表示运行时对象是否存在，不能代替健康检查。
-9. **检索**：`UbSearch`或`UbSearchWithTimeout`同步返回全局top-K（不足填充-1/+inf）。`UbSearch`使用配置超时（`query_timeout_ms`）；`UbSearchWithTimeout`由调用方传入本次查询的剩余时间预算（纳秒，含排队时间），宿主侧有查询级截止时间（如请求超时预算）时须使用该版本，传-1则等价于`UbSearch`。每次调用要求`1 ≤ nq ≤ 4096`，更多向量须拆分批次；查询向量不得含NaN或无穷值。
-10. **释放**：`UbStopDistributedSearch`停止运行时，`UbShutdown`释放全部状态。
-
-## 接入Milvus
-
-本节以Milvus为例介绍宿主接入形态；其他宿主可参照上文[集成C ABI](#集成c-abi)的生命周期自行接入。
-
-gd_hnsw运行时随Milvus集成分发，经C ABI（Application Binary Interface，应用二进制接口）接入Milvus QueryNode。Milvus侧提供`queryNode.urma`/`queryNode.ub`配置项控制启用与设备、线程等参数，配置键与默认值以Milvus侧资料为准。
-
-接入链路当前仅支持**裸向量检索**：单个FloatVector查询、无标量过滤/group-by/迭代器、`search_params`仅接受声明的字段（未知字段拒绝），并要求`0 < topk <= ef`。这里的`ef`是Milvus请求字段名，对应算法库的`ef_search`参数；该接入层未收到`ef`时使用`topk`，不采用参考构建写入索引的默认64。
-
-## 验证部署
-
-部署完成后逐项确认：
-
-1. 集群各组件Running，查询节点进程数与索引分片数一致（一个进程一个分片）。
-2. 各分片的五块注册内存（topology/vectors/distance-tasks/distance-results/distance-notify）已在资源目录发布，对端完成链路激活与句柄导入。
-3. 集合装载完成，检索请求返回全局top-K结果。
-4. 时延、吞吐等验收口径见《[最佳实践](./best_practices.md)》"验收Checklist"。
+1. 通过`UbSetUrmaContext`注入宿主持有的URMA上下文。
+2. 通过`UbConfigure`配置运行时，调用`UbEstimateRuntimeMemory`检查配置并估算内存。
+3. 通过`UbLoadShardFromDir`装载本进程的分片，通过`UbSetLocalShard`设置本地分片身份。
+4. 通过`UbBindGlobalGraphIdentity`绑定全局图身份。
+5. 通过`UbEnsureRpcMailbox`创建距离请求、响应和通知邮箱。
+6. 通过`UbGetGraphPublishSnapshot`取得图和向量快照，由宿主发布本分片的五类注册内存资源。
+7. 由宿主发现对端记录并激活链路，通过`UbImportPeerHandles`导入对端资源句柄。
+8. 资源就绪后调用`UbEnableDistributedSearch`启用分布式检索。
+9. 调用`UbSearch`或`UbSearchWithTimeout`发起查询。
+10. 通过`UbStopDistributedSearch`停止运行时，通过`UbShutdown`释放状态。
 
 ## 缩略语
 
 | 缩略语 | 英文全称 | 中文全称 |
-|--------|----------|----------|
-| ABI | Application Binary Interface | 应用二进制接口 |
+| ------ | -------- | -------- |
 | HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
-| HTTP | HyperText Transfer Protocol | 超文本传输协议 |
-| IP | Inner Product | 内积 |
-| L2 | L2 Norm | 欧氏距离 |
-| RPC | Remote Procedure Call | 远程过程调用 |
-| TCP | Transmission Control Protocol | 传输控制协议 |
+| NUMA | Non-Uniform Memory Access | 非一致内存访问 |
+| QN | QueryNode | 查询节点 |
 | URMA | Unified Remote Memory Access | 统一远端内存访问 |
 
 ## 修订记录
 
 | 文档版本 | 发布日期 | 修改说明 |
-|------|----------|------------|
+| -------- | -------- | -------- |
 | 01 | 2026-12-30 | 第一次正式发布。 |

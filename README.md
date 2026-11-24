@@ -25,7 +25,7 @@
 
 ### 仓库工程目录
 
-以下按`dev_for_26930`分支列出仓库工程的完整目录，并补入中文常见问题文档。
+以下为`dev_for_26930`分支的工程结构参考，包含配套中文文档。《[快速入门](./docs/zh/quick_start.md)》使用`master`分支的`gd_hnsw_urma/`算法源码，目录说明见下文“[独立算法库交付目录](#独立算法库交付目录)”。获取源码和编译时，应按所选分支及实际Commit核对目录，不要混用不同分支的构建入口。
 
 ```text
 gd-hnsw/
@@ -273,7 +273,7 @@ gd_hnsw_urma/
 ## 学习文档
 
 | 学习文档名称 | 学习文档简介 |
-|--------------|--------------|
+| --- | --- |
 | [特性介绍](./docs/zh/feature_introduction.md) | 提供gd_hnsw架构介绍、核心算法原理及特性说明。 |
 | [版本说明书](./docs/zh/release_notes.md) | 提供gd_hnsw每个发布版本的基础信息、配套环境与特性更新信息。 |
 | [快速入门](./docs/zh/quick_start.md) | 提供gd_hnsw快速入门指导，含环境准备、索引构建与Milvus接入示例。 |
@@ -285,7 +285,7 @@ gd_hnsw_urma/
 ## 缩略语
 
 | 缩略语 | 英文全称 | 中文全称 |
-|--------|----------|----------|
+| --- | --- | --- |
 | ABI | Application Binary Interface | 应用二进制接口 |
 | ARM | Advanced RISC Machine | 高级精简指令集机器 |
 | CC-BY | Creative Commons Attribution | 知识共享署名 |

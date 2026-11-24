@@ -47,7 +47,7 @@
 请逐项确认：
 
 1. 算法库构建时`ENABLE_URMA=ON`；
-2. 各节点URMA设备可用（`ubctl`等工具枚举）；
+2. 各节点URMA设备可用，通过`urma_admin show`枚举设备，并按《[快速入门](./quick_start.md#检查urma设备和链路)》核对设备属性、EID及节点间收发测试；
 3. 传输模式与设备能力匹配（当前驱动要求`rm`可靠消息模式）；
 4. 对端资源已在资源目录中发布并完成导入。
 
@@ -82,7 +82,7 @@ URMA 跨节点数据面对网络质量敏感，组网验收建议全部以实测
 2. URMA 设备不可枚举或传输模式与设备能力不匹配：启用分布式检索失败，当前驱动要求`rm`可靠消息模式；
 3. 未注入 URMA 上下文（未调用`UbSetUrmaContext`）：启用分布式检索返回`kInvalidArgument`。
 
-排查建议：用`ubctl`等工具确认设备可枚举，确认库以`ENABLE_URMA=ON`编译，并检查接入流程已注入上下文。
+排查建议：按《[快速入门](./quick_start.md#检查urma设备和链路)》确认设备、EID及RM能力，确认库以`ENABLE_URMA=ON`编译，并检查接入流程已注入上下文。
 
 ### 跑通路径验证失败排查
 
@@ -96,36 +96,64 @@ URMA 跨节点数据面对网络质量敏感，组网验收建议全部以实测
 
 **日志查看入口**
 
-算法库默认将带`[ub_hnsw INFO]`等前缀的日志写入进程标准错误，不使用固定日志文件；宿主可接管日志输出。Milvus的`log.file.rootPath`为空时，日志默认输出到标准输出和标准错误；配置该项后，到配置目录查看日志。使用Docker部署时执行`docker logs <容器名> --tail 200`；使用Kubernetes部署时执行`kubectl logs -n <命名空间> <Pod名> -c <容器名> --tail=200`。Kubernetes容器重启后，可加`--previous`查看上一次容器的日志。
+算法库默认将带`[ub_hnsw INFO]`等前缀的日志写入进程标准错误，不使用固定日志文件；宿主可接管日志输出。Milvus的`log.file.rootPath`为空时，日志默认输出到标准输出和标准错误；配置该项后，到配置目录查看日志。
+
+快速入门通过Docker Compose运行etcd、MinIO和Pulsar，Milvus各组件直接以进程方式启动。启动命令将标准输出和标准错误重定向到`$LOG_DIR`下的组件日志，并把PID记录到`$PID_DIR`；优先检查这些日志和PID，以及Compose中间件状态。
+
+采用其他部署方式时，按实际环境补充日志检查：Docker使用`docker logs <容器名> --tail 200`，Kubernetes使用`kubectl logs -n <命名空间> <Pod名> -c <容器名> --tail=200`；容器重启后可加`--previous`查看上一次容器日志。
 
 | 环节 | 常见失败原因 | 自检命令/接口 |
-|------|--------------|----------------|
-| 环境准备 | URMA设备未识别、传输模式与设备能力不匹配、跨节点网络不通 | `ubctl`枚举设备；`nc`/`wget`实测TCP/HTTP连通性 |
+| --- | --- | --- |
+| 环境准备 | URMA设备未识别、EID无效、传输模式不匹配、节点间通信失败 | 按快速入门检查URMA设备和链路；另用`nc`/`wget`检查数据库服务的TCP/HTTP连通性 |
 | 编译/获取算法库 | 未找到UMDK/URMA头文件与库、fmt缺失、编译器过旧 | 见本文"安装编译相关"条目 |
-| 部署集群 | 进程数与分片数不一致、组件未Running | 检查集群各组件状态 |
-| 构建索引三元组 | 三元组文件缺失或不完整 | 确认`global.meta`/`upper_graph.index`/`shard_N.index`齐全 |
-| 装载并启用 | 分片未装载、邮箱未创建、对端句柄未导入、URMA上下文未注入 | `UbGetShardStatus`读取装载状态；`UbRpcDistanceReady`确认运行时是否存在；`UbEnableDistributedSearch`的`msg`参数取失败原因 |
-| 查询验证 | 查询参数越界、运行时未启用 | `UbPing`验证接口连通；`UbLastError`取错误详情 |
+| 部署集群 | 组件退出、中间件连接失败、工作QueryNode数量与全局图分片数不匹配 | 检查PID、组件日志和Compose状态；本例8个工作QueryNode对应8个全局图分片，不计Proxy、协调组件及其他数据处理组件 |
+| 导入数据 | 连接失败、写入失败、数据状态或行数不符 | 检查客户端输出、datanode及中间件日志，确认`IMPORT_OK`与100万条数据 |
+| 构建全局索引 | 构建任务未完成、参数或构建组件异常 | 检查`create_index`结果、索引构建进度与datanode相关日志，确认`INDEX_OK`及已索引行数 |
+| 装载并启用 | 分片未装载、资源未发布、对端未导入、URMA上下文未注入 | 检查加载进度及QueryNode日志，核对8个全局分片归属、资源发布和对端导入；客户端Load完成不能单独证明算法已启用 |
+| 查询验证 | 查询参数越界、集合未加载、运行时未启用 | 检查客户端错误、`SEARCH_COMPLETED`及对应QueryNode算法完成日志；核对距离、top-K和ef |
+
+自行开发宿主、直接调用C ABI时，再按《[API参考](./api_reference.md)》核对`global.meta`、`upper_graph.index`及本地`shard_N.index`，并使用`UbGetShardStatus`、`UbEnableDistributedSearch`和`UbLastError`辅助定位。`UbRpcDistanceReady`仅表示运行时对象是否存在，`UbPing`仅验证接口调用连通，均不能代替实际检索验证。快速入门中的索引由Milvus接入层构建和装载，无需手工向`INDEX_DIR`放置索引三元组。
 
 **常用自检命令**
 
-将下面的IP、端口、命名空间和索引路径替换为实际部署值。`nc`检查TCP端口，`wget`只用于HTTP服务；不要用HTTP探测命令测试仅提供gRPC的接口。
+以下目录沿用快速入门。根据实际配置修改路径及服务地址；本例Proxy端口为16745、etcd访问端口为31114，不一定等于容器内部端口。`nc`检查TCP端口，`wget`只用于HTTP服务；不要用HTTP探测命令测试仅提供gRPC的接口。
 
 ```bash
-# 查看本版本设备管理工具支持的设备枚举命令。
-ubctl --help
+export QS_ROOT=/opt/milvus-urma
+export MILVUS_HOME="$QS_ROOT/milvus"
+export LOG_DIR="$MILVUS_HOME/logs"
+export PID_DIR="$MILVUS_HOME/run"
+export COMPOSE_DIR="$MILVUS_HOME"  # 完整Compose配置所在目录
+PROXY_HOST=127.0.0.1              # 按Proxy实际地址修改
+ETCD_HOST=请替换为milvus.yaml中etcd的实际地址
+
+# 查看URMA设备，完整检查步骤见快速入门。
+urma_admin show
 
 # 检查客户端到Milvus Proxy，以及节点到etcd的TCP连通性。
-nc -vz <Milvus-Proxy-IP> 19530
-nc -vz <etcd-IP> 2379
+nc -vz "$PROXY_HOST" 16745
+nc -vz "$ETCD_HOST" 31114
 
 # 检查本机监听端口和时间同步状态。
 ss -lntp
 timedatectl status
 
-# 检查Kubernetes组件状态与本进程所需的索引文件。
-kubectl get pods -n <命名空间> -o wide
-ls -lh /data/idx/global.meta /data/idx/upper_graph.index /data/idx/shard_<本地分片号>.index
+# 检查本次启动的Milvus进程及日志。
+for pid_file in "$PID_DIR"/*.pid; do
+    test -s "$pid_file" || { printf '请核对PID目录: %s\n' "$PID_DIR"; exit 1; }
+    pid=$(cat "$pid_file")
+    if kill -0 "$pid" 2>/dev/null; then
+        ps -p "$pid" -o pid,args
+    else
+        printf '进程已退出: %s\n' "$pid_file"
+    fi
+done
+tail -n 50 "$LOG_DIR/mixcoord.log" "$LOG_DIR/proxy.log" "$LOG_DIR/datanode.log"
+tail -n 50 "$LOG_DIR"/querynode_*.log
+
+# 检查Compose中间件；目录应包含与启动时相同的完整部署配置。
+(cd "$COMPOSE_DIR" && docker compose ps && \
+  docker compose logs --tail=50 etcd minio pulsar)
 ```
 
 ## 原理与使用相关
@@ -153,7 +181,7 @@ gd_hnsw 的全局索引与传统分片式索引有何不同？
 ## 缩略语
 
 | 缩略语 | 英文全称 | 中文全称 |
-|--------|----------|----------|
+| --- | --- | --- |
 | CMake | Cross-platform Make | 跨平台构建工具 |
 | CPU | Central Processing Unit | 中央处理器 |
 | FAQ | Frequently Asked Questions | 常见问题 |
@@ -168,5 +196,5 @@ gd_hnsw 的全局索引与传统分片式索引有何不同？
 ## 修订记录
 
 | 文档版本 | 发布日期 | 修改说明 |
-|------|----------|------------|
+| --- | --- | --- |
 | 01 | 2026-12-30 | 第一次正式发布。 |
