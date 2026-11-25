@@ -1,14 +1,51 @@
 # 快速入门
 
-本文介绍gd_hnsw与Milvus集成后的功能验证流程：获取Milvus源码和URMA补丁，加入算法源码并联合编译，通过Docker Compose启动中间件，再逐项启动Milvus组件和8个工作QueryNode，最后使用PyMilvus完成GIST数据导入、全局索引构建、加载和检索。
+本文介绍gd_hnsw与Milvus集成的功能验证流程，以及通过C ABI集成算法库的接入流程。
 
-本例采用直接运行Milvus进程的方式，使用8个全局图分片。操作不绑定具体服务器名称或业务IP，路径、端口和CPU/NUMA分配均可按运行环境配置。URMA设备及软件配套要求见《[安装指南](./installation_guide.md)》。
+## 集成Milvus
 
-执行顺序：准备源码和配置 → 联合编译 → 启动etcd、MinIO和Pulsar → 设置进程环境 → streamingnode → datanode → 8个QueryNode → mixcoord → proxy → 导入GIST → 构建全局索引 → 加载 → 检索并计算样本召回率。
+### 特性简介
 
-## 准备源码和运行环境
+gd_hnsw是算法侧的全局分布式HNSW检索库，通过URMA提供跨分片图搜索与距离计算能力。Milvus是向量数据库，负责向量数据管理、索引构建与加载，并向用户提供检索接口。两者集成后，用户通过Milvus完成数据导入、建索引、加载和检索，由gd_hnsw执行全局图检索。
 
-### 获取源码及补丁
+### 环境部署
+
+本示例采用直接运行Milvus进程的方式，在一台具备URMA设备的鲲鹏服务器上启动8个工作QueryNode，使用8个全局图分片。参考环境及配套软件如下。
+
+| 项目 | 本示例环境及软件要求 |
+| ---- | -------------------- |
+| 服务器 | 鲲鹏950处理器，AArch64（ARM64）架构，具备配套URMA设备 |
+| CPU与NUMA分配 | 示例使用4个NUMA节点，每个工作QueryNode分配48个逻辑CPU；分配方法见“[规划QueryNode的CPU和NUMA](#规划querynode的cpu和numa)” |
+| 操作系统 | openEuler 24.03 LTS SP3 |
+| 编译器 | GCC 12.3，编译器与标准库支持C++20 |
+| 构建工具 | CMake 3.22及以上版本 |
+| 数据库 | Milvus v3.0.0，应用配套URMA补丁并与gd_hnsw联合编译 |
+| 容器运行方式 | 使用Docker和Docker Compose运行etcd、MinIO、Pulsar；Milvus各组件在宿主机直接以进程方式运行 |
+| etcd镜像 | `milvusdb/etcd:3.5.5-r2` |
+| MinIO镜像 | `minio/minio:RELEASE.2024-05-28T17-19-04Z` |
+| Pulsar镜像 | `apachepulsar/pulsar:2.8.2` |
+| 验证客户端 | Python 3、PyMilvus 3.0.1、h5py和NumPy |
+| 其他工具 | Bash、Git、make、numactl和curl；完整数据库编译依赖按Milvus侧配套说明准备 |
+
+本示例在上述鲲鹏950、openEuler 24.03 LTS SP3环境中运行，仅作为功能验证参考。实际操作不绑定特定服务器名称或业务IP；使用满足配套要求的服务器，并根据本机CPU/NUMA拓扑、部署目录和服务地址填写后续参数。表中的CPU分配是本示例的配置，不作为所有部署场景的固定最低要求。中间件镜像取自本示例配套的Compose配置。
+
+URMA设备及软件配套要求请参见《安装指南》中的“[环境要求](./installation_guide.md#环境要求)”和“[安装UB相关组件与驱动](./installation_guide.md#安装ub相关组件与驱动)”。
+
+### 功能验证流程
+
+gd_hnsw与Milvus集成后的功能验证流程如下。
+
+1. [准备源码和运行环境](#准备源码和运行环境)。
+2. [准备数据库侧中间件](#准备数据库侧中间件)。
+3. [设置Milvus进程环境](#设置milvus进程环境)。
+4. [按顺序启动集群](#按顺序启动集群)。
+5. [准备GIST数据及客户端](#准备gist数据及客户端)。
+6. [检查算法实际生效](#检查算法实际生效)。
+7. [常见问题](#常见问题)。
+
+#### 准备源码和运行环境
+
+##### 获取源码及补丁
 
 | 材料 | 获取方式 |
 | ---- | -------- |
@@ -45,7 +82,7 @@ git -C "$ALGO_REPO" rev-parse HEAD
 
 补丁检查失败时，先核对Milvus版本、补丁版本及目录状态，不要跳过检查继续构建。记录两个仓库的Commit及补丁校验值，便于追溯本次运行版本。
 
-### 放置算法源码并联合编译
+##### 放置算法源码并联合编译
 
 补丁工程使用`internal/core/thirdparty/ub_hnsw`作为算法源码目录，该目录下应直接包含算法的`CMakeLists.txt`、`include/`和`src/`，避免多嵌套一层`gd_hnsw_urma`。
 
@@ -77,7 +114,7 @@ LD_LIBRARY_PATH="$MILVUS_HOME/internal/core/output/lib:${LD_LIBRARY_PATH:-}" \
 
 **通过标准**：构建成功，程序及动态库存在，动态链接依赖没有`not found`。编译环境、头文件、URMA依赖或其他第三方库缺失时，先按配套编译说明补齐。
 
-### 检查URMA设备和链路
+##### 检查URMA设备和链路
 
 先按《[安装指南](./installation_guide.md#安装ub相关组件与驱动)》安装配套驱动及UMDK/URMA组件。在每个运行QueryNode的节点上，以后续启动Milvus的用户执行以下检查。本例8个工作QueryNode部署在同一台服务器上，在该服务器执行即可；跨服务器部署时，每台均需检查。
 
@@ -123,7 +160,7 @@ LD_LIBRARY_PATH="$MILVUS_HOME/internal/core/output/lib:${LD_LIBRARY_PATH:-}" \
 
    **通过标准**：两端完成1000次收发测试，正常输出时延结果并成功退出，没有设备打开、建链或超时错误。按实际通信关系覆盖各节点间链路；失败时先修复设备、链路或权限问题，再启动Milvus。该测试验证基本通信，算法是否成功接入仍需完成后面的导入、构建、加载、检索及“[检查算法实际生效](#检查算法实际生效)”。
 
-### 核对数据库连接和算法配置
+##### 核对数据库连接和算法配置
 
 将数据库侧配套的完整配置放在`$MILVUS_HOME/configs/milvus.yaml`，数据库服务地址、凭据、数据卷及其他数据库参数按数据库侧部署说明配置。本文仅列与后续操作直接相关的连接信息和算法字段。
 
@@ -161,7 +198,7 @@ queryNode:
 
 后面的QueryNode启动命令会覆盖部分YAML字段：配置文件中的Distance/RPC线程数为15/7，本流程运行时使用14/5；`cpuLayout`由`contiguous`覆盖为`llc-spread`，CPU来源由`cgroup`覆盖为显式CPU列表。`expandBatch=42`及`maxActiveQueries=32`同样由启动环境设置。运行选项中的`--profile`用于计时信息输出，功能是否成功仍通过四个验证模块和服务日志判断。
 
-## 准备数据库侧中间件
+#### 准备数据库侧中间件
 
 由数据库侧准备完整Compose部署配置、环境变量及需要的覆盖文件，并完成数据卷和运行用户权限配置。以下以这些文件放在Milvus工程根目录为例，实际目录不同则修改`COMPOSE_DIR`。
 
@@ -178,7 +215,7 @@ docker compose logs --tail=80 etcd minio pulsar
 
 提供的Compose基础文件还包含编译容器定义，且未直接列出etcd、MinIO和Pulsar的宿主机端口映射；完整部署所需的端口映射、环境变量和覆盖配置由数据库侧配套说明补齐。本文继续使用已经准备好的数据库环境，不展开数据库组件内部配置。
 
-## 设置Milvus进程环境
+#### 设置Milvus进程环境
 
 后续启动命令在同一Bash终端依次执行。路径使用当前工作目录，日志和PID单独保存。
 
@@ -202,11 +239,9 @@ ps -eo pid,args | grep -F "$MILVUS_BIN run" | grep -v grep || true
 ss -lntp | grep -E ':(16745|183[0-9]|184[01])\b' || true
 ```
 
-如已存在本部署的旧进程或目标端口被占用，先确认其归属并按数据库侧停止流程处理，再启动本次进程。本文不自动强制结束旧进程。
-
 `INDEX_DIR`沿用配套启动环境中的本地索引目录参数。目录名称不代表实际分片数量；本例全局图由后面的`create_index`构建，目标分片数明确设置为8。应使用匹配补丁的全局索引配置，避免误用其他测试遗留的离线索引。
 
-### 规划QueryNode的CPU和NUMA
+##### 规划QueryNode的CPU和NUMA
 
 启动参数使用8个QueryNode，每进程分配48个逻辑CPU。下面是已验证启动命令采用的分配方式，执行前先核对实际拓扑：
 
@@ -233,106 +268,108 @@ QN_CPU_RANGES=(0-47 48-95 96-143 144-191 192-239 240-287 288-335 336-383)
 QN_NUMA_NODES=(0 0 1 1 2 2 3 3)
 ```
 
-## 按顺序启动集群
+#### 按顺序启动集群
 
 以下顺序沿用本次跑通的进程启动方式。前面启动的进程可能在等待协调服务期间重试连接，因此每步先检查进程和日志，全部组件启动后再统一验证服务可用性。等待时间用于复现启动节奏，不能单独作为健康判据。
 
-### 第一步：启动streamingnode
+1. 启动streamingnode。
 
-```bash
-cd "$MILVUS_HOME"
-METRICS_PORT=1830 nohup "$MILVUS_BIN" run streamingnode --run-with-subprocess \
-  > "$LOG_DIR/streamingnode.log" 2>&1 &
-echo "$!" > "$PID_DIR/streamingnode.pid"
-sleep 15
-kill -0 "$(cat "$PID_DIR/streamingnode.pid")"
-tail -n 30 "$LOG_DIR/streamingnode.log"
-```
+   ```bash
+   cd "$MILVUS_HOME"
+   METRICS_PORT=1830 nohup "$MILVUS_BIN" run streamingnode --run-with-subprocess \
+     > "$LOG_DIR/streamingnode.log" 2>&1 &
+   echo "$!" > "$PID_DIR/streamingnode.pid"
+   sleep 15
+   kill -0 "$(cat "$PID_DIR/streamingnode.pid")"
+   tail -n 30 "$LOG_DIR/streamingnode.log"
+   ```
 
-### 第二步：启动datanode
+2. 启动datanode。
 
-```bash
-METRICS_PORT=1831 nohup "$MILVUS_BIN" run datanode --run-with-subprocess \
-  > "$LOG_DIR/datanode.log" 2>&1 &
-echo "$!" > "$PID_DIR/datanode.pid"
-sleep 10
-kill -0 "$(cat "$PID_DIR/datanode.pid")"
-tail -n 30 "$LOG_DIR/datanode.log"
-```
+   ```bash
+   METRICS_PORT=1831 nohup "$MILVUS_BIN" run datanode --run-with-subprocess \
+     > "$LOG_DIR/datanode.log" 2>&1 &
+   echo "$!" > "$PID_DIR/datanode.pid"
+   sleep 10
+   kill -0 "$(cat "$PID_DIR/datanode.pid")"
+   tail -n 30 "$LOG_DIR/datanode.log"
+   ```
 
-### 第三步：启动8个工作QueryNode
+3. 启动8个工作QueryNode。
 
-每个进程使用独立业务端口及CPU集合，保留已跑通命令中的算法参数：`expandBatch=42`、`maxActiveQueries=32`，Search/Distance/READ/RPC工作线程分别为10/14/2/5。
+   每个进程使用独立业务端口及CPU集合，保留已跑通命令中的算法参数：`expandBatch=42`、`maxActiveQueries=32`，Search/Distance/READ/RPC工作线程分别为10/14/2/5。
 
-```bash
-for n in 0 1 2 3 4 5 6 7; do
-    port=$((1832 + n))
-    cpu_range="${QN_CPU_RANGES[$n]}"
-    numa_node="${QN_NUMA_NODES[$n]}"
-    nohup numactl --physcpubind="$cpu_range" --membind="$numa_node" \
-      env MILVUS_CONF_querynodeport="$port" \
-      MILVUS_CONF_querynodeUbSeedDir="$INDEX_DIR" \
-      MILVUS_CONF_querynodeUbExpandBatch=42 \
-      MILVUS_CONF_querynodeUbMaxActiveQueries=32 \
-      MILVUS_CONF_querynodeUbThreadsSearch=10 \
-      MILVUS_CONF_querynodeUbThreadsDistance=14 \
-      MILVUS_CONF_querynodeUbThreadsReadProgress=2 \
-      MILVUS_CONF_querynodeUbThreadsRpcProgress=5 \
-      MILVUS_CONF_querynodeUbCpuBindMode=auto \
-      MILVUS_CONF_querynodeUbCpuLayout=llc-spread \
-      MILVUS_CONF_querynodeUbAllowedCpusSource=yaml \
-      MILVUS_CONF_querynodeUbAllowedCpus="$cpu_range" \
-      METRICS_PORT="$port" \
-      "$MILVUS_BIN" run querynode --run-with-subprocess \
-      > "$LOG_DIR/querynode_$port.log" 2>&1 &
-    echo "$!" > "$PID_DIR/querynode_$port.pid"
-    sleep 2
-    kill -0 "$(cat "$PID_DIR/querynode_$port.pid")" || exit 1
-done
-sleep 20
-```
+   ```bash
+   for n in 0 1 2 3 4 5 6 7; do
+       port=$((1832 + n))
+       cpu_range="${QN_CPU_RANGES[$n]}"
+       numa_node="${QN_NUMA_NODES[$n]}"
+       nohup numactl --physcpubind="$cpu_range" --membind="$numa_node" \
+         env MILVUS_CONF_querynodeport="$port" \
+         MILVUS_CONF_querynodeUbSeedDir="$INDEX_DIR" \
+         MILVUS_CONF_querynodeUbExpandBatch=42 \
+         MILVUS_CONF_querynodeUbMaxActiveQueries=32 \
+         MILVUS_CONF_querynodeUbThreadsSearch=10 \
+         MILVUS_CONF_querynodeUbThreadsDistance=14 \
+         MILVUS_CONF_querynodeUbThreadsReadProgress=2 \
+         MILVUS_CONF_querynodeUbThreadsRpcProgress=5 \
+         MILVUS_CONF_querynodeUbCpuBindMode=auto \
+         MILVUS_CONF_querynodeUbCpuLayout=llc-spread \
+         MILVUS_CONF_querynodeUbAllowedCpusSource=yaml \
+         MILVUS_CONF_querynodeUbAllowedCpus="$cpu_range" \
+         METRICS_PORT="$port" \
+         "$MILVUS_BIN" run querynode --run-with-subprocess \
+         > "$LOG_DIR/querynode_$port.log" 2>&1 &
+       echo "$!" > "$PID_DIR/querynode_$port.pid"
+       sleep 2
+       kill -0 "$(cat "$PID_DIR/querynode_$port.pid")" || exit 1
+   done
+   sleep 20
+   ```
 
-端口用于区分进程，不能直接作为全局图分片编号。实际分片归属由本版本接入层的装载和分配逻辑决定，在后续Load及算法日志中核对8个全局分片与参与进程的对应关系。
+   端口用于区分进程，不能直接作为全局图分片编号。实际分片归属由本版本接入层的装载和分配逻辑决定，在后续Load及算法日志中核对8个全局分片与参与进程的对应关系。
 
-### 第四步：启动mixcoord
+4. 启动mixcoord。
 
-```bash
-METRICS_PORT=1840 nohup "$MILVUS_BIN" run mixcoord --run-with-subprocess \
-  > "$LOG_DIR/mixcoord.log" 2>&1 &
-echo "$!" > "$PID_DIR/mixcoord.pid"
-sleep 20
-kill -0 "$(cat "$PID_DIR/mixcoord.pid")"
-tail -n 30 "$LOG_DIR/mixcoord.log"
-```
+   ```bash
+   METRICS_PORT=1840 nohup "$MILVUS_BIN" run mixcoord --run-with-subprocess \
+     > "$LOG_DIR/mixcoord.log" 2>&1 &
+   echo "$!" > "$PID_DIR/mixcoord.pid"
+   sleep 20
+   kill -0 "$(cat "$PID_DIR/mixcoord.pid")"
+   tail -n 30 "$LOG_DIR/mixcoord.log"
+   ```
 
-### 第五步：启动proxy
+5. 启动proxy。
 
-```bash
-METRICS_PORT=1841 nohup "$MILVUS_BIN" run proxy --run-with-subprocess \
-  > "$LOG_DIR/proxy.log" 2>&1 &
-echo "$!" > "$PID_DIR/proxy.pid"
-sleep 30
-kill -0 "$(cat "$PID_DIR/proxy.pid")"
-tail -n 30 "$LOG_DIR/proxy.log"
-```
+   ```bash
+   METRICS_PORT=1841 nohup "$MILVUS_BIN" run proxy --run-with-subprocess \
+     > "$LOG_DIR/proxy.log" 2>&1 &
+   echo "$!" > "$PID_DIR/proxy.pid"
+   sleep 30
+   kill -0 "$(cat "$PID_DIR/proxy.pid")"
+   tail -n 30 "$LOG_DIR/proxy.log"
+   ```
 
-### 检查进程和日志
+6. 检查进程和日志。
 
-```bash
-for pid_file in "$PID_DIR"/*.pid; do
-    pid=$(cat "$pid_file")
-    kill -0 "$pid" || { printf '进程已退出: %s\n' "$pid_file"; exit 1; }
-done
-ps -eo pid,args | grep -F "$MILVUS_BIN run" | grep -v grep
-ss -lntp | grep -E ':(16745|183[0-9]|184[01])\b' || true
-tail -n 50 "$LOG_DIR/mixcoord.log" "$LOG_DIR/proxy.log"
-```
+   ```bash
+   for pid_file in "$PID_DIR"/*.pid; do
+       pid=$(cat "$pid_file")
+       kill -0 "$pid" || { printf '进程已退出: %s\n' "$pid_file"; exit 1; }
+   done
+   ps -eo pid,args | grep -F "$MILVUS_BIN run" | grep -v grep
+   ss -lntp | grep -E ':(16745|183[0-9]|184[01])\b' || true
+   tail -n 50 "$LOG_DIR/mixcoord.log" "$LOG_DIR/proxy.log"
+   ```
 
-**通过标准**：本次启动的各组件及8个QueryNode持续运行，没有持续的连接、设备或资源错误，Proxy监听端口与配置一致。由于采用子进程启动，`ps`行数不等于逻辑组件数；还需继续用客户端连接和四个功能模块验证整个链路。
+   **通过标准**：本次启动的各组件及8个QueryNode持续运行，没有持续的连接、设备或资源错误，Proxy监听端口与配置一致。由于采用子进程启动，`ps`行数不等于逻辑组件数；还需继续用客户端连接和四个功能模块验证整个链路。
 
-## 准备GIST数据及客户端
+#### 准备GIST数据及客户端
 
-### 安装Python依赖
+本步骤准备客户端与GIST数据，完成后按顺序执行下文的数据导入、全局索引构建、加载和检索四个验证模块。
+
+##### 安装Python依赖
 
 使用与Milvus 3.0接口兼容的PyMilvus。官方[Milvus v3.0.0发布说明](https://github.com/milvus-io/milvus/releases/tag/v3.0.0)列出的Python SDK版本为3.0.1；配套补丁版本若另有要求，以其说明为准。
 
@@ -343,7 +380,7 @@ python -m pip install 'pymilvus==3.0.1' h5py numpy
 python -c 'import pymilvus, h5py, numpy; print("pymilvus", pymilvus.__version__)'
 ```
 
-### 获取数据并设置公共参数
+##### 获取数据并设置公共参数
 
 本例直接读取HDF5格式的GIST数据，包含`train`、`test`和`neighbors`，不需要转换为VectorDBBench格式。数据来源及格式说明见[ANN-Benchmarks数据集](https://github.com/erikbern/ann-benchmarks#data-sets)。
 
@@ -373,7 +410,7 @@ printf '本次集合: %s\n' "$MILVUS_COLLECTION"
 
 接下来的4个模块在同一已激活虚拟环境的终端中顺序执行，始终使用同一个`MILVUS_COLLECTION`。更换终端时重新设置相同值，不要在步骤之间重新生成集合名。每个模块单独连接Milvus，便于定位失败阶段。
 
-## 模块一：创建集合并导入GIST
+#### 模块一：创建集合并导入GIST
 
 本模块导入全部100万条训练向量，将训练行号作为主键，保证后面能与HDF5真值ID对应。每批10000条，每批约36.6 MiB原始float32向量数据，仍需考虑RPC消息和序列化开销。
 
@@ -423,7 +460,7 @@ PY
 
 **通过标准**：最后输出`IMPORT_OK`，行数为1000000。失败时先排查连接、消息大小、存储和写入状态，不要重复执行导入导致数据状态混淆。
 
-## 模块二：构建8分片全局HNSW索引
+#### 模块二：构建8分片全局HNSW索引
 
 `index_type`使用`HNSW`，在索引参数中传入`global_index_shard_count`，由配套Milvus接入层创建全局图。集合写入分片数与全局图分片数是不同参数，本例都取8，全局图参与进程数也应匹配8。
 
@@ -462,7 +499,7 @@ PY
 
 **通过标准**：等待索引构建完成，已索引行数覆盖100万条，输出`INDEX_OK`。构建超时时查看datanode及相关构建日志，不能把提交索引请求成功视为构建完成。
 
-## 模块三：加载集合
+#### 模块三：加载集合
 
 加载刚才构建的索引，等待数据就绪，并打印副本和QueryNode信息供核对。
 
@@ -495,7 +532,7 @@ PY
 
 **通过标准**：装载等待完成，进度为100%，集合Loaded并输出`LOAD_OK`。结合QueryNode日志核对全局图8个分片的实际归属和资源发布；客户端副本信息只能辅助检查，不能单独证明算法链路已启用。
 
-## 模块四：检索并计算样本召回率
+#### 模块四：检索并计算样本召回率
 
 读取HDF5中的前`MILVUS_NQ`条查询向量及对应真值，以`ef=200`、top-K为10执行裸向量检索。默认只查1条，属于功能冒烟测试，不统计QPS。
 
@@ -551,7 +588,7 @@ PY
 
 **通过标准**：每条查询返回10个有效且不重复的ID及有限距离，输出`SEARCH_COMPLETED`和样本Recall@10，无检索异常。样本召回率用于检查本次查询，不能用单条查询的结果代表整个数据集的召回率，也不使用任意低阈值直接宣称质量达标。
 
-## 检查算法实际生效
+#### 检查算法实际生效
 
 四个功能模块完成后，再检查本次集合对应的服务日志：
 
@@ -567,7 +604,7 @@ done
 
 本次流程完成后，保留集合、索引和日志，便于复查。重复测试时不要自动删除同名前缀的所有集合；先确认旧集合和图状态，按配套数据库流程释放或重置后再开始新一轮。
 
-## 常见问题
+#### 常见问题
 
 | 现象 | 检查方向 |
 | ---- | -------- |
