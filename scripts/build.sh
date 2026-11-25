@@ -94,15 +94,52 @@ done
 # UT 占位函数: 不执行真正的 ut 测试，仅打印日志
 # ----------------------------------------------------------------------------
 run_ut() {
+    local ut_script="${SCRIPT_DIR}/../tests/run.sh"
+    local gtest_source="${UB_GTEST_SOURCE_DIR:-/opt/compile_rely/googletest}"
+    local gtest_build="${PROJECT_ROOT}/${BUILD_DIR}/googletest"
+    local gtest_prefix="${PROJECT_ROOT}/${BUILD_DIR}/ut-deps"
+    local deps_prefix="${UB_DEPS_PREFIX:-${CMAKE_PREFIX_PATH}}"
+    local ut_status=0
+
     echo ""
     echo "============================================================"
-    echo "[UT] 开始执行 ut 用例 (占位实现，不执行真正的测试)"
+    echo "[UT] 测试脚本 : ${ut_script}"
     echo "============================================================"
-    echo "[UT] 执行ut"
-    echo "============================================================"
-    echo "[UT] ut 用例执行完成 (占位)"
-    echo "============================================================"
-    echo ""
+
+    if [[ ! -f "${ut_script}" ]]; then
+        echo "[UT][ERROR] 未找到测试脚本: ${ut_script}"
+        return 1
+    fi
+
+    if [[ ! -f "${gtest_source}/CMakeLists.txt" ]]; then
+        echo "[UT][ERROR] 未找到GoogleTest源码: ${gtest_source}，请通过UB_GTEST_SOURCE_DIR指定"
+        return 1
+    fi
+
+    echo "[UT] 配置GoogleTest: ${gtest_source}"
+    cmake -S "${gtest_source}" -B "${gtest_build}" \
+        -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+        -DCMAKE_INSTALL_PREFIX="${gtest_prefix}" \
+        -DBUILD_GMOCK=OFF -DINSTALL_GTEST=ON || return $?
+    echo "[UT] 编译GoogleTest"
+    cmake --build "${gtest_build}" --parallel "${JOBS:-4}" || return $?
+    echo "[UT] 安装GoogleTest: ${gtest_prefix}"
+    cmake --install "${gtest_build}" || return $?
+
+    deps_prefix="${gtest_prefix}${deps_prefix:+;${deps_prefix}}"
+    ALGO_ROOT="${PROJECT_ROOT}" \
+    UB_DEPS_PREFIX="${deps_prefix}" \
+    BUILD_TYPE="${BUILD_TYPE}" \
+    ENABLE_LCOV="${ENABLE_LCOV:-0}" \
+        bash "${ut_script}" || ut_status=$?
+
+    if [[ "${ut_status}" -ne 0 ]]; then
+        echo "[UT][ERROR] 单元测试执行失败，退出码: ${ut_status}"
+        return "${ut_status}"
+    fi
+
+    echo "[UT] 单元测试执行完成 ✓"
+    return 0
 }
 
 # ----------------------------------------------------------------------------
