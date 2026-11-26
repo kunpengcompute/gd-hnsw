@@ -8,7 +8,7 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE. See the
  * Mulan PSL v2 for more details.
  */
- 
+
 #include "hnsw_urma/ub_c_api.h"
 #include "fmt/format.h"
 #include "hnsw_urma/core/log.hpp"
