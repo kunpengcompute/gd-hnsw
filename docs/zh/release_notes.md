@@ -21,7 +21,7 @@
 | --- | --- | --- | --- |
 | openEuler 24.03 LTS SP3 | 鲲鹏950处理器 | GCC 12.3 | CMake 3.22及以上版本 |
 
->![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
+>![表示说明的图片](./public_sys-resources/icon-note.gif) **说明。**
 >
 > - gd_hnsw跨节点数据面依赖UMDK/URMA，需在配备URMA设备的鲲鹏环境部署，并以`ENABLE_URMA=ON`构建算法库；未启用URMA数据面的构建无法提供分布式检索服务。
 > - 上表列出本版本发布时的验证环境及构建工具要求；UB相关组件与驱动版本请参见《[安装指南](./installation_guide.md#安装ub相关组件与驱动)》。

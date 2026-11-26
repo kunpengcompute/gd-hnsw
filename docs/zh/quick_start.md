@@ -133,7 +133,7 @@ LD_LIBRARY_PATH="$MILVUS_HOME/internal/core/output/lib:${LD_LIBRARY_PATH:-}" \
   ldd "$MILVUS_HOME/internal/core/output/lib/libmilvus_core.so"
 ```
 
-**通过标准**。构建成功，程序及动态库存在，动态链接依赖没有`not found`。Milvus编译环境、头文件或其他数据库编译依赖缺失时，请参见[数据库侧配套说明](https://gitcode.com/boostkit/milvus/tree/master)中的编译环境与依赖说明；URMA组件及算法独立编译依赖请分别参见《安装指南》中的“[安装UB相关组件与驱动](./installation_guide.md#安装ub相关组件与驱动)”和“[编译gd_hnsw](./installation_guide.md#编译gd_hnsw)”。
+**通过标准**：构建成功，程序及动态库存在，动态链接依赖没有`not found`。Milvus编译环境、头文件或其他数据库编译依赖缺失时，请参见[数据库侧配套说明](https://gitcode.com/boostkit/milvus/tree/master)中的编译环境与依赖说明；URMA组件及算法独立编译依赖请分别参见《安装指南》中的“[安装UB相关组件与驱动](./installation_guide.md#安装ub相关组件与驱动)”和“[编译gd_hnsw](./installation_guide.md#编译gd_hnsw)”。
 
 ##### 检查URMA设备和链路
 
@@ -181,7 +181,7 @@ LD_LIBRARY_PATH="$MILVUS_HOME/internal/core/output/lib:${LD_LIBRARY_PATH:-}" \
 
    这里`-p 0`指定RM模式，`-I 64`指定inline大小，EID索引由`--eid_idx`单独指定。
 
-   **通过标准**。两端完成1000次收发测试，正常输出时延结果并成功退出，没有设备打开、建链或超时错误。按实际通信关系覆盖各节点间链路；失败时先修复设备、链路或权限问题，再启动Milvus。本章节仅验证基本通信，算法成功接入仍需完成后续章节。
+   **通过标准**：两端完成1000次收发测试，正常输出时延结果并成功退出，没有设备打开、建链或超时错误。按实际通信关系覆盖各节点间链路；失败时先修复设备、链路或权限问题，再启动Milvus。本章节仅验证基本通信，算法成功接入仍需完成后续章节。
 
 ##### 核对数据库连接和算法配置
 
@@ -200,7 +200,7 @@ LD_LIBRARY_PATH="$MILVUS_HOME/internal/core/output/lib:${LD_LIBRARY_PATH:-}" \
 
 这些是Milvus访问服务的端口，不一定等于容器内部端口。需逐项核对完整Compose配置中的宿主机端口映射或现有服务的实际入口，使其与`milvus.yaml`一致；端口映射及服务入口的配置请参见[数据库侧配套说明](https://gitcode.com/boostkit/milvus/tree/master)。凭据、鉴权及数据库存储配置保留配套文件的实际值。
 
-算法配置至少核对以下字段。下列是完整`milvus.yaml`中的局部内容，合并到对应位置，不要替换整个配置文件：
+算法配置至少核对以下字段：下列是完整`milvus.yaml`中的局部内容，合并到对应位置，不要替换整个配置文件。
 
 ```yaml
 queryNode:
@@ -236,7 +236,7 @@ docker compose ps etcd minio pulsar
 docker compose logs --tail=80 etcd minio pulsar
 ```
 
-**通过标准**。3项中间件运行正常，实际服务入口与前表及`milvus.yaml`一致。若运行环境已提供就绪中间件，核对连接即可继续。
+**通过标准**：3项中间件运行正常，实际服务入口与前表及`milvus.yaml`一致。若运行环境已提供就绪中间件，核对连接即可继续。
 
 本示例配套的Compose基础文件还包含编译容器定义，且未直接列出etcd、MinIO和Pulsar的宿主机端口映射。启动前需取得完整部署配置，并确认端口映射、环境变量、覆盖文件、数据卷和运行用户权限均已配置，具体请参见[数据库侧配套说明](https://gitcode.com/boostkit/milvus/tree/master)。本文继续使用已经准备好的数据库环境，不展开数据库组件内部配置。
 
@@ -268,7 +268,7 @@ ss -lntp | grep -E ':(16745|183[0-9]|184[01])\b' || true
 
 ##### 规划QueryNode的CPU和NUMA
 
-启动参数使用8个QueryNode，每进程分配48个逻辑CPU。下面是已验证启动命令采用的分配方式，执行前先核对实际拓扑：
+启动参数使用8个QueryNode，每进程分配48个逻辑CPU。下面是已验证启动命令采用的分配方式，执行前先核对实际拓扑。
 
 ```bash
 lscpu
@@ -485,7 +485,7 @@ connections.disconnect("default")
 PY
 ```
 
-**通过标准**。最后输出`IMPORT_OK`，行数为1000000。失败时先排查连接、消息大小、存储和写入状态，不要重复执行导入导致数据状态混淆。
+**通过标准**：最后输出`IMPORT_OK`，行数为1000000。失败时先排查连接、消息大小、存储和写入状态，不要重复执行导入导致数据状态混淆。
 
 #### 模块二：构建8分片全局HNSW索引
 
@@ -524,7 +524,7 @@ connections.disconnect("default")
 PY
 ```
 
-**通过标准**。等待索引构建完成，已索引行数覆盖100万条，输出`INDEX_OK`。构建超时时查看datanode及相关构建日志，不能把提交索引请求成功视为构建完成。
+**通过标准**：等待索引构建完成，已索引行数覆盖100万条，输出`INDEX_OK`。构建超时时查看datanode及相关构建日志，不能把提交索引请求成功视为构建完成。
 
 #### 模块三：加载集合
 
@@ -557,7 +557,7 @@ connections.disconnect("default")
 PY
 ```
 
-**通过标准**。装载等待完成，进度为100%，集合Loaded并输出`LOAD_OK`。结合QueryNode日志核对全局图8个分片的实际归属和资源发布；客户端副本信息只能辅助检查，不能单独证明算法链路已启用。
+**通过标准**：装载等待完成，进度为100%，集合Loaded并输出`LOAD_OK`。结合QueryNode日志核对全局图8个分片的实际归属和资源发布；客户端副本信息只能辅助检查，不能单独证明算法链路已启用。
 
 #### 模块四：检索并计算样本召回率
 
@@ -613,11 +613,11 @@ connections.disconnect("default")
 PY
 ```
 
-**通过标准**。每条查询返回10个有效且不重复的ID及有限距离，输出`SEARCH_COMPLETED`和样本Recall@10，无检索异常。样本召回率用于检查本次查询，不能用单条查询的结果代表整个数据集的召回率，也不使用任意低阈值直接宣称质量达标。
+**通过标准**：每条查询返回10个有效且不重复的ID及有限距离，输出`SEARCH_COMPLETED`和样本Recall@10，无检索异常。样本召回率用于检查本次查询，不能用单条查询的结果代表整个数据集的召回率，也不使用任意低阈值直接宣称质量达标。
 
 #### 检查算法实际生效
 
-四个功能模块完成后，再检查本次集合对应的服务日志：
+四个功能模块完成后，再检查本次集合对应的服务日志。
 
 ```bash
 for port in 1832 1833 1834 1835 1836 1837 1838 1839; do

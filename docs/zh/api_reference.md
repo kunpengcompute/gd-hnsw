@@ -6,14 +6,14 @@
 
 本文介绍gd_hnsw的API。gd_hnsw采用HNSW图索引，跨节点通信基于URMA（Unified Remote Memory Access，统一远端内存访问）。
 
-本库提供两类接口：
+本库提供两类接口。
 
 - **C接口**：头文件`ub_c_api.h`，供Milvus等宿主接入检索运行时。
 - **C++接口**：位于`namespace hnsw_urma`，用于参考建库和索引文件读写。
 
 调用顺序：先注入URMA上下文并配置，然后装载分片、创建邮箱，再发布并导入资源，之后启用并执行检索，最后释放。完整接入流程请参见《[快速入门](./quick_start.md#集成c-abi)》。
 
-调用约定如下：
+调用约定如下。
 
 - 除另有说明外，C接口返回`0`表示成功，非`0`表示失败。
 - 配置和输出结构体应先清零，`reserved`字段保持为0。
@@ -103,7 +103,7 @@ int UbConfigure(const UbConfig* cfg);
 >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
 >不要直接用全零配置启动。须填写设备名、CPU列表及长度、`max_active_queries`。`UbConfigure`只暂存配置，装载接口不负责解析运行时配置。建议在装载前调用`UbEstimateRuntimeMemory`提前校验：`max_active_queries=0`会在该步返回`kOutOfRange`。若未调用内存估算接口，该错误会在创建邮箱（`UbEnsureRpcMailbox`）时返回；启用接口也会再次解析配置。CPU列表为空会导致内存估算或创建邮箱失败。
 
-`runtime_options`使用空格分隔，例如：
+`runtime_options`使用空格分隔，示例如下。
 
 ```text
 --use-dot-norm --layer0-sort local-only --request-ring-depth 32

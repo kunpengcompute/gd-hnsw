@@ -21,7 +21,7 @@
 | 编译器 | GCC 12.3，编译器与标准库支持C++20 |
 | 构建工具 | CMake 3.22及以上版本 |
 
->![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
+>![表示说明的图片](./public_sys-resources/icon-note.gif) **说明。**
 >
 > - gd_hnsw核心代码使用C++20（`std::jthread`、`std::span`、`std::stop_token`等），编译器与标准库须支持C++20。
 > - 跨节点数据面依赖UMDK（Unified Memory Development Kit，统一内存开发工具包）/URMA（Unified Remote Memory Access，统一远端内存访问），编译时需开启`ENABLE_URMA`。以`ENABLE_URMA=OFF`（默认）构建的库不含URMA数据面：调用启用分布式检索接口将返回`kInvalidArgument`，分布式检索不可用。
@@ -82,7 +82,7 @@ gd_hnsw算法库的编译依赖组件如下，编译器与构建工具版本要�
 
 4. ### 编译gd_hnsw
 
-   算法库以独立CMake工程交付（`gd_hnsw_urma/`目录）。当前工程未自行初始化GNUInstallDirs，独立构建时需显式补齐安装目录变量。以下示例统一使用`lib`目录，在仓库根目录执行：
+   算法库以独立CMake工程交付（`gd_hnsw_urma/`目录）。当前工程未自行初始化GNUInstallDirs，独立构建时需显式补齐安装目录变量。以下示例统一使用`lib`目录，在仓库根目录执行。
 
    ```bash
    install_prefix="$PWD/install"
@@ -105,7 +105,7 @@ gd_hnsw算法库的编译依赖组件如下，编译器与构建工具版本要�
    printf 'INSTALL_OK\n'
    ```
 
-   以上命令在配置、编译或安装失败时立即退出。除CMake自身日志外，成功时会依次输出以下检查标记：
+   以上命令在配置、编译或安装失败时立即退出。除CMake自身日志外，成功时会依次输出以下检查标记。
 
    ```text
    BUILD_OK
@@ -114,7 +114,7 @@ gd_hnsw算法库的编译依赖组件如下，编译器与构建工具版本要�
 
    `BUILD_OK`表示编译命令成功且构建目录中的动态库非空；`INSTALL_OK`表示安装命令成功，安装目录中的动态库、C ABI头文件、pkg-config文件及CMake包配置文件均存在且非空。未看到对应标记时，先处理该步骤的错误日志，再重新执行；这些检查不代替目标环境中的链接与检索验证。
 
-   >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明：**
+   >![表示说明的图片](./public_sys-resources/icon-note.gif) **说明。**
    >
    > - `ENABLE_URMA`默认为`OFF`；开启后编译需能找到UMDK/URMA头文件与库（默认查找系统路径，亦可通过`UMDK_ROOT`环境变量或`CMAKE_PREFIX_PATH`指定安装路径）。
    > - `ENABLE_URMA=OFF`构建的库不含跨节点数据面，仅供编译与便捷验证，无法启用分布式检索。
