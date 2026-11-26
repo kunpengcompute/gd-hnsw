@@ -4,6 +4,21 @@
 
 ## 安装编译相关
 
+### Milvus URMA补丁检查失败
+
+**问题**
+
+按《快速入门》中的“[获取源码及补丁](./quick_start.md#获取源码及补丁)”执行`git apply --check`失败，或没有输出`PATCH_CHECK_OK`。
+
+**回答**
+
+检查命令仅验证补丁能否应用，不会修改源码。检查失败时停止后续应用和构建，按以下顺序排查。
+
+1. 确认当前目录是选定的Milvus源码仓库，核对`git describe --tags --always`和`git rev-parse HEAD`，本示例要求Milvus v3.0.0及其配套URMA补丁。
+2. 检查补丁文件是否完整，确认下载的是原始补丁内容而非HTML网页，并记录文件的SHA-256校验值。提示`No valid patches in input`时，优先核对文件内容及下载方式。
+3. 执行`git status --short`检查工作区。出现`patch does not apply`时，核对源码版本、已有修改以及补丁是否已应用。可用`git apply --reverse --check <补丁路径>`辅助检查能否反向应用，但不要据此直接回退源码或丢弃现有修改。
+4. 确认源码与补丁配套且工作区状态符合要求后，重新执行快速入门中的检查命令；出现`PATCH_CHECK_OK`后再应用补丁。仍失败时，保留版本、补丁校验值及完整错误信息，交由配套补丁提供方确认。
+
 ### 编译报找不到UMDK/URMA（"ENABLE_URMA requires the URMA library, headers and bonding header"）
 
 **问题**
