@@ -23,6 +23,7 @@ struct FloatDataset {
   std::uint64_t rows{0};
   std::uint32_t dim{0};
 
+  // Returns empty if the row is outside either the shape or backing storage.
   [[nodiscard]] std::span<const float> Row(std::uint64_t row) const noexcept;
   [[nodiscard]] const std::vector<float> &values() const noexcept;
   [[nodiscard]] std::shared_ptr<const void> owner() const noexcept {

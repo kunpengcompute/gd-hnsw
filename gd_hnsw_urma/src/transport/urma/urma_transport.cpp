@@ -442,6 +442,11 @@ UmdkResourceBackend::ExportDescriptor(UrmaResourceHandle handle) const {
 
 Result<UrmaResourceHandle>
 UmdkResourceBackend::Create(const UrmaResourceRequest &request) {
+  if ((request.kind == UrmaResourceKind::kImportedSegment ||
+       request.kind == UrmaResourceKind::kImportedEndpoint) &&
+      request.token > std::numeric_limits<std::uint32_t>::max()) {
+    return Status(StatusCode::kOutOfRange, "remote URMA token exceeds uint32");
+  }
   if (request.kind != UrmaResourceKind::kContext && impl_->context == nullptr) {
     return Status(StatusCode::kInvalidArgument,
                   "UMDK context must be created first");

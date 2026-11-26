@@ -47,8 +47,8 @@ typedef struct UbConfig {
   const char *
       cpu_layout; // NULL="contiguous"; "contiguous"|"llc-isolated"|"llc-spread"
   const char *progress_mode; // NULL="busy"; "busy"|"adaptive"
-  const uint32_t
-      *allowed_cpus; // explicit CPU list; allowed_cpu_count==0 = not set
+  // A zero count leaves the CPU list unset. A positive count requires a list.
+  const uint32_t *allowed_cpus;
   uint32_t allowed_cpu_count;
   uint32_t max_active_queries;                 // 0 = built-in default (16)
   uint32_t read_jfs_depth;                     // 0 = auto

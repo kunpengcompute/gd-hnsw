@@ -44,8 +44,8 @@ QuerySlotPool &QuerySlotPool::operator=(QuerySlotPool &&other) noexcept {
 
 Result<QueryKey> QuerySlotPool::Acquire() {
   for (std::uint32_t offset = 0; offset < slots_.size(); ++offset) {
-    const std::uint32_t index =
-        (cursor_ + offset) % static_cast<std::uint32_t>(slots_.size());
+    const auto index = static_cast<std::uint32_t>(
+        (static_cast<std::uint64_t>(cursor_) + offset) % slots_.size());
     auto &slot = slots_[index];
     if (slot.active) {
       continue;

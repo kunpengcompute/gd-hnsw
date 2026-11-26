@@ -1,6 +1,7 @@
 #include "hnsw_urma/search/mock_io.hpp"
 
 #include <algorithm>
+#include <limits>
 
 namespace hnsw_urma {
 
@@ -15,12 +16,21 @@ Result<GraphTicket> MockGraphReader::Submit(QueryKey query,
   if (nodes.empty() || output == nullptr) {
     return Status(StatusCode::kInvalidArgument, "invalid mock graph request");
   }
-  GraphTicket ticket{next_ticket_++, query.generation};
+  if (next_ticket_ == 0) {
+    return Status(StatusCode::kResourceExhausted,
+                  "mock graph ticket space is exhausted");
+  }
+  GraphTicket ticket{next_ticket_, query.generation};
   Operation operation{ticket,
                       std::vector<NodeToExpand>(nodes.begin(), nodes.end()),
                       output, false, std::move(next_failure_)};
   next_failure_ = Status::Ok();
-  operations_.emplace(ticket.value, std::move(operation));
+  if (!operations_.emplace(ticket.value, std::move(operation)).second) {
+    return Status(StatusCode::kProtocolError, "duplicate mock graph ticket");
+  }
+  next_ticket_ = ticket.value == std::numeric_limits<ticket_t>::max()
+                     ? 0
+                     : ticket.value + 1U;
   return ticket;
 }
 
@@ -115,7 +125,11 @@ Result<DistanceTicket> MockDistanceOracle::Submit(
     return Status(StatusCode::kInvalidArgument,
                   "invalid mock distance request");
   }
-  DistanceTicket ticket{next_ticket_++, query.generation};
+  if (next_ticket_ == 0) {
+    return Status(StatusCode::kResourceExhausted,
+                  "mock distance ticket space is exhausted");
+  }
+  DistanceTicket ticket{next_ticket_, query.generation};
   Operation operation{
       ticket,
       std::vector<float>(query_vector.begin(), query_vector.end()),
@@ -124,7 +138,12 @@ Result<DistanceTicket> MockDistanceOracle::Submit(
       false,
       std::move(next_failure_)};
   next_failure_ = Status::Ok();
-  operations_.emplace(ticket.value, std::move(operation));
+  if (!operations_.emplace(ticket.value, std::move(operation)).second) {
+    return Status(StatusCode::kProtocolError, "duplicate mock distance ticket");
+  }
+  next_ticket_ = ticket.value == std::numeric_limits<ticket_t>::max()
+                     ? 0
+                     : ticket.value + 1U;
   return ticket;
 }
 

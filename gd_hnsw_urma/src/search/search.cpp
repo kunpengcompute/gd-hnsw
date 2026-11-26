@@ -27,6 +27,38 @@ bool Better(const HeapEntry &lhs, const HeapEntry &rhs) noexcept {
          (lhs.distance == rhs.distance && lhs.id < rhs.id);
 }
 
+using SearchClock = std::chrono::steady_clock;
+
+Result<SearchClock::time_point>
+CheckedQueryDeadline(SearchClock::time_point admission,
+                     std::chrono::milliseconds timeout) {
+  // Check the conversion as well as the addition: milliseconds::max() may
+  // overflow the clock's finer duration before time_point addition begins.
+  const auto max_timeout =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          SearchClock::duration::max());
+  if (timeout > max_timeout) {
+    return Status(StatusCode::kOutOfRange,
+                  "query timeout exceeds the steady clock duration range");
+  }
+  const auto duration =
+      std::chrono::duration_cast<SearchClock::duration>(timeout);
+  if (admission > SearchClock::time_point::max() - duration) {
+    return Status(StatusCode::kOutOfRange,
+                  "query deadline exceeds the steady clock time point range");
+  }
+  return admission + duration;
+}
+
+SearchClock::time_point
+CappedDeadline(SearchClock::time_point now, SearchClock::duration timeout,
+               SearchClock::time_point query_deadline) noexcept {
+  if (now > SearchClock::time_point::max() - timeout) {
+    return query_deadline;
+  }
+  return std::min(now + timeout, query_deadline);
+}
+
 class ExclusiveProfileTimerState {
 public:
   [[nodiscard]] std::uint64_t *Enter(std::uint64_t &destination) noexcept {
@@ -273,7 +305,7 @@ struct HnswSearchTask::Impl {
   Impl(QueryKey query_key, const GlobalIndexMeta &global_meta,
        const ShardMap &map, GraphReader &graph, DistanceOracle &distance,
        QueryScratch &query_scratch, SearchParams search_params,
-       std::chrono::steady_clock::time_point admission,
+       std::chrono::steady_clock::time_point deadline,
        const SearchRuntimeContext *runtime_context)
       : key(query_key), meta(global_meta), shard_map(&map),
         graph_reader(&graph), distance_oracle(&distance),
@@ -309,7 +341,7 @@ struct HnswSearchTask::Impl {
         entry_level(search_params.entry_point == INVALID_NODE_ID
                         ? global_meta.max_level
                         : search_params.entry_level),
-        query_deadline(admission + search_params.query_timeout) {}
+        query_deadline(deadline) {}
 
   ~Impl() {
     if (scratch_active) {
@@ -344,6 +376,7 @@ struct HnswSearchTask::Impl {
   QueryRunController controller;
   QueryReadyPublisher *ready_publisher{nullptr};
   QueryState state{QueryState::kInit};
+  bool runtime_abort_required{false};
   Status operation_status;
   Status final_status;
   SearchResult result;
@@ -591,7 +624,11 @@ struct HnswSearchTask::Impl {
   }
 
   void SetAttemptDeadline(std::chrono::steady_clock::time_point now) {
-    attempt_deadline = std::min(now + params.operation_timeout, query_deadline);
+    attempt_deadline =
+        CappedDeadline(now,
+                       std::chrono::duration_cast<SearchClock::duration>(
+                           params.operation_timeout),
+                       query_deadline);
   }
 
   [[nodiscard]] std::optional<SearchStepResult>
@@ -609,7 +646,10 @@ struct HnswSearchTask::Impl {
         retry_wait_state = wait_state;
         retry_handle = QueryRetryHandle{
             key, epoch.value(),
-            std::min(now + std::chrono::microseconds(50), query_deadline)};
+            CappedDeadline(now,
+                           std::chrono::duration_cast<SearchClock::duration>(
+                               std::chrono::microseconds(50)),
+                           query_deadline)};
         return SearchStepResult::kYielded;
       }
       Fail(scheduled.status());
@@ -626,6 +666,17 @@ struct HnswSearchTask::Impl {
     if (!completed.ok() && controller.state() != RunState::kFailed) {
       Fail(completed.status());
     }
+  }
+
+  Status RollbackGraphPreparation(Status failure) {
+    auto cancelled = graph_reader->CancelPrepared(*graph_ticket);
+    if (cancelled.ok()) {
+      graph_ticket.reset();
+    } else {
+      runtime_abort_required = true;
+      failure.AddContext("cancel_prepared", cancelled.ToString());
+    }
+    return failure;
   }
 
   Result<bool> ScheduleGraph(QueryState wait_state,
@@ -666,14 +717,13 @@ struct HnswSearchTask::Impl {
               prepared.value().participating_lanes, key.generation);
           if (!waiting.ok()) {
             wait_started_nanoseconds = 0;
-            (void)graph_reader->CancelPrepared(*graph_ticket);
-            graph_ticket.reset();
-            return waiting.status();
+            return RollbackGraphPreparation(waiting.status());
           }
           if (waiting.value() != expected_epoch) {
-            return Status(
-                StatusCode::kProtocolError,
-                "prepared graph wait epoch changed during preparation");
+            wait_started_nanoseconds = 0;
+            return RollbackGraphPreparation(
+                Status(StatusCode::kProtocolError,
+                       "prepared graph wait epoch changed during preparation"));
           }
           ++result.profile.suspend_count;
           resume_pending = true;
@@ -684,10 +734,13 @@ struct HnswSearchTask::Impl {
         auto published = graph_reader->PublishPrepared(*graph_ticket);
         if (!published.ok()) {
           wait_started_nanoseconds = 0;
-          return Status(StatusCode::kInternalError,
-                        "prepared graph publication failed after wait "
-                        "registration")
-              .AddContext("cause", published.ToString());
+          auto failure = Status(StatusCode::kInternalError,
+                                "prepared graph publication failed after wait "
+                                "registration");
+          failure.AddContext("cause", published.ToString());
+          // Graph publication failures retain an unpublished, cancellable
+          // phase. Never discard the ticket if rollback itself is rejected.
+          return RollbackGraphPreparation(std::move(failure));
         }
       }
       if (prepared.value().asynchronous) {
@@ -1068,8 +1121,25 @@ struct HnswSearchTask::Impl {
           return waiting.status();
         }
         if (waiting.value() != expected_epoch) {
-          return Status(StatusCode::kProtocolError,
-                        "distance wait epoch changed during preparation");
+          wait_started_nanoseconds = 0;
+          auto failure =
+              Status(StatusCode::kProtocolError,
+                     "distance wait epoch changed during preparation");
+          if (defer_ready) {
+            controller.EndDeferredReady();
+          }
+          for (auto &record : distance_operations) {
+            if (!record.ticket.has_value())
+              continue;
+            auto cancelled = distance_oracle->CancelPrepared(*record.ticket);
+            if (cancelled.ok()) {
+              record.ticket.reset();
+            } else {
+              runtime_abort_required = true;
+              failure.AddContext("cancel_prepared", cancelled.ToString());
+            }
+          }
+          return failure;
         }
         ++result.profile.suspend_count;
         resume_pending = true;
@@ -1083,6 +1153,7 @@ struct HnswSearchTask::Impl {
             result.timing.remote_prepare_publish_nanoseconds);
         auto published = distance_oracle->PublishPrepared(*record.ticket);
         if (!published.ok()) {
+          runtime_abort_required = true;
           // Only later operations are certainly unpublished. Keep the current
           // and earlier slots stable until rank-fatal shutdown stops Progress.
           for (std::size_t later = index + 1;
@@ -1417,6 +1488,10 @@ Result<std::unique_ptr<HnswSearchTask>> HnswSearchTask::Create(
     return Status(StatusCode::kInvalidArgument,
                   "query source rank or entry point is invalid");
   }
+  auto deadline = CheckedQueryDeadline(admission_time, params.query_timeout);
+  if (!deadline.ok()) {
+    return deadline.status();
+  }
   if (custom_entry) {
     auto location = shard_map.Locate(params.entry_point);
     if (!location.ok() || location.value().shard_id != key.source_rank) {
@@ -1451,7 +1526,7 @@ Result<std::unique_ptr<HnswSearchTask>> HnswSearchTask::Create(
     try {
       task->impl_ = std::make_unique<Impl>(key, meta, shard_map, graph_reader,
                                            distance_oracle, *scratch, params,
-                                           admission_time, runtime_context);
+                                           deadline.value(), runtime_context);
     } catch (...) {
       scratch->impl_->Release(key.generation);
       throw;
@@ -1859,6 +1934,9 @@ HnswSearchTask::ProgressWaiting(std::chrono::steady_clock::time_point now) {
 QueryState HnswSearchTask::query_state() const noexcept { return impl_->state; }
 RunState HnswSearchTask::run_state() const noexcept {
   return impl_->controller.state();
+}
+bool HnswSearchTask::requires_runtime_abort() const noexcept {
+  return impl_->runtime_abort_required;
 }
 const Status &HnswSearchTask::status() const noexcept {
   return impl_->final_status;

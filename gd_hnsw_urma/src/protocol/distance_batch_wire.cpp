@@ -384,6 +384,11 @@ DistanceBatchResponseWriter::Create(std::uint64_t batch_sequence,
   auto payload = PayloadStart<DistanceBatchResponseTask>(task_count);
   if (!payload.ok())
     return payload.status();
+  if (payload.value() > std::numeric_limits<std::uint32_t>::max()) {
+    return Status(
+        StatusCode::kOutOfRange,
+        "distance response descriptor table exceeds wire offset range");
+  }
   if (payload.value() > output.size()) {
     return Status(StatusCode::kResourceExhausted,
                   "distance response descriptor table does not fit");

@@ -31,7 +31,8 @@ std::optional<std::uint32_t> FindNextSetBit(const Word *words,
   if (bit_count == 0)
     return std::nullopt;
   for (std::uint32_t offset = 0; offset < bit_count; ++offset) {
-    const auto bit = (cursor + offset) % bit_count;
+    const auto bit = static_cast<std::uint32_t>(
+        (static_cast<std::uint64_t>(cursor) + offset) % bit_count);
     const auto value =
         words[bit / kQueueBitmapWordBits].bits.load(std::memory_order_acquire);
     if ((value & (std::uint64_t{1} << (bit % kQueueBitmapWordBits))) != 0) {

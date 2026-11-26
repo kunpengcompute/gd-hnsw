@@ -72,6 +72,11 @@ int UbConfigure(const UbConfig *cfg) {
       SetUbLastError("UbConfigure: cfg is null");
       return static_cast<int>(hnsw_urma::StatusCode::kInvalidArgument);
     }
+    if (cfg->allowed_cpu_count != 0 && cfg->allowed_cpus == nullptr) {
+      SetUbLastError(
+          "UbConfigure: allowed_cpus is null with non-zero allowed_cpu_count");
+      return static_cast<int>(hnsw_urma::StatusCode::kInvalidArgument);
+    }
     if (hnsw_urma::MilvusUbRuntime::Instance().RpcDistanceReady()) {
       SetUbLastError(
           "UbConfigure: runtime already enabled; configure before enable");
@@ -87,16 +92,9 @@ int UbConfigure(const UbConfig *cfg) {
     knobs.cpu_bind_mode = cfg->cpu_bind_mode ? cfg->cpu_bind_mode : "auto";
     knobs.cpu_layout = cfg->cpu_layout ? cfg->cpu_layout : "contiguous";
     knobs.progress_mode = cfg->progress_mode ? cfg->progress_mode : "busy";
-    if (cfg->allowed_cpu_count && cfg->allowed_cpus) {
+    if (cfg->allowed_cpu_count) {
       knobs.allowed_cpus.assign(cfg->allowed_cpus,
                                 cfg->allowed_cpus + cfg->allowed_cpu_count);
-    } else if (cfg->allowed_cpu_count && !cfg->allowed_cpus) {
-      // Non-zero count but NULL array: illegal input. Returning here avoids
-      // pointer arithmetic / dereference on NULL (UB, crash). Early return
-      // before SetKnobs so knobs stays unmodified.
-      SetUbLastError(
-          "UbConfigure: allowed_cpu_count>0 but allowed_cpus is NULL");
-      return static_cast<int>(hnsw_urma::StatusCode::kInternalError);
     } else {
       knobs.allowed_cpus.clear();
     }

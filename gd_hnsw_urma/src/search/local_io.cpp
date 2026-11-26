@@ -118,6 +118,13 @@ Result<LocalDistanceOracle> LocalDistanceOracle::Create(
     return Status(StatusCode::kInvalidArgument,
                   "local distance oracle needs every shard view");
   }
+  for (std::size_t index = 0; index < shards.size(); ++index) {
+    if (shards[index] == nullptr ||
+        shards[index]->range() != shard_map.ranges()[index]) {
+      return Status(StatusCode::kInvalidArgument,
+                    "local distance shard views must match the shard map");
+    }
+  }
   try {
     LocalDistanceOracle oracle;
     oracle.shard_map_ = &shard_map;

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
+#include <exception>
 #include <new>
 #include <utility>
 
@@ -169,7 +170,17 @@ void RuntimeThreadGroup::Launch(std::string name, std::uint32_t worker_id,
                 name.c_str(), worker_id, cpu, binding.ToString().c_str());
       }
     }
-    auto result = loop(stop_.get_token(), worker_id);
+    Status result;
+    try {
+      result = loop(stop_.get_token(), worker_id);
+    } catch (const std::exception &error) {
+      result = Status(StatusCode::kInternalError,
+                      "runtime callback threw an exception")
+                   .AddContext("exception", error.what());
+    } catch (...) {
+      result = Status(StatusCode::kInternalError,
+                      "runtime callback threw a non-standard exception");
+    }
     if (!result.ok()) {
       RecordFailure(std::move(result), name, worker_id);
     }

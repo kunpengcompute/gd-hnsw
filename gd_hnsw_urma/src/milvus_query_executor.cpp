@@ -309,28 +309,37 @@ Status MilvusQueryExecutor::Control(std::stop_token stop) {
         slot.storage = std::move(created).value();
         slot.completion = pending.completion;
         slot.deadline_expired = false;
-        auto bound = slot.storage->BindOwner(cursor);
-        if (!bound.ok())
-          return bound;
-        if (config_.profile) {
-          slot.submitted_at = pending.deadline - pending.params.query_timeout;
-          slot.admitted_at = Clock::now();
-        }
-        // Initialize all slot state before publishing to the fixed owner.
-        slot.task.store(slot.storage.get(), std::memory_order_release);
-        auto admitted = queues_->PublishAdmission(cursor, key.value());
-        if (!admitted.ok()) {
+        const auto rollback = [&] {
           slot.task.store(nullptr, std::memory_order_release);
           slot.storage.reset();
           slot.completion.reset();
           (void)pool_->Release(key.value());
+        };
+        auto bound = slot.storage->BindOwner(cursor);
+        if (!bound.ok()) {
+          rollback();
+          return bound;
+        }
+        if (config_.profile) {
+          slot.submitted_at = pending.deadline - pending.params.query_timeout;
+          slot.admitted_at = Clock::now();
+        }
+        // Reserve the deadline before the worker can observe the task. Any
+        // failure up to publication can then roll back without a live reader.
+        auto scheduled = deadlines_->Schedule({key.value(), pending.deadline});
+        if (!scheduled.ok()) {
+          rollback();
+          return scheduled;
+        }
+        slot.task.store(slot.storage.get(), std::memory_order_release);
+        auto admitted = queues_->PublishAdmission(cursor, key.value());
+        if (!admitted.ok()) {
+          (void)deadlines_->Cancel(key.value());
+          rollback();
           if (admitted.code() != StatusCode::kResourceExhausted)
             return admitted;
           break;
         }
-        auto scheduled = deadlines_->Schedule({key.value(), pending.deadline});
-        if (!scheduled.ok())
-          return scheduled;
         cursor = (cursor + 1) % effective_.search_workers;
         pending_.pop_front();
         ++active;
@@ -403,6 +412,12 @@ Status MilvusQueryExecutor::Search(std::stop_token stop, std::uint32_t worker) {
       return Status(StatusCode::kProtocolError, "stale UB runnable handle");
     }
     const auto step = task->Step();
+    if (task->requires_runtime_abort()) {
+      // A failed publication/rollback can leave READ callbacks holding task
+      // state. Stop the thread group and retain its slot instead of sending
+      // Done, which would let Control destroy the task before Progress stops.
+      return task->status();
+    }
     if (step == SearchStepResult::kCompleted ||
         step == SearchStepResult::kFailed) {
       auto done =

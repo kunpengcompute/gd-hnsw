@@ -142,10 +142,15 @@ public:
     return Status(StatusCode::kInvalidArgument,
                   "graph reader does not support prepared waits");
   }
+  // A failed publication must leave the phase unpublished and cancellable.
+  // Backends must complete all fallible validation before exposing batches
+  // to Progress; an already published phase must not be rolled back.
   virtual Status PublishPrepared(GraphTicket) {
     return Status(StatusCode::kInvalidArgument,
                   "graph reader does not support prepared publication");
   }
+  // Success releases an unpublished phase and all of its reservations.
+  // Reject cancellation if any published work can still reference it.
   virtual Status CancelPrepared(GraphTicket) {
     return Status(StatusCode::kInvalidArgument,
                   "graph reader does not support prepared cancellation");
