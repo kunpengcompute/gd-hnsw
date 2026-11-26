@@ -269,7 +269,7 @@ for component in "${components[@]}"; do
 done
 ```
 
-随后重新执行《[快速入门](./quick_start.md#设置milvus进程环境)》中的环境设置、CPU数组和《[逐项启动命令](./quick_start.md#按顺序启动集群)》，使更新后的参数生效。更换图时使用新的集合名并完成导入、建索引、加载和检索；单纯重测`ef`时无需执行本节停止流程。
+随后按《快速入门》中的“[设置Milvus进程环境](./quick_start.md#设置milvus进程环境)”和“[规划QueryNode的CPU和NUMA](./quick_start.md#规划querynode的cpu和numa)”设置环境及CPU数组，再按“[按顺序启动集群](./quick_start.md#按顺序启动集群)”启动进程，使更新后的参数生效。更换图时使用新的集合名并完成导入、建索引、加载和检索；单纯重测`ef`时无需执行本节停止流程。
 
 ### 测试结果
 

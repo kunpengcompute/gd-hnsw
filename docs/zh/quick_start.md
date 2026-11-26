@@ -650,7 +650,9 @@ done
 
 ## 集成C ABI
 
-本例由Milvus接入层完成算法库调用，部署和测试过程中无需手工调用C接口。自行开发宿主时，按以下生命周期接入；各接口的参数、前置条件和错误处理见《[API参考](./api_reference.md)》。
+C ABI指遵循C语言调用约定的应用二进制接口，其中ABI是Application Binary Interface（应用二进制接口）的缩略语。gd_hnsw通过公共头文件`ub_c_api.h`提供C兼容接口，供Milvus等宿主调用算法库，完成运行时配置、分片装载、资源交换和检索。
+
+本例由Milvus接入层完成算法库调用，部署和测试过程中无需手工调用C接口。自行开发宿主时，按以下生命周期接入。各接口的参数和前置条件请参见《API参考》中的“[配置接口](./api_reference.md#配置接口)”、“[装载接口](./api_reference.md#装载接口)”、“[资源发布与导入接口](./api_reference.md#资源发布与导入接口)”、“[启用与检索接口](./api_reference.md#启用与检索接口)”和“[释放接口](./api_reference.md#释放接口)”；调用约定和错误处理请参见“[概述](./api_reference.md#概述)”、“[状态码](./api_reference.md#状态码)”及“[UbLastError](./api_reference.md#ublasterror)”。
 
 1. 通过`UbSetUrmaContext`注入宿主持有的URMA上下文。
 2. 通过`UbConfigure`配置运行时，调用`UbEstimateRuntimeMemory`检查配置并估算内存。
@@ -669,6 +671,7 @@ done
 
 | 缩略语 | 英文全称 | 中文全称 |
 | ------ | -------- | -------- |
+| ABI | Application Binary Interface | 应用二进制接口 |
 | HNSW | Hierarchical Navigable Small World | 分层可导航小世界 |
 | NUMA | Non-Uniform Memory Access | 非一致内存访问 |
 | QN | QueryNode | 查询节点 |
