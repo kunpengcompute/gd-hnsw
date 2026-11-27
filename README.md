@@ -278,7 +278,7 @@ gd_hnsw_urma/
 | [版本说明书](./docs/zh/release_notes.md) | 提供gd_hnsw每个发布版本的基础信息、配套环境与特性更新信息。 |
 | [快速入门](./docs/zh/quick_start.md) | 提供gd_hnsw快速入门指导，含环境准备、索引构建与Milvus接入示例。 |
 | [安装指南](./docs/zh/installation_guide.md) | 提供gd_hnsw依赖安装与编译方法指导。 |
-| [API参考](./docs/zh/api_reference.md) | 提供gd_hnsw对外C ABI与C++接口定义、参数说明与返回值。 |
+| [API参考](./docs/zh/api_reference.md) | 提供gd_hnsw对外C ABI接口定义、参数说明与返回值。 |
 | [最佳实践](./docs/zh/best_practices.md) | 提供使用gd_hnsw的部署Checklist与调优建议。 |
 | [常见问题（FAQ）](./docs/zh/FAQ.md) | 汇总使用gd_hnsw过程中的常见问题与解答。 |
 

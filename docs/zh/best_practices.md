@@ -1,310 +1,231 @@
 # 最佳实践
 
-本文档提供gd_hnsw与Milvus集成的实践案例，旨在帮助用户实现在具体场景中调用gd_hnsw算法。
+本文档提供gd_hnsw与Milvus集成的实践案例，旨在帮助用户实现在具体场景中调用gd_hnsw算法
 
 ## 约束与限制
 
-- 数据库编译依赖、中间件部署、完整数据库配置请参见[Milvus侧配套说明](https://gitcode.com/boostkit/milvus/tree/master)。
-- 本文档关注全局分布式检索算法，不限定具体服务器名称、业务IP或个人工作目录。
-- 快速入门默认只查询1条向量，用于验证功能流程。本实践扩大查询样本并重复测量，查询参数和运行时起点与快速入门一致；实际质量和时延以当前版本、数据及运行环境下的结果为准。
+- 本例沿用快速入门的GIST数据、8个工作QueryNode和8个全局图分片。
+- 数据库编译、中间件部署和完整配置请参见[Milvus侧配套说明](https://gitcode.com/boostkit/milvus/tree/master)。路径、地址和CPU分配填写自己环境中的实际值。
+- 先用快速入门的参数跑通，再一次修改一个参数，方便看出是哪项修改影响了结果。
 
-## 集成milvus
+## 集成Milvus
 
 ### 环境部署
 
-#### 保存环境信息
+使用《快速入门》中的“[环境部署](./quick_start.md#环境部署)”。中间件由Docker Compose运行，Milvus各组件直接以进程方式启动。
 
-下面使用与快速入门相同的目录。`MILVUS_COLLECTION`必须填写快速入门已经创建并加载的实际集合名，不要重新生成名字。
-
-```bash
-export QS_ROOT=/opt/milvus-urma
-export MILVUS_HOME="$QS_ROOT/milvus"
-export MILVUS_BIN="$MILVUS_HOME/bin/milvus"
-export LOG_DIR="$MILVUS_HOME/logs"
-export PID_DIR="$MILVUS_HOME/run"
-export MILVUS_URI=http://127.0.0.1:16745
-export MILVUS_HDF5="$QS_ROOT/datasets/gist-960-euclidean.hdf5"
-export MILVUS_COLLECTION=请填写快速入门保留的集合名
-export RESULT_DIR="$QS_ROOT/results/gist"
-source "$QS_ROOT/.venv/bin/activate"
-mkdir -p "$RESULT_DIR"
-
-uname -a
-lscpu
-numactl --hardware
-free -h
-df -h / /var
-sha256sum "$MILVUS_BIN" \
-  "$MILVUS_HOME/internal/core/output/lib/libmilvus_core.so"
-```
-
-记录实际软件版本、设备与驱动、CPU/NUMA分配、配置文件和环境变量。配置和连接凭据按数据库侧规则保管；测试报告中只摘录必要字段。
+在同一个Bash终端中操作，保持快速入门使用的Python虚拟环境和环境变量。更换终端时，先恢复原来的目录、服务地址、数据路径和集合名。`MILVUS_COLLECTION`填写已经创建的集合名；复用原索引时，不要重新生成集合名。
 
 ### 前提条件
 
-#### 部署Checklist
+开始调整参数前，先确认以下内容。
 
-1. **功能流程完成**：快速入门四个模块均成功，集合包含100万条数据，索引构建和Load完成，客户端能检索。
-2. **版本可追溯**：记录Milvus和算法Commit、URMA补丁校验值，以及实际运行的`bin/milvus`和动态库校验值。
-3. **数据库连接正确**：使用数据库侧完整配置，etcd、MinIO、Pulsar入口与`milvus.yaml`一致；本例Proxy客户端端口为16745。
-4. **算法链路生效**：URMA及全局索引开关启用，8个全局分片的装载、资源发布、对端导入和实际UB检索记录可核对，方法见《[快速入门](./quick_start.md#检查算法实际生效)》。
-5. **CPU/NUMA分配有效**：进程允许CPU范围、`numactl`绑定与算法运行时CPU列表一致；为Milvus其他组件、中间件和系统留出资源。
-6. **容量充足**：同时考虑索引、向量、算法运行时、Milvus和中间件的内存，以及数据、日志和临时文件的磁盘空间。
-7. **测量条件固定**：使用相同数据文件、查询样本、真值、距离、top-K和统计方法，避免其他测试负载干扰。
-
-队列和RPC注册内存预算属于配置上限，不能直接相加后视为进程固定占用。算法接口`UbEstimateRuntimeMemory`提供的是运行时开销估算，不包含索引和宿主的全部内存，详细语义见《[API参考](./api_reference.md)》。
+- 快速入门的导入、构建索引、加载和检索四个模块已经完成，集合中有100万条GIST数据。
+- 8个工作QueryNode运行正常，URMA设备和链路可用。
+- 按“[检查算法实际生效](./quick_start.md#检查算法实际生效)”核对日志，确认本次查询确实使用gd_hnsw。
+- 记下当前的集合名和参数，后面用相同数据比较修改前后的结果。
 
 ### 操作步骤
 
-#### 设置场景与参数起点
+先分清下面三类参数，再决定改完后执行哪些步骤。
 
-| 项目 | 本实践设置 |
-| ---- | ---------- |
-| 数据 | GIST HDF5，训练集1000000条、960维，含查询向量及近邻真值 |
-| 字段与距离 | 主键`id`为训练行号，向量字段`vector`，L2距离 |
-| 运行进程 | 8个工作QueryNode，业务端口1832～1839 |
-| 全局图分片 | `global_index_shard_count=8`，与参与该图的工作进程匹配 |
-| 集合写入分片 | `shards_num=8`，与全局图分片含义不同 |
-| 建图参数 | `M=64`、`efConstruction=40` |
-| 查询起点 | `ef=200`、top-K为10 |
-| 运行时起点 | `expandBatch=42`、`maxActiveQueries=32` |
-| 工作线程 | Search/Distance/READ/RPC分别为10/14/2/5 |
-| 客户端 | 与快速入门相同的PyMilvus、h5py及NumPy环境 |
+| 参数 | 在哪里修改 | 改完后怎么做 |
+| ---- | ---------- | ------------ |
+| 构图参数，如`M`、`efConstruction` | 创建索引时的`create_index`参数 | 重新构图，再load和search |
+| 启动参数，如线程数、CPU分配、`expandBatch` | `milvus.yaml`或QueryNode启动命令 | 重启相关进程，再load和search |
+| 查询参数，如`ef` | 每次调用`search`时的参数 | 直接重新search |
 
-先使用上述配置完成全量导入、建索引、加载及检索，再开展调优。数据库环境准备、配置及进程启动的具体操作请参见[Milvus侧配套说明](https://gitcode.com/boostkit/milvus/tree/master)。本文不预设通用的召回或性能承诺；测试前根据业务要求约定Recall@10、时延、错误和资源占用目标。
+#### 设置构图参数
 
-#### 区分YAML与进程环境覆盖值
+构图参数决定索引怎样建立，只有创建索引时才会使用。先沿用快速入门的设置。
 
-实际跑通环境中的部分值来自`milvus.yaml`，部分由QueryNode启动命令覆盖。
+| 参数 | 起始值 | 说明 |
+| ---- | ------ | ---- |
+| `M` | 64 | 控制图中节点的连接数量 |
+| `efConstruction` | 40 | 控制构图时的候选搜索范围 |
+| `global_index_shard_count` | 8 | 将全局图分成8个分片，与本例参与检索的8个工作QueryNode对应 |
 
-启动命令仍含同名覆盖变量时，仅修改YAML不会改变这些字段；命令内显式设置的值也会覆盖终端导出的同名环境变量。`runtimeOptions`中的同名参数也可能覆盖独立字段，应同时检查。配置修改、进程环境覆盖及重启的具体操作请参见[Milvus侧配套说明](https://gitcode.com/boostkit/milvus/tree/master)，修改后核对实际生效值。
-
-#### 标定召回率和串行响应
-
-##### 复用已加载的集合
-
-`ef`属于每次检索参数，可以在同一个索引上调整，无需为每个`ef`重新导入、建索引或重启进程。保持`M=64`、`efConstruction=40`和top-K为10，先围绕起始值200选择候选查询参数。
-
-本例选择`128,200,400`作为待测点。候选值不是预先验证的最优值，应根据测量结果扩大或缩小范围，并保持`ef ≥ top-K`。
-
-下面一次请求只查询1条向量，默认使用HDF5中的前1000条查询向量，按顺序发请求，每个候选值重复3轮。测得的是当前客户端到Milvus的端到端响应及串行观测吞吐，不代表系统最大并发QPS。
+快速入门通过下面的环境变量将参数传给`create_index`。
 
 ```bash
-export MILVUS_EF_LIST=128,200,400
+export MILVUS_M=64
+export MILVUS_EFC=40
+export MILVUS_GLOBAL_SHARDS=8
+```
+
+具体调用位置请参见“[模块二：构建8分片全局HNSW索引](./quick_start.md#模块二构建8分片全局hnsw索引)”。例如，想比较`efConstruction=40`与`80`，可以将`MILVUS_EFC`改为`80`，再重新构图。这里的80只是对比示例，是否适合当前数据要看实际结果。
+
+只改环境变量不会改变已经建好的索引。需要换一组构图参数时，先按“[重启进程，再重新load](#重启进程再重新load)”释放旧集合并重启持有旧图的进程，再使用新的集合名，依次执行快速入门的“[创建集合并导入GIST](./quick_start.md#模块一创建集合并导入gist)”和“[构建8分片全局HNSW索引](./quick_start.md#模块二构建8分片全局hnsw索引)”。随后重新load和search。原集合保留，方便后面核对。
+
+如果只是调整启动参数或查询`ef`，继续使用原集合和原索引，不需要重新导入或构图。
+
+#### 设置进程启动前的参数
+
+下面这些参数在QueryNode启动时读取。先保持起始值，确认能跑通后，再按需要调整。
+
+| 参数 | 起始值 | 说明 |
+| ---- | ------ | ---- |
+| `expandBatch` | 42 | 控制每轮展开的节点数 |
+| `maxActiveQueries` | 32 | 控制算法进程最多同时处理多少个查询 |
+| Search线程 | 10 | 处理图搜索 |
+| Distance线程 | 14 | 处理距离计算任务 |
+| READ Progress线程 | 2 | 推进远端读取 |
+| RPC Progress线程 | 5 | 推进请求和响应收发 |
+| CPU/NUMA分配 | 沿用快速入门中的分配方式 | 按本机可用CPU和NUMA节点填写 |
+
+快速入门中，这些值由“[启动8个工作QueryNode](./quick_start.md#按顺序启动集群)”的命令设置。例如，调整Distance线程数时，修改启动命令中的`MILVUS_CONF_querynodeUbThreadsDistance=14`。
+
+启动命令中的同名变量会覆盖YAML配置。如果只改`milvus.yaml`，启动命令仍写着旧值，最终使用的仍是旧值。也不要只在另一个终端里`export`后就认为运行中的进程已经更新。
+
+超时时间和`runtimeOptions`等YAML字段请参见“[核对数据库连接和算法配置](./quick_start.md#核对数据库连接和算法配置)”。具体配置及进程维护操作请参见[Milvus侧配套说明](https://gitcode.com/boostkit/milvus/tree/master)。
+
+每次先改一项，例如只改Distance线程数，其余参数保持原样。改好后执行下一步。
+
+#### 重启进程，再重新load
+
+如果改了构图参数或启动参数，按下面的顺序操作。只改查询`ef`时，直接跳到“[调整ef，重新search](#调整ef重新search)”。
+
+1. 停止当前查询，释放旧集合的加载状态。这一步不会删除集合、数据或索引。
+
+   ```bash
+   python - <<'PY'
+   import os
+   from pymilvus import Collection, connections
+
+   connections.connect(uri=os.environ["MILVUS_URI"], timeout=600)
+   try:
+       Collection(os.environ["MILVUS_COLLECTION"]).release(timeout=600)
+       print("RELEASE_OK")
+   finally:
+       connections.disconnect("default")
+   PY
+   ```
+
+2. 按[Milvus侧配套说明](https://gitcode.com/boostkit/milvus/tree/master)正常停止本次部署中需要重启的Milvus进程，确认旧进程已经退出，再使用修改后的配置启动。启动顺序请参见《快速入门》中的“[设置Milvus进程环境](./quick_start.md#设置milvus进程环境)”、“[规划QueryNode的CPU和NUMA](./quick_start.md#规划querynode的cpu和numa)”和“[按顺序启动集群](./quick_start.md#按顺序启动集群)”。本例8个工作QueryNode均按更新后的配置启动，中间件保持原部署。
+
+3. 如果更改了构图参数，按“[设置构图参数](#设置构图参数)”使用新集合重新导入和构图，等待`INDEX_OK`。如果只改启动参数，保留原来的`MILVUS_COLLECTION`，跳过重新导入和构图。
+
+4. 对本轮要测试的集合重新执行load，等待加载完成。
+
+   ```bash
+   python - <<'PY'
+   import os
+   from pymilvus import Collection, connections, utility
+
+   name = os.environ["MILVUS_COLLECTION"]
+   connections.connect(uri=os.environ["MILVUS_URI"], timeout=600)
+   try:
+       Collection(name).load(replica_number=1, timeout=86400)
+       utility.wait_for_loading_complete(name, timeout=86400)
+       print("loading progress:", utility.loading_progress(name))
+       print("LOAD_OK")
+   finally:
+       connections.disconnect("default")
+   PY
+   ```
+
+看到加载进度为100%和`LOAD_OK`后，再进行检索，并检查QueryNode日志中的参数和全局图资源是否正确。
+
+#### 调整ef，重新search
+
+`ef`是每次查询时设置的参数。可以把它理解成“这次查询要搜索多大的候选范围”。索引不变时，修改`ef`后直接重新search，不需要重启、重新load或重新构图。
+
+先用`ef=200`检查查询是否正常，再试`128、200、400`进行比较。下面使用同一批1000条查询，top-K固定为10。每次发一个查询，收到结果后再发下一个，并统计召回率、平均查询耗时和QPS。
+
+```bash
+export MILVUS_EF_LIST=200
 export MILVUS_EVAL_NQ=1000
-export MILVUS_EVAL_REPEATS=3
-export MILVUS_EVAL_WARMUP=10
 export MILVUS_TOPK=10
 export MILVUS_RPC_TIMEOUT=600
 ```
 
-#### 执行评估并保存结果
-
-保持上一节的变量和Python虚拟环境，执行下面代码。它只读取已加载集合并发起检索，不重新导入、创建索引或删除数据。遇到请求、结果或数据校验错误时，当前评估终止，应先排查再重测。
+执行下面的检索代码。
 
 ```bash
 python - <<'PY'
-import csv
 import os
 import time
-from pathlib import Path
 import h5py
 import numpy as np
-from pymilvus import Collection, connections, utility
+from pymilvus import Collection, connections
 
-name = os.environ["MILVUS_COLLECTION"]
-topk = int(os.environ["MILVUS_TOPK"])
 nq = int(os.environ["MILVUS_EVAL_NQ"])
-repeats = int(os.environ["MILVUS_EVAL_REPEATS"])
-warmup = int(os.environ["MILVUS_EVAL_WARMUP"])
+topk = int(os.environ["MILVUS_TOPK"])
 efs = [int(value) for value in os.environ["MILVUS_EF_LIST"].split(",")]
 timeout = float(os.environ["MILVUS_RPC_TIMEOUT"])
-assert topk > 0 and nq > 0 and repeats > 0 and warmup >= 0
-assert efs and all(ef >= topk for ef in efs)
-
+assert nq > 0 and topk > 0 and efs and all(ef >= topk for ef in efs)
 with h5py.File(os.environ["MILVUS_HDF5"], "r") as h5:
     assert h5["train"].shape == (1_000_000, 960)
-    assert nq <= h5["test"].shape[0]
-    assert nq <= h5["neighbors"].shape[0]
+    assert nq <= h5["test"].shape[0] and nq <= h5["neighbors"].shape[0]
     assert topk <= h5["neighbors"].shape[1]
-    vectors = np.asarray(h5["test"][:nq], dtype=np.float32)
-    truth = np.asarray(h5["neighbors"][:nq, :topk], dtype=np.int64)
-truth_sets = [set(int(value) for value in row) for row in truth]
+    queries = np.asarray(h5["test"][:nq], dtype=np.float32)
+    truth = [set(int(value) for value in row)
+             for row in h5["neighbors"][:nq, :topk]]
 assert all(len(row) == topk and all(0 <= value < 1_000_000 for value in row)
-           for row in truth_sets)
+           for row in truth)
 
 connections.connect(uri=os.environ["MILVUS_URI"], timeout=timeout)
 try:
-    col = Collection(name)
+    col = Collection(os.environ["MILVUS_COLLECTION"])
     assert col.num_entities == 1_000_000
-    print("collection:", name, "load_state:", utility.load_state(name))
-    print("indexes:", [index.params for index in col.indexes])
-    output = Path(os.environ["RESULT_DIR"])
-    output.mkdir(parents=True, exist_ok=True)
-    filename = output / f"gist_serial_eval_{time.time_ns()}.csv"
-    columns = ["collection", "ef", "repeat", "queries", "recall_at_k",
-               "serial_observed_qps", "p50_ms", "p95_ms", "p99_ms", "total_seconds"]
-    with filename.open("w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=columns)
-        writer.writeheader()
-        for ef in efs:
-            for repeat in range(1, repeats + 1):
-                for i in range(warmup):
-                    col.search(data=[vectors[i % nq].tolist()], anns_field="vector",
-                               param={"metric_type": "L2", "params": {"ef": ef}},
-                               limit=topk, consistency_level="Strong", timeout=timeout)
-                matches = 0
-                latencies = []
-                begin = time.perf_counter()
-                for i, vector in enumerate(vectors):
-                    request_begin = time.perf_counter()
-                    result = col.search(
-                        data=[vector.tolist()], anns_field="vector",
-                        param={"metric_type": "L2", "params": {"ef": ef}},
-                        limit=topk, consistency_level="Strong", timeout=timeout,
-                    )
-                    latencies.append((time.perf_counter() - request_begin) * 1000)
-                    assert len(result) == 1 and len(result[0]) == topk
-                    ids = [int(hit.id) for hit in result[0]]
-                    assert len(set(ids)) == topk
-                    assert all(0 <= value < 1_000_000 for value in ids)
-                    assert np.isfinite([float(hit.distance) for hit in result[0]]).all()
-                    matches += len(set(ids) & truth_sets[i])
-                elapsed = time.perf_counter() - begin
-                p50, p95, p99 = np.percentile(latencies, [50, 95, 99])
-                row = dict(collection=name, ef=ef, repeat=repeat, queries=nq,
-                           recall_at_k=matches / (nq * topk),
-                           serial_observed_qps=nq / elapsed,
-                           p50_ms=float(p50), p95_ms=float(p95), p99_ms=float(p99),
-                           total_seconds=elapsed)
-                writer.writerow(row)
-                file.flush()
-                print(row, flush=True)
-    print("RESULT_CSV:", filename)
+    for ef in efs:
+        matches = 0
+        query_seconds = 0.0
+        begin = time.perf_counter()
+        for i, query in enumerate(queries):
+            query_begin = time.perf_counter()
+            result = col.search(
+                data=[query.tolist()], anns_field="vector",
+                param={"metric_type": "L2", "params": {"ef": ef}},
+                limit=topk, consistency_level="Strong", timeout=timeout,
+            )
+            query_seconds += time.perf_counter() - query_begin
+            assert len(result) == 1 and len(result[0]) == topk
+            ids = [int(hit.id) for hit in result[0]]
+            assert len(set(ids)) == topk and all(0 <= value < 1_000_000 for value in ids)
+            assert np.isfinite([float(hit.distance) for hit in result[0]]).all()
+            matches += len(set(ids) & truth[i])
+        elapsed = time.perf_counter() - begin
+        print(f"ef={ef} queries={nq} Recall@{topk}={matches / (nq * topk):.4f} "
+              f"avg_ms={query_seconds * 1000 / nq:.3f} QPS={nq / elapsed:.2f}", flush=True)
 finally:
     connections.disconnect("default")
 PY
 ```
 
-#### 调整运行时与资源配置
-
-固定已选择的索引参数、`ef`、查询样本和负载，每次只改变一个运行时因素，修改后重启并确认生效，再重复相同评估。
-
-| 参数 | 当前起始值 | 观察和调整方向 |
-| ---- | ---------- | -------------- |
-| `expandBatch` | 42 | 每轮展开工作量；同时观察召回、时延、通信和资源需求 |
-| `maxActiveQueries` | 32 | 算法进程的在途查询上限；调大前检查槽位、队列及通信资源开销 |
-| Search线程 | 10 | 本地图搜索工作量与CPU占用 |
-| Distance线程 | 14 | 对端距离下推任务处理压力 |
-| READ Progress线程 | 2 | 远端读完成推进与等待情况 |
-| RPC Progress线程 | 5 | 邮箱收发与RPC推进压力 |
-| CPU/NUMA | 每进程显式CPU集合，`llc-spread` | 实际拓扑、允许CPU列表、内存位置及系统资源余量 |
-
-线程总数应适合各进程实际允许的CPU集合，还需计入Control线程、Milvus和系统其他线程。快速入门中的48核分配是该启动配置的示例，不是所有环境的固定最低要求。
-
-客户端并发、每次请求的`nq`与`maxActiveQueries`作用不同。当前串行评估每次只有一个请求，不能单凭这组结果判断提高在途上限能否改善并发吞吐。
-
-`runtimeOptions`中的`--profile`用于计时信息输出，比较不同参数时应保持该开关一致。操作超时、查询超时和客户端RPC超时属于不同层次，调整时核对单位和实际生效值；放宽超时不能代替查明排队、链路或资源问题。
-
-#### 配置变化和复测状态处理
-
-##### 哪些变化需要重启或重建
-
-| 变化 | 处理方法 |
-| ---- | -------- |
-| 仅修改检索`ef`或top-K | 在现有已加载索引上重新检索，保持`0 < top-K ≤ ef` |
-| 修改线程、expandBatch、CPU布局或其他启动期运行时参数 | 修改实际生效入口，正常停止并重新启动相关Milvus进程，核对资源和配置 |
-| 修改M、efConstruction或换数据、建立新全局图 | 释放原集合、重置持有旧图的进程，按快速入门重新构建并加载 |
-
-当前运行时每进程持有一张全局图。调优查询参数应优先复用当前集合；更换索引或图时，避免旧图仍驻留影响下一轮。
-
-##### 释放原集合
-
-停止客户端查询后，使用原集合名执行。该操作释放装载状态，不删除数据或索引。
+单个`ef`跑通后，修改下面的参数，再执行同一段检索代码，就能比较三组结果。
 
 ```bash
-python - <<'PY'
-import os
-from pymilvus import Collection, connections, utility
-connections.connect(uri=os.environ["MILVUS_URI"], timeout=600)
-try:
-    name = os.environ["MILVUS_COLLECTION"]
-    if utility.has_collection(name):
-        Collection(name).release(timeout=600)
-        print("RELEASED:", name)
-finally:
-    connections.disconnect("default")
-PY
+export MILVUS_EF_LIST=128,200,400
 ```
 
-##### 正常停止并按原顺序启动
-
-数据库侧负责组件退出和数据持久化的完整维护流程。以下适用于快速入门用PID文件记录的本次进程组，先停止Proxy及查询，再停止数据和协调组件，中间件保持原有部署。
-
-确认PID目录属于本次部署，逐个核对命令行后发送SIGTERM并等待退出；PID不匹配或退出超时时停止操作并排查，不自动强制杀进程。
-
-```bash
-components=(proxy querynode_1832 querynode_1833 querynode_1834 querynode_1835
-            querynode_1836 querynode_1837 querynode_1838 querynode_1839
-            datanode streamingnode mixcoord)
-for component in "${components[@]}"; do
-    pid_file="$PID_DIR/$component.pid"
-    test -s "$pid_file" || { printf '请核对PID文件: %s\n' "$pid_file"; exit 1; }
-    pid=$(cat "$pid_file")
-    if ! kill -0 "$pid" 2>/dev/null; then
-        printf '进程已停止: %s\n' "$component"
-        continue
-    fi
-    command_line=$(ps -p "$pid" -o args=)
-    role="$component"
-    [[ "$component" == querynode_* ]] && role=querynode
-    [[ "$command_line" == *"$MILVUS_BIN run $role"* ]] || \
-      { printf 'PID命令不匹配，请人工核对: %s\n' "$pid"; exit 1; }
-    kill -TERM "$pid" || exit 1
-    deadline=$((SECONDS + 300))
-    while kill -0 "$pid" 2>/dev/null; do
-        (( SECONDS < deadline )) || { printf '进程退出超时: %s\n' "$component"; exit 1; }
-        sleep 1
-    done
-done
-```
-
-随后按《快速入门》中的“[设置Milvus进程环境](./quick_start.md#设置milvus进程环境)”和“[规划QueryNode的CPU和NUMA](./quick_start.md#规划querynode的cpu和numa)”设置环境及CPU数组，再按“[按顺序启动集群](./quick_start.md#按顺序启动集群)”启动进程，使更新后的参数生效。更换图时使用新的集合名并完成导入、建索引、加载和检索；单纯重测`ef`时无需执行本节停止流程。
+`MILVUS_EF_LIST`只是这个客户端示例中要依次测试的`ef`列表，不是Milvus进程的启动参数。各值都要满足`ef ≥ top-K`。比较时保持数据、集合、查询条数和其他参数不变。
 
 ### 测试结果
 
-#### 查看测试输出与指标
+#### 输出结果
 
-字段解释。
+每个`ef`会输出一行结果，重点看下面几项。
 
-- `recall_at_k`为本轮全部查询的命中数除以`查询数 × top-K`，需要使用全量训练数据及相同主键映射。
-- P50/P95/P99来自客户端逐请求计时，包含RPC和服务处理等端到端开销，不等于算法内部搜索耗时。
-- `serial_observed_qps`为本轮查询数除以总耗时，包含客户端串行处理及结果核对开销，不能作为最大吞吐报告。
-- 预热请求不计入正式统计。不同轮次应保持预热、查询顺序、缓存条件和负载来源一致，并记录资源状态。
+- **Recall@10**：召回率，表示返回结果命中GIST近邻真值的比例，越接近1说明本次查询的结果越完整。
+- **avg_ms**：平均每次查询的耗时，单位毫秒，从客户端发出请求计时到收到结果，包含通信和服务处理时间。
+- **QPS**：查询条数除以本组测试总时间，包含客户端处理和结果核对时间。本例一次只发一个请求，结果用于比较相同测试方式下的参数，不代表系统最大并发吞吐。
 
-默认参数共发出9000次正式检索及90次预热检索，应预留相应时间。测试失败时保留已完成轮次及错误日志，不将未完成轮次视为合格结果。
+先检查有没有报错、数据条数和加载状态是否正确，再看召回率是否达到业务要求，最后比较耗时和QPS。
 
-#### 根据结果选择参数
-
-先筛选满足业务召回率目标的候选值，再检查时延及资源占用。每个候选值至少保留3轮原始结果，汇总中位值和波动范围，不能只摘取一次最优值。
-
-若增大`ef`仍无法达到召回目标，核对数据、真值、主键映射、实际算法链路及建图参数。需要调整`M`或`efConstruction`时，按“[配置变化和复测状态处理](#配置变化和复测状态处理)”中的流程重新构建索引，再标定查询参数。
-
-若要评估并发最大吞吐，应另行使用已验证的并发压测方法，固定并发请求数、每请求向量数、查询总量、统计时长和错误口径。本例串行结果用于同一测试口径下的参数观察，不沿用其他部署规模的历史QPS或P99结果。
+如果想提高召回率，可以先尝试增大`ef`。如果查询变慢，或者QPS下降，就结合召回率要求选择合适的值。若增加`ef`后仍不满足要求，再检查数据、真值和算法链路，确认无误后再考虑调整`M`或`efConstruction`重新构图。参数效果以实际测试为准。
 
 #### 结果记录和验收Checklist
 
-本实践测试gd_hnsw与Milvus集成后的全局分布式检索能力：通过Milvus完成GIST数据导入、全局索引构建、加载和检索，结合QueryNode日志确认查询实际进入gd_hnsw算法路径；再使用GIST近邻真值核对Recall@10，测量客户端到Milvus的端到端时延和串行观测吞吐，并检查不同参数下重复运行的结果及资源状态。
+这套流程检查的是：Milvus能否完成数据导入、构图、load和search，查询是否真正进入gd_hnsw，以及调整参数后召回率、耗时和QPS有什么变化。
 
-每轮记录集合与数据文件版本、Milvus和算法版本、补丁、二进制及配置校验信息，以及实际全局分片数、CPU/NUMA、建图参数、请求参数和日志位置。
+- **功能**：集合有100万条数据，索引构建和加载完成，8个工作QueryNode及全局图资源正常，search能返回结果，日志确认使用gd_hnsw。
+- **质量**：用同一批查询和对应真值计算Recall@10，检查是否达到业务要求。
+- **响应**：记录查询条数、`ef`、平均耗时和QPS，使用相同方式比较修改前后的结果。
+- **稳定性**：参数初步选定后，重复运行至少3轮，观察是否有报错、异常重启或明显波动。
+- **可追溯性**：保留集合名、构图参数、启动参数、`ef`、终端结果和对应日志，方便复查。
 
-- **功能**：8个工作QueryNode和目标全局图资源正常，100万条数据、索引和Load状态正确，查询进入gd_hnsw路径。
-- **质量**：使用明确的查询样本数和对应真值，Recall@10满足测试前约定的目标。
-- **响应**：按明确的串行或并发口径记录时延，目标与测量方法一致。
-- **稳定性**：至少3轮完整结果，无请求错误、异常重启或持续资源压力；保留波动和失败信息。
-- **可追溯性**：参数修改、生效检查、原始CSV和服务日志完整，功能冒烟结果与扩大样本评估分别标明。
-
-遇到数据、设备、装载或运行时问题时，先恢复快速入门的功能验证，再继续调优。接口语义见《[API参考](./api_reference.md)》，排查入口见《[常见问题和故障案例](./FAQ.md)》。
+有问题时，先回到《快速入门》的对应步骤检查，排查方法请参见《常见问题和故障案例》中的“[跑通路径验证失败排查](./FAQ.md#跑通路径验证失败排查)”。
 
 ## 缩略语
 
